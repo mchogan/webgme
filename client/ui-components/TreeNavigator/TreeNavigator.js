@@ -22,7 +22,10 @@ define([
          function () {
 
              return {
-                 scope: { treeData: '=' },
+                 scope: {
+                     treeData: '=',
+                     config: '='
+                 },
                  restrict: 'E',
                  replace: true,
                  template: template

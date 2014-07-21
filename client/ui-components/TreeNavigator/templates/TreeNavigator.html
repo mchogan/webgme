@@ -1,3 +1,15 @@
-<div class="tree-navigator">
+<nav class="tree-navigator">
+    <header>
+        <span class="dropdown scope-selector" on-toggle="toggled(open)" ng-if="!scopeSelector.hidden">
+            <a href class="dropdown-toggle">
+              Project
+            </a>
+            <ul class="dropdown-menu">
+                <li ng-repeat="choice in config.scopeSelector.items">
+                    <a href="#">{{ choice.label }}</a>
+                </li>
+            </ul>
+        </span>
+    </header>
     {{ treeData.label }}
-</div>
+</nav>
