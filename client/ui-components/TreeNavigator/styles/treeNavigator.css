@@ -1,0 +1,16 @@
+.tree-navigator {
+  padding: .5ex; }
+  .tree-navigator .node-list {
+    padding: 0 0 0 2ex;
+    list-style-type: none; }
+  .tree-navigator .node-list > li > ul {
+    overflow: hidden;
+    transition: opacity .2s;
+    opacity: 1; }
+  .tree-navigator .node-list > li:not(.expanded) > ul {
+    opacity: 0;
+    height: 0; }
+  .tree-navigator .node-label.loading:after {
+    display: block;
+    content: 'Loading...';
+    padding-left: 2ex; }

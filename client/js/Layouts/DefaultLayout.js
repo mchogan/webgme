@@ -23,7 +23,7 @@ define([ 'lib/jquery/' + (DEBUG ? 'jquery.layout' : 'jquery.layout.min'),
         SPACING_OPEN = WebGMEGlobal.SUPPORTS_TOUCH ? SPACING_OPEN_TOUCH : SPACING_OPEN_DESKTOP,
         SPACING_CLOSED = WebGMEGlobal.SUPPORTS_TOUCH ? SPACING_CLOSED_TOUCH : SPACING_CLOSED_DESKTOP,
         CONFIG = JSON.parse(DefaultLayoutConfigJSON),
-        SIDE_PANEL_WIDTH = 202;
+        SIDE_PANEL_WIDTH = 302;
 
     DefaultLayout = function (params) {
         this._logger = (params && params.logger) || logManager.create('DefaultLayout');

@@ -147,12 +147,58 @@ define(
             id
             ) {
             var self = this,
-                newTreeNode;
+                newTreeNode,
+                children = [];
 
             newTreeNode = {
                 id: id,
                 label: id,
-                children: []
+                children: children,
+                expanded: false,
+                nodeData: {
+                    id: id
+                },
+                nodeClick: function (
+                    theNode
+                    ) {
+                    console.log(
+                        theNode.id + ' was clicked'
+                    );
+
+                    if (theNode.children.length === 0 && !theNode.isLoading) {
+
+                        theNode.isLoading=true;
+
+                        self.update();
+
+                        setTimeout(
+
+                            function (
+                                ) {
+
+                                self.dummyTreeDataGenerator(
+                                    theNode, 'Async ' + id, 5, 0
+                                );
+
+
+                                theNode.isLoading =false;
+                                theNode.expanded = true;
+
+                                self.update();
+
+                            }, 2000
+                        );
+                    } else {
+
+                        // Expand-collapse
+
+                        if ( theNode.expanded !== true ) {
+                            theNode.expanded = true;
+                        } else {
+                            theNode.expanded = false;
+                        }
+                    }
+                }
             };
 
             treeNode.children.push(

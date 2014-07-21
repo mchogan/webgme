@@ -2,7 +2,7 @@
     <header>
         <span class="dropdown scope-selector" on-toggle="toggled(open)" ng-if="!scopeSelector.hidden">
             <a href class="dropdown-toggle">
-              Project
+                Project
             </a>
             <ul class="dropdown-menu">
                 <li ng-repeat="choice in config.scopeSelector.items">
@@ -14,26 +14,32 @@
 
 
     <script type="text/ng-template" id="tree-navigator-node-template">
-        <span class="node-label">{{ node.label }}</span>
+        <a class="node-label"
+           data-ng-class="{ 'loading': node.isLoading }"
+           data-ng-click="node.nodeClick(node)"
+                >{{ node.label }}</a>
+
         <ul class="node-list"
             data-ng-if="node.children && node.children.length > 0">
-
-           <li  data-ng-repeat="parentNode in node.children"
+            <li data-ng-repeat="parentNode in node.children"
                 data-ng-include="'tree-navigator-node-template'"
-                data-ng-init="node=parentNode">
-           </li>
+                data-ng-init="node=parentNode"
+                data-ng-class="{ 'expanded': parentNode.expanded }">
+            </li>
         </ul>
     </script>
 
     <div class="tree-navigator-nodes">
-        <span class="node-label"
-              data-ng-if="show-root-label">{{ treeData.label }}</span>
+        <a class="node-label"
+           data-ng-click="node.nodeClick(node)"
+           data-ng-if="show-root-label">{{ treeData.label }}</a>
         <ul class="node-list"
             data-ng-if="treeData.children && treeData.children.length > 0">
 
-           <li  data-ng-repeat="node in treeData.children"
-                data-ng-include="'tree-navigator-node-template'">
-           </li>
+            <li data-ng-repeat="node in treeData.children"
+                data-ng-include="'tree-navigator-node-template'"
+                data-ng-class="{ 'expanded': node.expanded  }">
+            </li>
 
         </ul>
 
