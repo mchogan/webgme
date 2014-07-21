@@ -9,7 +9,7 @@
                 class="divider"></li>
 
             <li data-ng-if="menuItemGroup.label && menuItemGroup.items && menuItemGroup.items.length > 0"
-                class="label">{{menuItemGroup.label}}
+                class="label">{{ menuItemGroup.label }}
             </li>
 
             <li data-ng-repeat="item in menuItemGroup.items | limitTo:menuItemGroup.totalItems || 100"
@@ -46,7 +46,7 @@
     </script>
 
     <script type="text/ng-template" id="navigator-item-template">
-        <span class="item-label">{{item.label}}</span>
+        <span class="item-label">{{ item.label }}</span>
         <ul class="dropdown-menu"
             role="menu"
             aria-labelledby="dropdownMenu"

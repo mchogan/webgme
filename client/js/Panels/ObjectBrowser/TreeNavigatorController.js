@@ -128,7 +128,7 @@ define(
             var self = this;
 
             self.dummyTreeDataGenerator(
-                self.$scope.treeData, 'Node item ', 20, 5
+                self.$scope.treeData, 'Node item ', 5, 3
             );
         };
 

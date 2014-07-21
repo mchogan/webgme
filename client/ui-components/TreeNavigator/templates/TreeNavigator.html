@@ -11,5 +11,32 @@
             </ul>
         </span>
     </header>
-    {{ treeData.label }}
+
+
+    <script type="text/ng-template" id="tree-navigator-node-template">
+        <span class="node-label">{{ node.label }}</span>
+        <ul class="node-list"
+            data-ng-if="node.children && node.children.length > 0">
+
+           <li  data-ng-repeat="parentNode in node.children"
+                data-ng-include="'tree-navigator-node-template'"
+                data-ng-init="node=parentNode">
+           </li>
+        </ul>
+    </script>
+
+    <div class="tree-navigator-nodes">
+        <span class="node-label"
+              data-ng-if="show-root-label">{{ treeData.label }}</span>
+        <ul class="node-list"
+            data-ng-if="treeData.children && treeData.children.length > 0">
+
+           <li  data-ng-repeat="node in treeData.children"
+                data-ng-include="'tree-navigator-node-template'">
+           </li>
+
+        </ul>
+
+    </div>
+
 </nav>
