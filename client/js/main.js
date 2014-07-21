@@ -187,7 +187,9 @@ require(
                     'ngRoute',
                     'routeStyles',
                     'ui.bootstrap',
-                    'headerPanel'
+
+                    'headerPanel',
+                    'objectBrowserPanel'
                 ]);
 
             webGME.start( function(client) {

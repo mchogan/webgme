@@ -53,7 +53,6 @@ define(['js/PanelBase/PanelBase',
 
         // TODO: would be nice to get the app as a parameter
         var app = angular.module('gmeApp');
-
         app.controller('ProjectNavigatorController', ProjectNavigatorController);
 
         //project title
