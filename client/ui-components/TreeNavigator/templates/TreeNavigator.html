@@ -14,17 +14,28 @@
 
 
     <script type="text/ng-template" id="tree-navigator-node-template">
+        <a href="#"
+           class="node-expander"
+           data-ng-if="node.childrenCount"
+            data-ng-click="node.expanderClick(node)">
+               <i data-ng-if="!node.expanded" data-ng-class="node.collapsedIconClass || config.collapsedIconClass"></i>
+               <i data-ng-if="node.expanded" data-ng-class="node.expandedIconClass || config.expandedIconClass"></i>
+           </a>
         <a class="node-label"
            data-ng-class="{ 'loading': node.isLoading }"
-           data-ng-click="node.nodeClick(node)"
-                >
+           data-ng-click="node.nodeClick(node)">
+            <i data-ng-if="( node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass ) && !item.iconPullRight"
+               data-ng-class="node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass"></i>
             <span data-ng-if="node.label">{{ node.label }}</span>
             <span class="noname" data-ng-if="!node.label">No name</span>
+            <i data-ng-if="( node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass ) && item.iconPullRight"
+               data-ng-class="node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass"></i>
         </a>
 
         <ul class="node-list"
             data-ng-if="node.children && node.children.length > 0">
-            <li data-ng-repeat="parentNode in node.children"
+            <li title="{{ node.label }}"
+                data-ng-repeat="parentNode in node.children"
                 data-ng-include="'tree-navigator-node-template'"
                 data-ng-init="node=parentNode"
                 data-ng-class="{ 'expanded': parentNode.expanded }">
@@ -35,11 +46,12 @@
     <div class="tree-navigator-nodes">
         <a class="node-label"
            data-ng-click="node.nodeClick(node)"
-           data-ng-if="show-root-label">{{ treeData.label }}</a>
+           data-ng-if="config.showRootLabel">{{ treeData.label }}</a>
         <ul class="node-list"
             data-ng-if="treeData.children && treeData.children.length > 0">
 
-            <li data-ng-repeat="node in treeData.children"
+            <li title="{{ node.label }}"
+                data-ng-repeat="node in treeData.children"
                 data-ng-include="'tree-navigator-node-template'"
                 data-ng-class="{ 'expanded': node.expanded  }">
             </li>

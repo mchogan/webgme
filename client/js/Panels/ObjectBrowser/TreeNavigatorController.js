@@ -66,7 +66,11 @@ define([
                         }
                     }
                 ]
-            }
+            },
+
+            collapsedIconClass: 'fa fa-chevron-right',
+            expandedIconClass: 'fa fa-chevron-down'
+
         };
 
         TreeNavigatorController = function ($scope, gmeClient) {
@@ -213,11 +217,17 @@ define([
             var self = this,
                 newTreeNode,
                 children = [],
-                nodeClick;
+
+                nodeClick,
+                expanderClick;
+
+            nodeClick = function (theNode) {
+                console.log(theNode.id + ' ' + theNode.label + ' was clicked');
+            };
 
             if (self.gmeClient) {
-                nodeClick = function (theNode) {
-                    console.log(theNode.id + ' ' + theNode.label + ' was clicked');
+                expanderClick = function (theNode) {
+                    console.log(theNode.id + ' ' + theNode.label + ' was expander-clicked');
 
                     if (theNode.children.length === 0 && !theNode.isLoading && !theNode.loaded) {
 
@@ -244,8 +254,8 @@ define([
                     }
                 };
             } else {
-                nodeClick = function (theNode) {
-                    console.log(theNode.id + ' ' + theNode.label + ' was clicked');
+                expanderClick = function (theNode) {
+                    console.log(theNode.id + ' ' + theNode.label + ' was expander-clicked');
 
                     if (theNode.children.length === 0 && !theNode.isLoading && !theNode.loaded) {
 
@@ -277,12 +287,15 @@ define([
             newTreeNode = {
                 label: id,
                 children: children,
+                childrenCount: 0,
                 expanded: false,
                 isLoading: false,
                 loaded: false,
                 nodeData: {
                 },
-                nodeClick: nodeClick
+                nodeClick: nodeClick,
+                expanderClick: expanderClick,
+                iconClass: 'fa fa-file-o'
             };
 
             // TODO: add context menu
@@ -309,9 +322,30 @@ define([
 
             if (parentTreeNode) {
                 // if a parent was given add the new node as a child node
+                parentTreeNode.iconClass = undefined;
                 parentTreeNode.children.push(newTreeNode);
+
+                parentTreeNode.childrenCount = parentTreeNode.children.length;
+
+                if (self.gmeClient) {
+                    //newTreeNode.id = id;
+                } else {
+                    // for testing use a random GUID
+                    if ( newTreeNode.childrenCount === 0 ) {
+                        newTreeNode.childrenCount = Math.round(Math.random());
+
+
+                    }
+
+                }
+
+                if (newTreeNode.childrenCount) {
+                    newTreeNode.iconClass = undefined;
+                }
+
                 newTreeNode.parentId = parentTreeNode.id;
             } else {
+
                 // if no parent is given replace the current root node with this node
                 self.$scope.treeData = newTreeNode;
                 newTreeNode.parentId = null;
@@ -334,6 +368,8 @@ define([
                     parentNode.children = parentNode.children.filter(function (el) {
                         return el.id !== id;
                     });
+
+                    parentNode.childrenCount = parentNode.children.length;
                 }
 
                 delete self.treeNodes[id];

@@ -2,15 +2,27 @@
 
   padding: .5ex;
 
-  .node-list {
-    padding: 0 0 0 2ex;
+  font-size: 103%;
+
+  ul.node-list {
     list-style-type: none;
+    padding: 0;
   }
 
-  .node-list > li {
+  ul.node-list ul.node-list {
+    padding: 0 0 0 2ex;
   }
 
-  .node-list > li > ul {
+  ul.node-list > li {
+    padding: .2ex 0;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+
+    cursor: default;
+  }
+
+  ul.node-list > li > ul {
     overflow: hidden;
     transition: opacity .2s;
     opacity: 1;

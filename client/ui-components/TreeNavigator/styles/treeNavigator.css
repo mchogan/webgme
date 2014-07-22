@@ -1,9 +1,18 @@
 .tree-navigator {
-  padding: .5ex; }
-  .tree-navigator .node-list {
-    padding: 0 0 0 2ex;
-    list-style-type: none; }
-  .tree-navigator .node-list > li > ul {
+  padding: .5ex;
+  font-size: 103%; }
+  .tree-navigator ul.node-list {
+    list-style-type: none;
+    padding: 0; }
+  .tree-navigator ul.node-list ul.node-list {
+    padding: 0 0 0 2ex; }
+  .tree-navigator ul.node-list > li {
+    padding: .2ex 0;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    cursor: default; }
+  .tree-navigator ul.node-list > li > ul {
     overflow: hidden;
     transition: opacity .2s;
     opacity: 1; }
