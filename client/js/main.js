@@ -194,8 +194,15 @@ require(
 
             webGME.start( function(client) {
 
-                gmeApp.value('gmeClient', client);
-                gmeApp.value('gmeClient', null);
+                var mock = util.getURLParameterByName('mock').toLowerCase();
+
+                if (mock === 'true') {
+                    // using test data, no gmeClient
+                    gmeApp.value('gmeClient', null);
+                } else {
+                    // connects to the database using gmeClient
+                    gmeApp.value('gmeClient', client);
+                }
 
                 angular.bootstrap(document, [ 'gmeApp']);
 

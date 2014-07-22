@@ -4,10 +4,12 @@
  * @author lattmann / https://github.com/lattmann
  */
 
-define(
-    ['util/guid'], function (
+define([
+    'util/guid'
+],
+    function (
         GUID
-        ) {
+    ) {
         "use strict";
 
         var TreeNavigatorController,
@@ -20,11 +22,8 @@ define(
                     {
                         id: 'project',
                         label: 'Project',
-                        action: function (
-                            ) {
-                            console.log(
-                                'Show projects'
-                            );
+                        action: function () {
+                            console.log('Show projects');
                         },
                         menu: [
                             {
@@ -62,22 +61,15 @@ define(
                     {
                         id: 'composition',
                         label: 'Composition',
-                        action: function (
-                            ) {
-                            console.log(
-                                'Show composition'
-                            );
+                        action: function () {
+                            console.log('Show composition');
                         }
                     }
                 ]
             }
         };
 
-        TreeNavigatorController = function (
-            $scope,
-            gmeClient
-            ) {
-
+        TreeNavigatorController = function ($scope, gmeClient) {
             var self = this;
 
             // this controller identifier
@@ -220,105 +212,96 @@ define(
         TreeNavigatorController.prototype.addNode = function (parentTreeNode, id) {
             var self = this,
                 newTreeNode,
-                children = [];
+                children = [],
+                nodeClick;
 
             if (self.gmeClient) {
-                newTreeNode = {
-                    id: id,
-                    label: self.gmeClient.getNode(id).getAttribute('name'),
-                    children: children,
-                    expanded: false,
-                    isLoading: false,
-                    loaded: false,
-                    nodeData: {
-                    },
-                    nodeClick: function (theNode) {
-                        console.log(theNode.id + ' ' + theNode.label + ' was clicked');
+                nodeClick = function (theNode) {
+                    console.log(theNode.id + ' ' + theNode.label + ' was clicked');
 
-                        if (theNode.children.length === 0 && !theNode.isLoading && !theNode.loaded) {
+                    if (theNode.children.length === 0 && !theNode.isLoading && !theNode.loaded) {
 
-                            theNode.isLoading = true;
+                        theNode.isLoading = true;
 
-                            self.update();
+                        self.update();
 
-                            // add new rules to territory
-                            self.territoryPattern[theNode.id] = { children: 1};
-                            self.gmeClient.updateTerritory(self.territoryId, self.territoryPattern);
+                        // add new rules to territory
+                        self.territoryPattern[theNode.id] = { children: 1};
+                        self.gmeClient.updateTerritory(self.territoryId, self.territoryPattern);
 
-                            if (self.gmeClient.getNode(theNode.id).getChildrenIds().length === 0) {
-                                // if there are no children we are done
-                                theNode.isLoading = false;
-                                theNode.loaded = true;
-                            }
-
-                            // this node is expanded now
-                            theNode.expanded = true;
-
-                        } else {
-
-                            // Expand-collapse
-
-                            if (theNode.expanded !== true) {
-                                theNode.expanded = true;
-                            } else {
-                                theNode.expanded = false;
-                            }
+                        if (self.gmeClient.getNode(theNode.id).getChildrenIds().length === 0) {
+                            // if there are no children we are done
+                            theNode.isLoading = false;
+                            theNode.loaded = true;
                         }
+
+                        // this node is expanded now
+                        theNode.expanded = true;
+
+                    } else {
+                        // Expand-collapse
+                        theNode.expanded = !theNode.expanded;
                     }
                 };
             } else {
-                newTreeNode = {
-                    id: GUID(),
-                    label: id,
-                    children: children,
-                    expanded: false,
-                    isLoading: false,
-                    loaded: false,
-                    nodeData: {
-                    },
-                    nodeClick: function (
-                        theNode
-                        ) {
-                        console.log(
-                                theNode.id + ' ' + theNode.label + ' was clicked'
-                        );
+                nodeClick = function (theNode) {
+                    console.log(theNode.id + ' ' + theNode.label + ' was clicked');
 
-                        if (theNode.children.length === 0 && !theNode.isLoading && !theNode.loaded) {
+                    if (theNode.children.length === 0 && !theNode.isLoading && !theNode.loaded) {
 
-                            theNode.isLoading = true;
+                        theNode.isLoading = true;
 
-                            self.update();
+                        self.update();
 
-                            setTimeout(
+                        // emulate async loading of objects
+                        setTimeout(
+                            function () {
+                                self.dummyTreeDataGenerator(theNode, 'Async ' + id, 5, 0);
 
-                                function (
-                                    ) {
-
-                                    self.dummyTreeDataGenerator(
-                                        theNode, 'Async ' + id, 5, 0
-                                    );
-
-
-                                    theNode.isLoading = false;
-                                    theNode.loaded = true;
-                                    theNode.expanded = true;
-
-                                    self.update();
-
-                                }, 2000
-                            );
-                        } else {
-
-                            // Expand-collapse
-
-                            if ( theNode.expanded !== true ) {
+                                theNode.isLoading = false;
+                                theNode.loaded = true;
                                 theNode.expanded = true;
-                            } else {
-                                theNode.expanded = false;
-                            }
-                        }
+
+                                self.update();
+                            },
+                            2000
+                        );
+                    } else {
+                        // Expand-collapse
+                        theNode.expanded = !theNode.expanded;
                     }
                 };
+            }
+
+            // node structure
+            newTreeNode = {
+                label: id,
+                children: children,
+                expanded: false,
+                isLoading: false,
+                loaded: false,
+                nodeData: {
+                },
+                nodeClick: nodeClick
+            };
+
+            // TODO: add context menu
+            // TODO: add delete - on delete and in context menu
+            // TODO: add create new object (using meta model rules) - disabled and enabled types?
+            // TODO: add copy to clipboard
+            // TODO: add open in Visualizer
+            // TODO: add rename
+            // TODO: add library business (export as library, update library from file, import library here)
+            // TODO: collapse expand
+            // TODO: handle double click
+            // TODO: show meta types - config
+            // TODO: show icon
+
+            if (self.gmeClient) {
+                newTreeNode.id = id;
+            } else {
+                // for testing use a random GUID
+                newTreeNode.id = GUID();
             }
 
             // add the new node to the map
@@ -358,12 +341,42 @@ define(
 
         };
 
+        TreeNavigatorController.prototype.collapseAll = function () {
+            var self = this,
+                id;
+
+            for (id in self.treeNodes) {
+                if (self.treeNodes.hasOwnProperty(id)) {
+                    self.treeNodes[id].expanded = false;
+                }
+            }
+
+            self.update();
+        };
+
+        TreeNavigatorController.prototype.expandNodes = function (nodeIdList) {
+            var self = this,
+                i,
+                id;
+
+            nodeIdList = nodeIdList || [];
+
+            for (i = 0; i < nodeIdList.length; i += 1) {
+                id = nodeIdList[i].id;
+                if (self.treeNodes.hasOwnProperty(id)) {
+                    self.treeNodes[id].expanded = true;
+                }
+            }
+
+            self.update();
+        };
+
         TreeNavigatorController.prototype.dummyTreeDataGenerator = function (
             treeNode,
             name,
             maxCount,
             levels
-            ) {
+        ) {
             var self = this,
                 i,
                 id,
@@ -380,18 +393,13 @@ define(
             for (i = 0; i < count; i += 1) {
                 id = name + i;
 
-                childNode = self.addNode(
-                    treeNode, id
-                );
+                childNode = self.addNode(treeNode, id);
 
                 if (levels > 0) {
-                    self.dummyTreeDataGenerator(
-                        childNode, id + '.', maxCount, levels - 1
-                    );
+                    self.dummyTreeDataGenerator(childNode, id + '.', maxCount, levels - 1);
                 }
             }
         };
 
         return TreeNavigatorController;
-    }
-);
+    });
