@@ -326,7 +326,7 @@ define([
                 nodeToDelete = self.treeNodes[id];
 
             if (nodeToDelete) {
-                if (nodeToDelete.parentId && self.treeNodes[nodeToDelete.parentId]) {
+                if (nodeToDelete.parentId !== null && self.treeNodes[nodeToDelete.parentId] !== undefined) {
                     // find parent node
                     parentNode = self.treeNodes[nodeToDelete.parentId];
 
