@@ -14,23 +14,27 @@
 
 
     <script type="text/ng-template" id="tree-navigator-node-template">
-        <a href="#"
-           class="node-expander"
-           data-ng-if="node.childrenCount"
-            data-ng-click="node.expanderClick(node)">
-               <i data-ng-if="!node.expanded" data-ng-class="node.collapsedIconClass || config.collapsedIconClass"></i>
-               <i data-ng-if="node.expanded" data-ng-class="node.expandedIconClass || config.expandedIconClass"></i>
-           </a>
-        <a class="node-label"
+        <div class="node-label"
            data-ng-class="{ 'loading': node.isLoading }"
            data-ng-click="node.nodeClick(node)">
+
+            <a href="#"
+               class="node-expander"
+               data-ng-if="node.childrenCount"
+               data-ng-click="node.expanderClick(node)">
+                <i data-ng-if="!node.expanded" data-ng-class="node.collapsedIconClass || config.collapsedIconClass"></i>
+                <i data-ng-if="node.expanded" data-ng-class="node.expandedIconClass || config.expandedIconClass"></i>
+            </a>
+
             <i data-ng-if="( node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass ) && !item.iconPullRight"
                data-ng-class="node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass"></i>
             <span data-ng-if="node.label">{{ node.label }}</span>
+            <span data-ng-if="node.extraInfo"
+                  class="node-extra-info">{{ node.extraInfo }}</span>
             <span class="noname" data-ng-if="!node.label">No name</span>
             <i data-ng-if="( node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass ) && item.iconPullRight"
                data-ng-class="node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass"></i>
-        </a>
+        </div>
 
         <ul class="node-list"
             data-ng-if="node.children && node.children.length > 0">

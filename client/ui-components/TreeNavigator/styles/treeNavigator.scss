@@ -1,6 +1,6 @@
 .tree-navigator {
 
-  padding: .5ex;
+  padding: .75ex;
 
   font-size: 103%;
 
@@ -9,17 +9,17 @@
     padding: 0;
   }
 
-  ul.node-list ul.node-list {
-    padding: 0 0 0 2ex;
-  }
-
   ul.node-list > li {
-    padding: .2ex 0;
+    padding: .2ex 0 .2ex .2ex;
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
 
     cursor: default;
+  }
+
+  ul.node-list ul.node-list {
+    padding: 0 0 0 2ex;
   }
 
   ul.node-list > li > ul {
@@ -34,9 +34,24 @@
   }
 
 
+  .node-label:hover,
+  .node-label:active
+  {
+     text-decoration: none;
+     background-color: #eee;
+  }
+
   .node-label.loading:after {
     display: block;
     content: 'Loading...';
     padding-left: 2ex;
   }
+
+  span.node-extra-info {
+    color: #aaa;
+    font-size: 80%;
+  }
+
+
+
 }

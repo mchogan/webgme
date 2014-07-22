@@ -292,6 +292,7 @@ define([
             // node structure
             newTreeNode = {
                 label: id,
+                extraInfo: 'Extra info',
                 children: children,
                 childrenCount: 0,
                 expanded: false,
