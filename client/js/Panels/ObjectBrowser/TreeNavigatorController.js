@@ -413,16 +413,15 @@ define([
 
             values.sort(function (a, b) {
                 var i,
-                    key;
+                    key,
+                    result;
 
                 for (i = 0; i < orderBy.length; i += 1) {
                     key = orderBy[i];
                     if (a.hasOwnProperty(key) && b.hasOwnProperty(key)) {
-                        if (a[key] > b[key]) {
-                            return 1;
-                        }
-                        if (a[key] < b[key]) {
-                            return -1;
+                        result = a[key].toLowerCase().localeCompare(b[key].toLowerCase());
+                        if (result !== 0) {
+                            return result;
                         }
                     }
                 }
