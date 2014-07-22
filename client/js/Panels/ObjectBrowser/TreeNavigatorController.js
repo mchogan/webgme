@@ -155,6 +155,9 @@ define([
                             if (self.treeNodes.hasOwnProperty(event.eid)) {
                                 // we already have the tree node
                                 treeNode = self.treeNodes[event.eid];
+                                if (treeNode.parentId !== null && self.treeNodes.hasOwnProperty(treeNode.parentId)) {
+                                    parentNode = self.treeNodes[treeNode.parentId];
+                                }
                             } else {
                                 // we have to create a new node in the tree
                                 // get the parentId
@@ -173,6 +176,7 @@ define([
 
                                 // add the new node to the tree
                                 treeNode = self.addNode(parentNode, event.eid);
+
                             }
 
                             // update all relevant properties
@@ -186,6 +190,8 @@ define([
                                 //       update the flags here
                                 parentNode.isLoading = false;
                                 parentNode.loaded = true;
+
+                                self.sortChildren(parentNode.children);
                             }
 
                         } else if (event.etype === 'unload') {
@@ -310,6 +316,7 @@ define([
             if (parentTreeNode) {
                 // if a parent was given add the new node as a child node
                 parentTreeNode.children.push(newTreeNode);
+                self.sortChildren(parentTreeNode.children);
                 newTreeNode.parentId = parentTreeNode.id;
             } else {
                 // if no parent is given replace the current root node with this node
@@ -399,6 +406,32 @@ define([
                     self.dummyTreeDataGenerator(childNode, id + '.', maxCount, levels - 1);
                 }
             }
+        };
+
+        TreeNavigatorController.prototype.sortChildren = function (values) {
+            var orderBy = ['label', 'id'];
+
+            values.sort(function (a, b) {
+                var i,
+                    key;
+
+                for (i = 0; i < orderBy.length; i += 1) {
+                    key = orderBy[i];
+                    if (a.hasOwnProperty(key) && b.hasOwnProperty(key)) {
+                        if (a[key] > b[key]) {
+                            return 1;
+                        }
+                        if (a[key] < b[key]) {
+                            return -1;
+                        }
+                    }
+                }
+
+                // a must be equal to b
+                return 0;
+            });
+
+            return values;
         };
 
         return TreeNavigatorController;
