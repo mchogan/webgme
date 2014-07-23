@@ -105,10 +105,30 @@ define([
             self.$scope.contextMenuData = null;
 
             self.$scope.onContextMenu = function(theNode) {
+                var j,
+                    childrenTypes,
+                    createNewSubMenu;
 
                 console.log(theNode);
 
                 if ( theNode ) {
+
+                    createNewSubMenu = theNode.contextMenu[0].items[0].menu[0].items; // select create new sub menu
+
+                    if (self.gmeClient) {
+                        childrenTypes = self.gmeClient.getValidChildrenTypes(theNode.id);
+
+                        for (j = 0; j < childrenTypes.length; j += 1) {
+                            createNewSubMenu.push({
+                                id: childrenTypes[j],
+                                label: self.gmeClient.getNode(childrenTypes[j]).getAttribute('name')
+                            });
+                        }
+                    } else {
+                        // TODO: generate test data
+                    }
+
+
                     self.$scope.contextMenuData = theNode.contextMenu;
                 } else {
                     self.$scope.contextMenuData = null;
@@ -159,10 +179,15 @@ define([
                 // add this instance for listening to events
                 self.territoryId = self.gmeClient.addUI(self, function (events) {
                     var i,
+                        j,
                         event,
                         treeNode,
                         parentId,
-                        parentNode;
+                        parentNode,
+
+                        childrenTypes,
+
+                        createNewSubMenu;
 
                     for (i = 0; i < events.length; i += 1) {
                         event = events[i];
@@ -199,9 +224,6 @@ define([
                             // update all relevant properties
                             treeNode.label = self.gmeClient.getNode(event.eid).getAttribute('name');
                             treeNode.childrenCount = self.gmeClient.getNode(event.eid).getChildrenIds().length;
-
-                            // TODO: context menu to create a new node based on meta rules
-
 
                             if (parentNode) {
                                 // if parent node exists then the loading is done
@@ -332,12 +354,63 @@ define([
                     {
                         items: [
                             {
-                                id: 'preferences 1',
-                                label: 'Preferences 1' + id
+                                id: 'create',
+                                label: 'Create new',
+                                menu: [{
+                                    items: []
+                                }]
+                            },
+//                            {
+//                                id: 'toggleCollapse',
+//                                label: theNode.expanded ? 'Collapse' : 'Expand',
+//                                actionData: newTreeNode,
+//                                action: expanderClick
+//                            },
+                            {
+                                id: 'rename',
+                                label: 'Rename'
                             },
                             {
-                                id: 'preferences 2',
-                                label: 'Preferences 2'
+                                id: 'delete',
+                                label: 'Delete'
+                            },
+                            {
+                                id: 'exportObject',
+                                label: 'Export object ...'
+                            },
+                            {
+                                id: 'importHere',
+                                label: 'Import here ...'
+                            },
+                            {
+                                id: 'mergeHere',
+                                label: 'Merge here ...'
+                            },
+                            {
+                                id: 'exportContext',
+                                label: 'Export context ...'
+                            },
+                            {
+                                id: 'library',
+                                label: 'Library',
+                                menu: [
+                                    {
+                                        items: [
+                                            {
+                                                id: 'exportAsLibrary',
+                                                label: 'Export as library ...'
+                                            },
+                                            {
+                                                id: 'updateLibraryFromFile',
+                                                label: 'Update library from file ...'
+                                            },
+                                            {
+                                                id: 'importLibraryHere',
+                                                label: 'Import library here ...'
+                                            }
+                                        ]
+                                    }
+                                ]
                             },
                             {
                                 id: 'preferences 3',
