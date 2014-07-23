@@ -73,6 +73,16 @@ angular
           }
         }
 
+        function handleMouseDownEvent(event) {
+          if (!$scope.disabled() &&
+            opened &&
+            (event.button !== 2 || event.target !== ContextMenuService.element)) {
+            $scope.$apply(function() {
+              close(ContextMenuService.menuElement);
+            });
+          }
+        }
+
         function handleClickEvent(event) {
           if (!$scope.disabled() &&
             opened &&
@@ -119,13 +129,15 @@ angular
         w.bind('blur', handleBlurEvent);
 
         $document.bind('click', handleClickEvent);
-        $document.bind('contextmenu', handleClickEvent);
+        $document.bind('mousedown', handleMouseDownEvent);
+        $document.bind('contextmenu', handleMouseDownEvent);
 
         $scope.$on('$destroy', function() {
           //console.log('destroy');
           $document.unbind('keyup', handleKeyUpEvent);
           $document.unbind('click', handleClickEvent);
-          $document.unbind('contextmenu', handleClickEvent);
+          $document.unbind('mousedown', handleMouseDownEvent);
+          $document.unbind('contextmenu', handleMouseDownEvent);
           $document.unbind('scroll', handleScrollEvent);
           w.unbind('resize', handleResizeEvent);
           w.unbind('blur', handleBlurEvent);
