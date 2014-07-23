@@ -30,9 +30,9 @@
             <i data-ng-if="( node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass ) && !item.iconPullRight"
                data-ng-class="node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass"></i>
             <span data-ng-if="node.label">{{ node.label }}</span>
+            <span class="noname" data-ng-if="!node.label">No name</span>
             <span data-ng-if="node.extraInfo"
                   class="node-extra-info">{{ node.extraInfo }}</span>
-            <span class="noname" data-ng-if="!node.label">No name</span>
             <i data-ng-if="( node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass ) && item.iconPullRight"
                data-ng-class="node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass"></i>
         </div>

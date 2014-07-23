@@ -11,7 +11,7 @@ angular
       menuElement: null
     };
   })
-  .directive('contextMenu', ['$document', 'ContextMenuService', function($document, ContextMenuService) {
+  .directive('contextMenu', ['$document', 'ContextMenuService', '$window', function($document, ContextMenuService, $window) {
     return {
       restrict: 'A',
       scope: {
@@ -83,9 +83,41 @@ angular
           }
         }
 
+        function handleScrollEvent(event) {
+          if (!$scope.disabled() && opened) {
+            $scope.$apply(function() {
+              close(ContextMenuService.menuElement);
+            });
+          }
+        }
+
+        function handleResizeEvent(event) {
+          if (!$scope.disabled() && opened) {
+            $scope.$apply(function() {
+              close(ContextMenuService.menuElement);
+            });
+          }
+        }
+
+        function handleBlurEvent(event) {
+          if (!$scope.disabled() && opened) {
+            $scope.$apply(function() {
+              close(ContextMenuService.menuElement);
+            });
+          }
+        }
+
         $document.bind('keyup', handleKeyUpEvent);
         // Firefox treats a right-click as a click and a contextmenu event while other browsers
         // just treat it as a contextmenu event
+
+        $document.bind('scroll', handleScrollEvent);
+
+        var w = angular.element($window);
+
+        w.bind('resize', handleResizeEvent);
+        w.bind('blur', handleBlurEvent);
+
         $document.bind('click', handleClickEvent);
         $document.bind('contextmenu', handleClickEvent);
 
@@ -94,6 +126,9 @@ angular
           $document.unbind('keyup', handleKeyUpEvent);
           $document.unbind('click', handleClickEvent);
           $document.unbind('contextmenu', handleClickEvent);
+          $document.unbind('scroll', handleScrollEvent);
+          w.unbind('resize', handleResizeEvent);
+          w.unbind('blur', handleBlurEvent);
         });
       }
     };
