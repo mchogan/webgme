@@ -187,7 +187,7 @@ define([
                                     _self.dispatchEvent(_self.events.SERVER_PROJECT_DELETED,parameters.project);
                                     break;
                                 case "BRANCH_CREATED":
-                                    _self.dispatchEvent(_self.events.SERVER_BRANCH_CREATED,{project:parameters.project,branch:parameters.branch});
+                                    _self.dispatchEvent(_self.events.SERVER_BRANCH_CREATED,{project:parameters.project,branch:parameters.branch,commit:parameters.commit});
                                     break;
                                 case "BRANCH_DELETED":
                                     _self.dispatchEvent(_self.events.SERVER_BRANCH_DELETED,{project:parameters.project,branch:parameters.branch});
@@ -226,7 +226,7 @@ define([
                 WebGMEGlobal.getToken = getToken;
                 return {
                     getToken: getToken
-                }
+                };
             }
 
             function branchWatcher(branch,callback) {
@@ -513,7 +513,6 @@ define([
                                     if(firstName){
                                         branchWatcher(firstName,function(err){
                                             if(!err){
-                                                _self.dispatchEvent(_self.events.BRANCH_CHANGED, _branch);
                                                 callback(null);
                                             } else {
                                                 logger.error('The branch '+firstName+' of project '+name+' cannot be selected! ['+JSON.stringify(err)+']');
@@ -563,7 +562,7 @@ define([
             function closeOpenedProject(callback){
                 callback = callback || function(){};
                 var returning = function(e){
-
+                    var oldProjName = _projectName;
                     _projectName = null;
                     _inTransaction = false;
                     _core = null;
@@ -579,10 +578,17 @@ define([
                     _loadError = 0;
                     _offline = false;
                     cleanUsersTerritories();
-                    _self.dispatchEvent(_self.events.PROJECT_CLOSED);
+                    if(oldProjName){
+                        //otherwise there were no open project at all
+                        _self.dispatchEvent(_self.events.PROJECT_CLOSED,oldProjName);
+                    }
 
                     callback(e);
                 };
+                if(_branch){
+                    //otherwise the branch will not 'change'
+                    _self.dispatchEvent(_self.events.BRANCH_CHANGED,null);
+                }
                 _branch = null;
                 if(_project){
                     var project = _project;
@@ -1901,53 +1907,55 @@ define([
                 }
             }
             function updateTerritory(guid, patterns) {
-                if(_project){
-                    if(_nodes[ROOT_PATH]){
-                        //TODO: this has to be optimized
-                        var missing = 0;
-                        var error = null;
+                if(_users[guid]){
+                    if(_project){
+                        if(_nodes[ROOT_PATH]){
+                            //TODO: this has to be optimized
+                            var missing = 0;
+                            var error = null;
 
-                        var patternLoaded = function (err) {
-                            error = error || err;
-                            if(--missing === 0){
+                            var patternLoaded = function (err) {
+                                error = error || err;
+                                if(--missing === 0){
+                                    //allDone();
+                                    _updateTerritoryAllDone(guid, patterns, error);
+                                }
+                            };
+
+                            //EXTRADTED OUT TO: _updateTerritoryAllDone
+                            /*var allDone = function(){
+                             if(_users[guid]){
+                             _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
+                             if(!error){
+                             userEvents(guid,[]);
+                             }
+                             }
+                             };*/
+                            for(var i in patterns){
+                                missing++;
+                            }
+                            if(missing>0){
+                                for(i in patterns){
+                                    loadPattern(_core,i,patterns[i],_nodes,patternLoaded);
+                                }
+                            } else {
                                 //allDone();
                                 _updateTerritoryAllDone(guid, patterns, error);
                             }
-                        };
-
-                        //EXTRADTED OUT TO: _updateTerritoryAllDone
-                        /*var allDone = function(){
-                            if(_users[guid]){
-                                _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
-                                if(!error){
-                                    userEvents(guid,[]);
-                                }
-                            }
-                        };*/
-                        for(var i in patterns){
-                            missing++;
-                        }
-                        if(missing>0){
-                            for(i in patterns){
-                                loadPattern(_core,i,patterns[i],_nodes,patternLoaded);
-                            }
                         } else {
-                            //allDone();
-                            _updateTerritoryAllDone(guid, patterns, error);
+                            //something funny is going on
+                            if(_loadNodes[ROOT_PATH]){
+                                //probably we are in the loading process, so we should redo this update when the loading finishes
+                                //setTimeout(updateTerritory,100,guid,patterns);
+                            } else {
+                                //root is not in nodes and has not even started to load it yet...
+                                _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
+                            }
                         }
                     } else {
-                        //something funny is going on
-                        if(_loadNodes[ROOT_PATH]){
-                            //probably we are in the loading process, so we should redo this update when the loading finishes
-                            //setTimeout(updateTerritory,100,guid,patterns);
-                        } else {
-                            //root is not in nodes and has not even started to load it yet...
-                            _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
-                        }
+                        //we should update the patterns, but that is all
+                        _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
                     }
-                } else {
-                    //we should update the patterns, but that is all
-                    _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
                 }
             }
 
@@ -2242,9 +2250,7 @@ define([
                 //_self.addEventListener(_self.events.SERVER_BRANCH_UPDATED,function(client,data){
                 //    console.log(data);
                 //});
-                getFullProjectListAsync(function(err,info){
-                    console.log(err,info);
-                });
+                
             }
 
             //export and import functions
@@ -2477,6 +2483,24 @@ define([
                 });
             }
 
+            function createGenericBranchAsync(project,branch,commit,callback){
+                _database.simpleRequest({command:'setBranch',project:project,branch:branch,old:'',new:commit},function(err,id){
+                    if(err){
+                        return callback(err);
+                    }
+                    _database.simpleResult(id,callback);
+                });
+            }
+
+            function deleteGenericBranchAsync(project,branch,commit,callback){
+                _database.simpleRequest({command:'setBranch',project:project,branch:branch,old:commit,new:''},function(err,id){
+                    if(err){
+                        return callback(err);
+                    }
+                    _database.simpleResult(id,callback);
+                });
+            }
+
             //initialization
             function initialize(){
                 _database = newDatabase();
@@ -2644,6 +2668,8 @@ define([
                 updateLibraryAsync: updateLibraryAsync,
                 addLibraryAsync: addLibraryAsync,
                 getFullProjectsInfoAsync: getFullProjectsInfoAsync,
+                createGenericBranchAsync: createGenericBranchAsync,
+                deleteGenericBranchAsync: deleteGenericBranchAsync,
 
                 //constraint
                 setConstraint: setConstraint,
