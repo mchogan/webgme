@@ -185,7 +185,7 @@ define([
 
                             // update all relevant properties
                             treeNode.label = self.gmeClient.getNode(event.eid).getAttribute('name');
-
+                            treeNode.childrenCount = self.gmeClient.getNode(event.eid).getChildrenIds().length;
 
                             if (parentNode) {
                                 // if parent node exists then the loading is done
@@ -377,7 +377,15 @@ define([
                         return el.id !== id;
                     });
 
-                    parentNode.childrenCount = parentNode.children.length;
+                    if (self.gmeClient) {
+                        parentNode.childrenCount = self.gmeClient.getNode(nodeToDelete.parentId).getChildrenIds().length;
+                    } else {
+                        parentNode.childrenCount = parentNode.children.length;
+                    }
+
+                    if (parentNode.childrenCount === 0) {
+                        parentNode.iconClass = 'fa fa-file-o';
+                    }
                 }
 
                 delete self.treeNodes[id];
