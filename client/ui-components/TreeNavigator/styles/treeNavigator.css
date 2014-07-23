@@ -30,3 +30,5 @@
   .tree-navigator span.node-extra-info {
     color: #aaa;
     font-size: 80%; }
+  .tree-navigator .context-menu {
+    position: fixed; }

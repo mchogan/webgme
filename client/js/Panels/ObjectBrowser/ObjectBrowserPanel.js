@@ -97,7 +97,10 @@ define(
             app.controller('TreeNavigatorController', TreeNavigatorController);
 
 
-            treeNavigatorHtml = '<div data-ng-controller="TreeNavigatorController"><tree-navigator tree-data="treeData" config="config"></tree-navigator></div>';
+            treeNavigatorHtml = '<div data-ng-controller="TreeNavigatorController">' +
+                '<tree-navigator ' +
+                'tree-data="treeData" config="config" context-menu-data="contextMenuData" ' +
+                '></tree-navigator></div>';
 
             this.$el.html(
                 '<ul class="nav nav-tabs">' +

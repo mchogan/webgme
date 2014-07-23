@@ -72,7 +72,9 @@ require.config({
         'angular': 'lib/angular/angular-1.2.19/angular' + ( DEBUG ? '.min' : '' ),
         'angular-route': 'lib/angular/angular-1.2.19/angular-route' + ( DEBUG ? '.min' : '' ),
         'angular-route-styles': 'lib/angular/angular-route-styles/route-styles',
-        'angular-ui-bootstrap': 'lib/angular/ui-bootstrap/ui-bootstrap-tpls-0.11.0.min'
+        'angular-ui-bootstrap': 'lib/angular/ui-bootstrap/ui-bootstrap-tpls-0.11.0.min',
+        'ng-context-menu': 'lib/angular/ng-context-menu/ng-context-menu.0.1.4' + ( DEBUG ? '.min' : '' )
+
     },
 
     shim: {
@@ -80,7 +82,8 @@ require.config({
         'angular-route': ['angular'],
         'angular-route-styles': ['angular'],
         'angular-ui-bootstrap': ['angular'],
-        
+        'ng-context-menu': ['angular'],
+
         'jquery-ui': ['jquery'],
         'jquery-ui-iPad': ['jquery','jquery-ui'],
 

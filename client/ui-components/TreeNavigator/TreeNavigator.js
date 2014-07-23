@@ -8,7 +8,12 @@
 define([
     'angular',
     'text!./templates/TreeNavigator.html',
-    'css!./styles/treeNavigator.css'
+    'css!./styles/treeNavigator.css',
+
+    './../HierarchicalDropDown/HierarchicalDropdown',
+    './../Directives',
+    'ng-context-menu'
+
 ], function(
     ng,
     template ){
@@ -16,7 +21,13 @@ define([
     "use strict";
 
     angular.module(
-        'isis.ui.treeNavigator', []
+        'isis.ui.treeNavigator',
+        [
+            'isis.ui.hierarchicalDropdown',
+            'isis.ui.directives',
+            'ng-context-menu'
+        ]
+
     ).directive(
         'treeNavigator',
          function () {
@@ -24,7 +35,8 @@ define([
              return {
                  scope: {
                      treeData: '=',
-                     config: '='
+                     config: '=',
+                     contextMenuData: '='
                  },
                  restrict: 'E',
                  replace: true,

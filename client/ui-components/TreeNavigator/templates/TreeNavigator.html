@@ -12,11 +12,12 @@
         </span>
     </header>
 
-
     <script type="text/ng-template" id="tree-navigator-node-template">
         <div class="node-label"
            data-ng-class="{ 'loading': node.isLoading }"
-           data-ng-click="node.nodeClick(node)">
+           data-ng-click="node.nodeClick(node)"
+           context-menu="node.onContextMenu(node)"
+           data-target="tree-context-menu" >
 
             <a href="#"
                class="node-expander"
@@ -35,7 +36,6 @@
             <i data-ng-if="( node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass ) && item.iconPullRight"
                data-ng-class="node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass"></i>
         </div>
-
         <ul class="node-list"
             data-ng-if="node.children && node.children.length > 0">
             <li title="{{ node.label }}"
@@ -63,5 +63,10 @@
         </ul>
 
     </div>
+
+    <hierarchical-dropdown
+            menu="contextMenuData"
+            id="tree-context-menu"
+            class="context-menu position-fixed"></hierarchical-dropdown>
 
 </nav>

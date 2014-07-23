@@ -102,6 +102,19 @@ define([
 
             self.$scope.config = defaultConfig;
 
+            self.$scope.contextMenuData = null;
+
+            self.$scope.onContextMenu = function(theNode) {
+
+                console.log(theNode);
+
+                if ( theNode ) {
+                    self.$scope.contextMenuData = theNode.contextMenu;
+                } else {
+                    self.$scope.contextMenuData = null;
+                }
+            };
+
             if (self.gmeClient) {
                 self.initWithClient();
             } else {
@@ -314,7 +327,40 @@ define([
                 },
                 nodeClick: nodeClick,
                 expanderClick: expanderClick,
-                iconClass: 'fa fa-file-o'
+                iconClass: 'fa fa-file-o',
+                contextMenu: [
+                    {
+                        items: [
+                            {
+                                id: 'preferences 1',
+                                label: 'Preferences 1' + id
+                            },
+                            {
+                                id: 'preferences 2',
+                                label: 'Preferences 2'
+                            },
+                            {
+                                id: 'preferences 3',
+                                label: 'Preferences 3',
+                                menu: [
+                                    {
+                                        items: [
+                                            {
+                                                id: 'sub_preferences 1',
+                                                label: 'Sub preferences 1'
+                                            },
+                                            {
+                                                id: 'sub_preferences 2',
+                                                label: 'Sub preferences 2'
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                onContextMenu: self.$scope.onContextMenu
             };
 
             // TODO: add context menu
