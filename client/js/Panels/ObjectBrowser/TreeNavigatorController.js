@@ -367,6 +367,9 @@ define([
 //                                action: expanderClick
 //                            },
                             {
+                                id: 'dummy',
+                                label: 'Just for test ' + id,
+                            },{
                                 id: 'rename',
                                 label: 'Rename'
                             },
