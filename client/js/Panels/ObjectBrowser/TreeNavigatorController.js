@@ -187,6 +187,9 @@ define([
                             treeNode.label = self.gmeClient.getNode(event.eid).getAttribute('name');
                             treeNode.childrenCount = self.gmeClient.getNode(event.eid).getChildrenIds().length;
 
+                            // TODO: context menu to create a new node based on meta rules
+
+
                             if (parentNode) {
                                 // if parent node exists then the loading is done
                                 // NOTE: loading is only done once the for loop ends
@@ -225,7 +228,8 @@ define([
                 children = [],
 
                 nodeClick,
-                expanderClick;
+                expanderClick,
+                deleteNode;
 
             nodeClick = function (theNode) {
                 console.log(theNode.id + ' ' + theNode.label + ' was clicked');
@@ -259,6 +263,10 @@ define([
                         theNode.expanded = !theNode.expanded;
                     }
                 };
+
+                deleteNode = function (theNode) {
+                    self.gmeClient.delMoreNodes([theNode.id]);
+                };
             } else {
                 expanderClick = function (theNode) {
                     console.log(theNode.id + ' ' + theNode.label + ' was expander-clicked');
@@ -286,6 +294,10 @@ define([
                         // Expand-collapse
                         theNode.expanded = !theNode.expanded;
                     }
+                };
+
+                deleteNode = function (theNode) {
+                    self.removeNode(theNode.id);
                 };
             }
 
