@@ -109,7 +109,9 @@ define([
                     childrenTypes,
 
                     createNewMenu,
-                    createNewSubMenu;
+                    createNewSubMenu,
+
+                    createNewNode;
 
                 console.log(theNode);
 
@@ -121,16 +123,29 @@ define([
                     createNewSubMenu = createNewMenu.menu[0].items; // select create new sub menu
 
                     if (self.gmeClient) {
+                        createNewNode = function (data) {
+                            var newId = self.gmeClient.createChild(data);
+                            self.gmeClient.setAttributes(newId, 'name', 'New ' + self.gmeClient.getNode(data.baseId).getAttribute('name'));
+                        };
+
                         childrenTypes = self.gmeClient.getValidChildrenTypes(theNode.id);
 
                         for (j = 0; j < childrenTypes.length; j += 1) {
                             createNewSubMenu.push({
                                 id: childrenTypes[j],
-                                label: self.gmeClient.getNode(childrenTypes[j]).getAttribute('name')
+                                label: self.gmeClient.getNode(childrenTypes[j]).getAttribute('name'),
+                                actionData: {
+                                    parentId: theNode.id,
+                                    baseId: childrenTypes[j]
+                                },
+                                action: createNewNode
                             });
                         }
                     } else {
                         // TODO: generate test data
+                        createNewNode = function (data) {
+                           // TODO: create new node
+                        };
                     }
 
                     if (createNewSubMenu.length > 0) {
@@ -275,8 +290,7 @@ define([
                 children = [],
 
                 nodeClick,
-                expanderClick,
-                deleteNode;
+                expanderClick;
 
             nodeClick = function (theNode) {
                 console.log(theNode.id + ' ' + theNode.label + ' was clicked');
@@ -310,10 +324,6 @@ define([
                         theNode.expanded = !theNode.expanded;
                     }
                 };
-
-                deleteNode = function (theNode) {
-                    self.gmeClient.delMoreNodes([theNode.id]);
-                };
             } else {
                 expanderClick = function (theNode) {
                     console.log(theNode.id + ' ' + theNode.label + ' was expander-clicked');
@@ -342,10 +352,6 @@ define([
                         theNode.expanded = !theNode.expanded;
                     }
                 };
-
-                deleteNode = function (theNode) {
-                    self.removeNode(theNode.id);
-                };
             }
 
             // node structure
@@ -369,9 +375,8 @@ define([
                                 id: 'create',
                                 label: 'Create new',
                                 disabled: true,
-                                menu: [{
-                                    items: []
-                                }]
+                                iconClass: 'fa fa-plus',
+                                menu: []
                             },
 //                            {
 //                                id: 'toggleCollapse',
@@ -388,7 +393,16 @@ define([
                             },
                             {
                                 id: 'delete',
-                                label: 'Delete'
+                                label: 'Delete',
+                                iconClass: 'fa fa-minus',
+                                actionData: newTreeNode,
+                                action: function (data) {
+                                    if (self.gmeClient) {
+                                        self.gmeClient.delMoreNodes([data.id]);
+                                    } else {
+                                        self.removeNode(data.id);
+                                    }
+                                }
                             },
                             {
                                 id: 'exportObject',
