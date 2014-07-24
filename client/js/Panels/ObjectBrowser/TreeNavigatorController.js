@@ -5,10 +5,14 @@
  */
 
 define([
-    'util/guid'
+    'util/guid',
+    'js/Utils/ExportManager',
+    'js/Utils/ImportManager'
 ],
     function (
-        GUID
+        GUID,
+        ExportManager,
+        ImportManager
     ) {
         "use strict";
 
@@ -144,8 +148,20 @@ define([
                     } else {
                         // TODO: generate test data
                         createNewNode = function (data) {
-                           // TODO: create new node
+                            self.addNode(self.treeNodes[data.parentId], 'New node ' + GUID());
                         };
+
+                        if (Math.random() > 0.5) {
+                            createNewSubMenu.push({
+                                id: 'newNodeHere',
+                                label: 'New node here',
+                                actionData: {
+                                    parentId: theNode.id,
+                                    baseId: null
+                                },
+                                action: createNewNode
+                            });
+                        }
                     }
 
                     if (createNewSubMenu.length > 0) {
@@ -154,7 +170,6 @@ define([
                         createNewMenu.disabled = true;
                         createNewMenu.menu = [];
                     }
-
 
                     self.$scope.contextMenuData = theNode.contextMenu;
                 } else {
@@ -368,103 +383,152 @@ define([
                 nodeClick: nodeClick,
                 expanderClick: expanderClick,
                 iconClass: 'fa fa-file-o',
-                contextMenu: [
-                    {
-                        items: [
-                            {
-                                id: 'create',
-                                label: 'Create new',
-                                disabled: true,
-                                iconClass: 'fa fa-plus',
-                                menu: []
-                            },
+                contextMenu: [],                            // defined below
+                onContextMenu: self.$scope.onContextMenu
+            };
+
+            // get a unique id for tree node
+            if (self.gmeClient) {
+                newTreeNode.id = id;
+            } else {
+                // for testing use a random GUID
+                newTreeNode.id = GUID();
+            }
+
+            // add the new node to the map
+            self.treeNodes[newTreeNode.id] = newTreeNode;
+
+
+            // define context menu
+            newTreeNode.contextMenu = [
+                {
+                    items: [
+                        {
+                            id: 'create',
+                            label: 'Create new',
+                            disabled: true,
+                            iconClass: 'fa fa-plus',
+                            menu: []
+                        },
 //                            {
 //                                id: 'toggleCollapse',
 //                                label: theNode.expanded ? 'Collapse' : 'Expand',
 //                                actionData: newTreeNode,
 //                                action: expanderClick
 //                            },
-                            {
-                                id: 'dummy',
-                                label: 'Just for test ' + id
-                            },{
-                                id: 'rename',
-                                label: 'Rename'
+                        {
+                            id: 'dummy',
+                            label: 'Just for test ' + newTreeNode.id
+                        },
+                        {
+                            id: 'rename',
+                            label: 'Rename'
+                        },
+                        {
+                            id: 'delete',
+                            label: 'Delete',
+                            iconClass: 'fa fa-minus',
+                            actionData: {
+                                id: newTreeNode.id
                             },
-                            {
-                                id: 'delete',
-                                label: 'Delete',
-                                iconClass: 'fa fa-minus',
-                                actionData: newTreeNode,
-                                action: function (data) {
-                                    if (self.gmeClient) {
-                                        self.gmeClient.delMoreNodes([data.id]);
-                                    } else {
-                                        self.removeNode(data.id);
-                                    }
+                            action: function (data) {
+                                if (self.gmeClient) {
+                                    self.gmeClient.delMoreNodes([data.id]);
+                                } else {
+                                    self.removeNode(data.id);
                                 }
-                            },
-                            {
-                                id: 'exportObject',
-                                label: 'Export object ...'
-                            },
-                            {
-                                id: 'importHere',
-                                label: 'Import here ...'
-                            },
-                            {
-                                id: 'mergeHere',
-                                label: 'Merge here ...'
-                            },
-                            {
-                                id: 'exportContext',
-                                label: 'Export context ...'
-                            },
-                            {
-                                id: 'library',
-                                label: 'Library',
-                                menu: [
-                                    {
-                                        items: [
-                                            {
-                                                id: 'exportAsLibrary',
-                                                label: 'Export as library ...'
-                                            },
-                                            {
-                                                id: 'updateLibraryFromFile',
-                                                label: 'Update library from file ...'
-                                            },
-                                            {
-                                                id: 'importLibraryHere',
-                                                label: 'Import library here ...'
-                                            }
-                                        ]
-                                    }
-                                ]
-                            },
-                            {
-                                id: 'preferences 3',
-                                label: 'Preferences 3',
-                                menu: [
-                                    {
-                                        items: [
-                                            {
-                                                id: 'sub_preferences 1',
-                                                label: 'Sub preferences 1'
-                                            },
-                                            {
-                                                id: 'sub_preferences 2',
-                                                label: 'Sub preferences 2'
-                                            }
-                                        ]
-                                    }
-                                ]
                             }
-                        ]
-                    }
-                ],
-                onContextMenu: self.$scope.onContextMenu
-            };
+                        },
+                        {
+                            id: 'exportObject',
+                            label: 'Export object ...'
+                        },
+                        {
+                            id: 'importHere',
+                            label: 'Import here ...'
+                        },
+                        {
+                            id: 'mergeHere',
+                            label: 'Merge here ...'
+                        },
+                        {
+                            id: 'exportContext',
+                            label: 'Export context ...'
+                        },
+                        {
+                            id: 'library',
+                            label: 'Library',
+                            menu: [
+                                {
+                                    items: [
+                                        {
+                                            id: 'exportAsLibrary',
+                                            label: 'Export as library ...',
+                                            actionData: {
+                                                id: newTreeNode.id
+                                            },
+                                            action: function (data) {
+                                                if (self.gmeClient) {
+                                                    ExportManager.expLib(data.id);
+                                                } else {
+                                                    console.log('Export as a library ', data);
+                                                }
+                                            }
+                                        },
+                                        {
+                                            id: 'updateLibraryFromFile',
+                                            label: 'Update library from file ...',
+                                            actionData: {
+                                                id: newTreeNode.id
+                                            },
+                                            action: function (data) {
+                                                if (self.gmeClient) {
+                                                    ImportManager.importLibrary(data.id);
+                                                } else {
+                                                    console.log('Update library from file ', data);
+                                                }
+                                            }
+                                        },
+                                        {
+                                            id: 'importLibraryHere',
+                                            label: 'Import library here ...',
+                                            actionData: {
+                                                id: newTreeNode.id
+                                            },
+                                            action: function (data) {
+                                                if (self.gmeClient) {
+                                                    ImportManager.addLibrary(data.id);
+                                                } else {
+                                                    console.log('Import library here ', data);
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            id: 'preferences 3',
+                            label: 'Preferences 3',
+                            menu: [
+                                {
+                                    items: [
+                                        {
+                                            id: 'sub_preferences 1',
+                                            label: 'Sub preferences 1'
+                                        },
+                                        {
+                                            id: 'sub_preferences 2',
+                                            label: 'Sub preferences 2'
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ];
+
 
             // TODO: add context menu
             // TODO: add delete - on delete and in context menu
@@ -477,16 +541,6 @@ define([
             // TODO: handle double click
             // TODO: show meta types - config
             // TODO: show icon
-
-            if (self.gmeClient) {
-                newTreeNode.id = id;
-            } else {
-                // for testing use a random GUID
-                newTreeNode.id = GUID();
-            }
-
-            // add the new node to the map
-            self.treeNodes[newTreeNode.id] = newTreeNode;
 
             if (parentTreeNode) {
                 // if a parent was given add the new node as a child node
