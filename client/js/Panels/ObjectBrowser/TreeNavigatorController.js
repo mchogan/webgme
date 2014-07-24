@@ -418,7 +418,11 @@ define([
 //                            },
                         {
                             id: 'dummy',
-                            label: 'Just for test ' + newTreeNode.id
+                            label: 'Just for test ' + newTreeNode.id,
+                            action: function (data) {
+                                console.log('testing');
+                            }
+
                         },
                         {
                             id: 'rename',
@@ -519,7 +523,10 @@ define([
                                         },
                                         {
                                             id: 'sub_preferences 2',
-                                            label: 'Sub preferences 2'
+                                            label: 'Sub preferences 2',
+                                            action: function (data) {
+                                                console.log('testing2');
+                                            }
                                         }
                                     ]
                                 }
