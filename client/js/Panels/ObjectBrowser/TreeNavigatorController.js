@@ -107,13 +107,18 @@ define([
             self.$scope.onContextMenu = function(theNode) {
                 var j,
                     childrenTypes,
+
+                    createNewMenu,
                     createNewSubMenu;
 
                 console.log(theNode);
 
                 if ( theNode ) {
 
-                    createNewSubMenu = theNode.contextMenu[0].items[0].menu[0].items; // select create new sub menu
+                    createNewMenu = theNode.contextMenu[0].items[0];
+                    createNewMenu.menu = [];
+                    createNewMenu.menu.push({items: []});
+                    createNewSubMenu = createNewMenu.menu[0].items; // select create new sub menu
 
                     if (self.gmeClient) {
                         childrenTypes = self.gmeClient.getValidChildrenTypes(theNode.id);
@@ -126,6 +131,13 @@ define([
                         }
                     } else {
                         // TODO: generate test data
+                    }
+
+                    if (createNewSubMenu.length > 0) {
+                        createNewMenu.disabled = false;
+                    } else {
+                        createNewMenu.disabled = true;
+                        createNewMenu.menu = [];
                     }
 
 
@@ -356,6 +368,7 @@ define([
                             {
                                 id: 'create',
                                 label: 'Create new',
+                                disabled: true,
                                 menu: [{
                                     items: []
                                 }]
@@ -368,7 +381,7 @@ define([
 //                            },
                             {
                                 id: 'dummy',
-                                label: 'Just for test ' + id,
+                                label: 'Just for test ' + id
                             },{
                                 id: 'rename',
                                 label: 'Rename'
