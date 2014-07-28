@@ -108,7 +108,13 @@ define([
 
             self.$scope.contextMenuData = null;
 
-            self.$scope.onContextMenu = function(theNode) {
+            // id of activeNode
+            self.$scope.activeNode = null;
+
+            // ids of selected nodes
+            self.$scope.selectedNodes = [];
+
+            self.$scope.onContextMenu = function (theNode) {
                 var j,
                     childrenTypes,
 
@@ -118,6 +124,8 @@ define([
                     createNewNode;
 
                 console.log(theNode);
+
+                // TODO: handle if multiple objects are selected.
 
                 if ( theNode ) {
 
@@ -266,6 +274,7 @@ define([
                             // update all relevant properties
                             treeNode.label = self.gmeClient.getNode(event.eid).getAttribute('name');
                             treeNode.childrenCount = self.gmeClient.getNode(event.eid).getChildrenIds().length;
+                            treeNode.extraInfo = '<<FCO>>'; // TODO: getMetaType using the API
 
                             if (parentNode) {
                                 // if parent node exists then the loading is done
@@ -337,6 +346,16 @@ define([
                     } else {
                         // Expand-collapse
                         theNode.expanded = !theNode.expanded;
+
+//                        if ( !theNode.expanded) {
+//                            // collapsed, remove object patterns from the territory
+//                            delete self.territoryPattern[theNode.id];
+//                            self.gmeClient.updateTerritory(self.territoryId, self.territoryPattern);
+//
+//                            theNode.loaded = false;
+//
+//                            self.removeSubtree(theNode.id);
+//                        }
                     }
                 };
             } else {
@@ -443,22 +462,22 @@ define([
                                 }
                             }
                         },
-                        {
-                            id: 'exportObject',
-                            label: 'Export object ...'
-                        },
-                        {
-                            id: 'importHere',
-                            label: 'Import here ...'
-                        },
-                        {
-                            id: 'mergeHere',
-                            label: 'Merge here ...'
-                        },
-                        {
-                            id: 'exportContext',
-                            label: 'Export context ...'
-                        },
+//                        {
+//                            id: 'exportObject',
+//                            label: 'Export object ...'
+//                        },
+//                        {
+//                            id: 'importHere',
+//                            label: 'Import here ...'
+//                        },
+//                        {
+//                            id: 'mergeHere',
+//                            label: 'Merge here ...'
+//                        },
+//                        {
+//                            id: 'exportContext',
+//                            label: 'Export context ...'
+//                        },
                         {
                             id: 'library',
                             label: 'Library',
@@ -583,6 +602,30 @@ define([
 
             return newTreeNode;
         };
+
+//        TreeNavigatorController.prototype.removeSubtree = function (id) {
+//            var self = this,
+//                i,
+//                treeNode = self.treeNodes[id],
+//                idsToRemove = [],
+//                children;
+//
+//            if (treeNode) {
+//                children = treeNode.children;
+//                for (i = 0; i < children.length; i += 1) {
+//                    self.removeSubtree(children[i]);
+//                    idsToRemove.push(children[i]);
+//                }
+//
+//                for (i = 0; i < idsToRemove.length; i += 1) {
+//                    self.removeNode(idsToRemove[i]);
+//                }
+//
+//            } else {
+//                console.error('children is not here');
+//            }
+//
+//        };
 
         TreeNavigatorController.prototype.removeNode = function (id) {
             var self = this,
