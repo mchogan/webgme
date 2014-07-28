@@ -7,12 +7,14 @@
 define([
     'util/guid',
     'js/Utils/ExportManager',
-    'js/Utils/ImportManager'
+    'js/Utils/ImportManager',
+    'logManager'
 ],
     function (
         GUID,
         ExportManager,
-        ImportManager
+        ImportManager,
+        logManager
     ) {
         "use strict";
 
@@ -83,6 +85,8 @@ define([
             // this controller identifier
             self.guid = 'TreeNavigatorController_' + GUID();
 
+            self.logger = logManager.create(self.guid);
+
             self.$scope = $scope;
             self.gmeClient = gmeClient;
 
@@ -100,6 +104,8 @@ define([
 
         TreeNavigatorController.prototype.initialize = function () {
             var self = this;
+
+            self.logger.debug('Initializing ... ');
 
             // initialize model structure for view
             self.$scope.treeData = {};
@@ -191,11 +197,13 @@ define([
                 self.initTestData();
             }
 
-            //console.log(self.$scope.treeData);
+            self.logger.debug('Initialized.');
         };
 
         TreeNavigatorController.prototype.initTestData = function () {
             var self = this;
+
+            self.logger.debug('Initializing test data');
 
             // create a root node
             self.addNode(null, 'ROOT');
@@ -207,10 +215,14 @@ define([
         TreeNavigatorController.prototype.initWithClient = function () {
             var self = this;
 
+            self.logger.debug('Initializing with gme client');
+
             // if branch changes then we need to reinitialize the tree data
             self.gmeClient.addEventListener(self.gmeClient.events.BRANCH_CHANGED, function (client, branchId) {
 
                 //console.log(self.gmeClient.events.BRANCH_CHANGED, branchId);
+
+                self.logger.debug('Event: ' + self.gmeClient.events.BRANCH_CHANGED + ' - ' + branchId);
 
                 if (self.territoryId) {
                     // if there was a territory specified before it up
@@ -241,7 +253,8 @@ define([
 
                     for (i = 0; i < events.length; i += 1) {
                         event = events[i];
-                        //console.log(event);
+
+                        self.logger.debug('Processing event ' + JSON.stringify(event));
 
                         if (event.etype === 'load' || event.etype === 'update') {
                             if (self.treeNodes.hasOwnProperty(event.eid)) {
@@ -316,13 +329,15 @@ define([
                 nodeClick,
                 expanderClick;
 
+            self.logger.debug('Adding a new node ' + id + (parentTreeNode ? ' to ' + parentTreeNode.id : ' as ROOT'));
+
             nodeClick = function (theNode) {
-                console.log(theNode.id + ' ' + theNode.label + ' was clicked');
+                self.logger.debug('NodeClickHandler: ' + theNode.id + ' ' + theNode.label + ' was clicked');
             };
 
             if (self.gmeClient) {
                 expanderClick = function (theNode) {
-                    console.log(theNode.id + ' ' + theNode.label + ' was expander-clicked');
+                    self.logger.debug('ExpanderClickHandler: ' + theNode.id + ' ' + theNode.label + ' expended ' + self.expanded);
 
                     if (theNode.children.length === 0 && !theNode.isLoading && !theNode.loaded) {
 
@@ -360,7 +375,7 @@ define([
                 };
             } else {
                 expanderClick = function (theNode) {
-                    console.log(theNode.id + ' ' + theNode.label + ' was expander-clicked');
+                    self.logger.debug('ExpanderClickHandler: ' + theNode.id + ' ' + theNode.label + ' expended ' + self.expanded);
 
                     if (theNode.children.length === 0 && !theNode.isLoading && !theNode.loaded) {
 
@@ -632,6 +647,8 @@ define([
                 parentNode,
                 nodeToDelete = self.treeNodes[id];
 
+            self.logger.debug('Removing a node ' + id);
+
             if (nodeToDelete) {
                 if (nodeToDelete.parentId !== null && self.treeNodes[nodeToDelete.parentId] !== undefined) {
                     // find parent node
@@ -662,6 +679,8 @@ define([
             var self = this,
                 id;
 
+            self.logger.debug('Collapse all tree nodes.');
+
             for (id in self.treeNodes) {
                 if (self.treeNodes.hasOwnProperty(id)) {
                     self.treeNodes[id].expanded = false;
@@ -677,6 +696,8 @@ define([
                 id;
 
             nodeIdList = nodeIdList || [];
+
+            self.logger.debug('Expand nodes: ' + JSON.stringify(nodeIdList));
 
             for (i = 0; i < nodeIdList.length; i += 1) {
                 id = nodeIdList[i].id;
