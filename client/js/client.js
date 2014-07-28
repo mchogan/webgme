@@ -34,8 +34,9 @@ define([
         AllPlugins,
         Serialization
         ) {
-
-        var ROOT_PATH = '';
+        'use strict';
+        var ROOT_PATH = '',
+            META_SHEET = "MetaAspectSet";
         function COPY(object){
             if(object){
                 return JSON.parse(JSON.stringify(object));
@@ -73,7 +74,7 @@ define([
                 _offline = false,
                 _networkWatcher = null,
                 _TOKEN = null,
-                META = new BaseMeta();
+                META = new BaseMeta(),
                 _rootHash = null,
                 _gHash = 0;
 
@@ -2501,6 +2502,42 @@ define([
                 });
             }
 
+            //extra META functions
+            //TODO this is a very fragile distinction!!!
+            function isMetaElement(node){
+                var sets = _core.isMemberOf(node);
+                if(sets && sets[ROOT_PATH] && sets[ROOT_PATH].indexOf(META_SHEET) !== -1){
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            function getMetaTypeId(path){
+                var node;
+                if(_nodes[path]){
+                    node = _nodes[path].node;
+                    while(node){
+                        if(isMetaElement(node)){
+                            return _core.getPath(node);
+                        }
+                        node = _core.getBase(node);
+                    }
+                }
+                return null;
+            }
+            function getMetaTypeName(path){
+                var node;
+                if(_nodes[path]){
+                    node = _nodes[path].node;
+                    while(node){
+                        if(isMetaElement(node)){
+                            return _core.getAttribute(node,'name');
+                        }
+                        node = _core.getBase(node);
+                    }
+                }
+                return "n/a";
+            }
             //initialization
             function initialize(){
                 _database = newDatabase();
@@ -2646,6 +2683,9 @@ define([
                 deleteMetaAspect          : META.deleteMetaAspect,
                 getAspectTerritoryPattern : META.getAspectTerritoryPattern,
 
+                //extra META functions
+                getMetaTypeId                 : getMetaTypeId,
+                getMetaTypeName               : getMetaTypeName,
                 //end of META functions
 
                 //decorators

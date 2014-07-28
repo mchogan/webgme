@@ -287,7 +287,7 @@ define([
                             // update all relevant properties
                             treeNode.label = self.gmeClient.getNode(event.eid).getAttribute('name');
                             treeNode.childrenCount = self.gmeClient.getNode(event.eid).getChildrenIds().length;
-                            treeNode.extraInfo = '<<FCO>>'; // TODO: getMetaType using the API
+                            treeNode.extraInfo = '<<'+self.gmeClient.getTypeName(event.eid)+'>>'; //'<<FCO>>'; // TODO: getMetaType using the API
 
                             if (parentNode) {
                                 // if parent node exists then the loading is done
