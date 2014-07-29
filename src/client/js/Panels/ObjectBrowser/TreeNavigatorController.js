@@ -345,12 +345,17 @@ define([
                 children = [],
 
                 nodeClick,
+                nodeDblclick,
                 expanderClick;
 
             self.logger.debug('Adding a new node ' + id + (parentTreeNode ? ' to ' + parentTreeNode.id : ' as ROOT'));
 
             nodeClick = function (theNode) {
                 self.logger.debug('NodeClickHandler: ' + theNode.id + ' ' + theNode.label + ' was clicked');
+            };
+
+            nodeDblclick = function (theNode) {
+                self.logger.debug('Node Double ClickHandler: ' + theNode.id + ' ' + theNode.label + ' was clicked');
             };
 
             if (self.gmeClient) {
@@ -433,6 +438,7 @@ define([
                 nodeData: {
                 },
                 nodeClick: nodeClick,
+                nodeDblclick: nodeDblclick,
                 expanderClick: expanderClick,
                 iconClass: 'fa fa-file-o',
                 contextMenu: [],                            // defined below
