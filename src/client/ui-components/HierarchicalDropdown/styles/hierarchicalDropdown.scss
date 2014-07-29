@@ -41,18 +41,56 @@
     .dropdown-submenu:hover > .dropdown-menu {
       display: block;
     }
-    .dropdown-submenu > a:after {
-      display: block;
-      content: " ";
-      float: right;
-      width: 0;
-      height: 0;
-      border-color: transparent;
-      border-style: solid;
-      border-width: 5px 0 5px 5px;
-      border-left-color: #cccccc;
-      margin-top: 5px;
-      margin-right: -10px;
+
+    .dropdown-submenu {
+
+      > a {
+        padding-right: 2ex;
+      }
+
+      > a:after {
+        display: block;
+        content: " ";
+        width: 0;
+        height: 0;
+        border-color: transparent;
+        border-style: solid;
+        border-width: 5px 0 5px 5px;
+        border-left-color: #cccccc;
+
+        position: absolute;
+
+        top: 9px;
+        right: 5px;
+      }
+    }
+
+    .dropdown-submenu.drop-left {
+
+      > a {
+        padding-left: 2ex;
+      }
+
+      > a:after {
+        display: none;
+      }
+
+      > a:before {
+        display: block;
+        content: " ";
+        width: 0;
+        height: 0;
+        border-color: transparent;
+        border-style: solid;
+        border-width: 5px 5px 5px 0;
+        border-right-color: #cccccc;
+
+        position: absolute;
+
+        top: 9px;
+        left: 5px;
+
+      }
     }
 
     .dropdown-submenu:hover > a:after {
@@ -62,12 +100,11 @@
     .disabled.dropdown-submenu:hover > a:after {
       border-left-color: #999;
     }
-    .dropdown-submenu.pull-left {
-      float: none;
-    }
-    .dropdown-submenu.pull-left > .dropdown-menu {
-      left: -100%;
-      margin-left: 10px;
+
+    .dropdown-submenu.drop-left > .dropdown-menu {
+      min-width: 100%;
+      margin-left: -100%;
+      left: 5px;
       -webkit-border-radius: 6px 0 6px 6px;
       -moz-border-radius: 6px 0 6px 6px;
       border-radius: 6px 0 6px 6px;

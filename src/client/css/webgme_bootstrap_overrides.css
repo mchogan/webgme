@@ -273,6 +273,10 @@ ul.dropdown-menu {
     min-width: 0;
 }
 
+.dropdown-menu>li>a {
+    padding: .5ex 1.5ex;
+}
+
 
 .input-append .add-on.add-on-mini,
 .input-prepend .add-on.add-on-mini {

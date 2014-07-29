@@ -77,8 +77,6 @@
                                     event.pageX - docLeft, 0
                                 );
 
-                            console.log( elementHeight + ' ' + elementWidth );
-
                             if ( strechOverPageHeight > 0 ) {
                                 top = top - strechOverPageHeight;
                             }
