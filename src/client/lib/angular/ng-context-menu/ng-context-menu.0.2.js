@@ -92,6 +92,14 @@
                                 'left', left + 'px'
                             );
 
+                            // Setting property of menu to drop on left side if no room on right for sub menus
+
+                            if ( 2 * elementWidth + event.pageX > docWidth ) {
+                                menuElement.addClass( 'drop-left' );
+                            } else {
+                                menuElement.removeClass( 'drop-left' );
+                            }
+
                         };
 
                         open = function ( event, menuElement ) {
@@ -276,8 +284,6 @@
                                             $attrs.target
                                         )
                                     ).hide();
-
-
 
                                     ContextMenuService.element = event.target;
 
