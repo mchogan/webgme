@@ -77,6 +77,8 @@
                                     event.pageX - docLeft, 0
                                 );
 
+                            console.log( elementHeight + ' ' + elementWidth );
+
                             if ( strechOverPageHeight > 0 ) {
                                 top = top - strechOverPageHeight;
                             }
@@ -100,7 +102,10 @@
                                 'open'
                             );
 
-                            setPosition( event, menuElement );
+                            menuElement.show( function() {
+                                setPosition( event, menuElement );
+                            } );
+
 
                             bindEvents();
 
@@ -110,6 +115,8 @@
                         close = function ( menuElement ) {
 
                             unBindEvents();
+
+                            menuElement.hide();
 
                             menuElement.removeClass(
                                 'open'
@@ -259,23 +266,27 @@
                         $element.bind(
                             'contextmenu', function ( event ) {
                                 if ( !$scope.disabled() ) {
+
                                     if ( ContextMenuService.menuElement !== null ) {
                                         close(
                                             ContextMenuService.menuElement
                                         );
                                     }
+
                                     ContextMenuService.menuElement = angular.element(
                                         document.getElementById(
                                             $attrs.target
                                         )
-                                    );
-                                    ContextMenuService.element = event.target;
-                                    //console.log('set', ContextMenuService.element);
+                                    ).hide();
 
-                                    event.preventDefault(
-                                    );
-                                    event.stopPropagation(
-                                    );
+
+
+                                    ContextMenuService.element = event.target;
+
+
+                                    event.preventDefault();
+                                    event.stopPropagation();
+
                                     $scope.$apply(
                                         function () {
                                             $scope.callback(
