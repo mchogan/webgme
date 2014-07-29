@@ -6,12 +6,14 @@
 
 define([
     'util/guid',
+    'js/Utils/GMEConcepts',
     'js/Utils/ExportManager',
     'js/Utils/ImportManager',
     'logManager'
 ],
     function (
         GUID,
+        GMEConcepts,
         ExportManager,
         ImportManager,
         logManager
@@ -142,8 +144,14 @@ define([
 
                     if (self.gmeClient) {
                         createNewNode = function (data) {
-                            var newId = self.gmeClient.createChild(data);
-                            self.gmeClient.setAttributes(newId, 'name', 'New ' + self.gmeClient.getNode(data.baseId).getAttribute('name'));
+                            var newId;
+
+                            if (GMEConcepts.canCreateChild(data.parentId, data.baseId)) {
+                                newId = self.gmeClient.createChild(data);
+                                //self.gmeClient.setAttributes(newId, 'name', 'New ' + self.gmeClient.getNode(data.baseId).getAttribute('name'));
+                            } else {
+                                self.logger.error('Cannot create child object: ' + JSON.stringify(data));
+                            }
                         };
 
                         childrenTypes = self.gmeClient.getValidChildrenTypes(theNode.id);
@@ -152,6 +160,7 @@ define([
                             createNewSubMenu.push({
                                 id: childrenTypes[j],
                                 label: self.gmeClient.getNode(childrenTypes[j]).getAttribute('name'),
+                                disabled: !GMEConcepts.canCreateChild(theNode.id, childrenTypes[j]),
                                 actionData: {
                                     parentId: theNode.id,
                                     baseId: childrenTypes[j]
@@ -247,8 +256,9 @@ define([
                         parentId,
                         parentNode,
 
-                        childrenTypes,
+                        menuItem,
 
+                        childrenTypes,
                         createNewSubMenu;
 
                     for (i = 0; i < events.length; i += 1) {
@@ -288,6 +298,14 @@ define([
                             treeNode.label = self.gmeClient.getNode(event.eid).getAttribute('name');
                             treeNode.childrenCount = self.gmeClient.getNode(event.eid).getChildrenIds().length;
                             treeNode.extraInfo = '<<' + self.gmeClient.getMetaTypeName(event.eid) + '>>';
+
+                            for (j = 0; j < treeNode.contextMenu[0].items.length; j += 1) {
+                                menuItem = treeNode.contextMenu[0].items[j];
+                                if (menuItem.id === 'delete') {
+                                    menuItem.disabled = !GMEConcepts.canDeleteNode(event.eid);
+                                    break;
+                                }
+                            }
 
                             if (parentNode) {
                                 // if parent node exists then the loading is done
@@ -471,7 +489,12 @@ define([
                             },
                             action: function (data) {
                                 if (self.gmeClient) {
-                                    self.gmeClient.delMoreNodes([data.id]);
+                                    if (GMEConcepts.canDeleteNode(data.id)) {
+                                        self.gmeClient.delMoreNodes([data.id]);
+                                    } else {
+                                        self.logger.error('Cannot delete node: ' + data.id);
+                                    }
+
                                 } else {
                                     self.removeNode(data.id);
                                 }
