@@ -16,7 +16,9 @@ a{
     color: $light;
 }
 
-a:hover {
+a:hover,
+a:active,
+a:focus {
     color: $accentColor;
     text-decoration: none;
 }

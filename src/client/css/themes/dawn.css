@@ -1,7 +1,9 @@
 a {
   color: #3160ab; }
 
-a:hover {
+a:hover,
+a:active,
+a:focus {
   color: #ff7700;
   text-decoration: none; }
 
