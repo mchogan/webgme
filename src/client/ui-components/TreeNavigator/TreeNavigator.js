@@ -36,7 +36,8 @@ define([
                  scope: {
                      treeData: '=',
                      config: '=',
-                     contextMenuData: '='
+                     contextMenuData: '=',
+                     state: '='
                  },
                  restrict: 'E',
                  replace: true,

@@ -118,10 +118,15 @@ define([
 
             self.$scope.contextMenuData = null;
 
-            // id of activeNode
-            self.$scope.activeNode = null;
+            self.$scope.state = {
+                // id of activeNode
+                activeNode: null,
 
-            // ids of selected nodes
+                // ids of selected nodes
+                selectedNodes: []
+            };
+
+
             self.$scope.selectedNodes = [];
 
             self.$scope.onContextMenu = function (theNode) {
@@ -405,11 +410,7 @@ define([
                     settings[CONSTANTS.STATE_ACTIVE_VISUALIZER] = 'ModelEditor'; // DEFAULT_VISUALIZER;
                     WebGMEGlobal.State.set(settings);
 
-                    console.log(theNode);
-
-                    self.$scope.activeNode = theNode;
-
-                    self.update();
+                    self.$scope.state.activeNode = theNode.id;
                 };
 
 

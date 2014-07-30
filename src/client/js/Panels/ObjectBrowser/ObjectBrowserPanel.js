@@ -99,7 +99,10 @@ define(
 
             treeNavigatorHtml = '<div data-ng-controller="TreeNavigatorController">' +
                 '<tree-navigator ' +
-                'tree-data="treeData" config="config" context-menu-data="contextMenuData" ' +
+                'tree-data="treeData" ' +
+                'config="config" ' +
+                'context-menu-data="contextMenuData" ' +
+                'state="state" ' +
                 '></tree-navigator></div>';
 
             this.$el.html(
