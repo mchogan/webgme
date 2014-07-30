@@ -397,11 +397,19 @@ define([
                 };
 
                 nodeClick = function (theNode) {
+
                     var settings = {};
+
                     settings[CONSTANTS.STATE_ACTIVE_OBJECT] = theNode.id;
                     settings[CONSTANTS.STATE_ACTIVE_ASPECT] = CONSTANTS.ASPECT_ALL;
                     settings[CONSTANTS.STATE_ACTIVE_VISUALIZER] = 'ModelEditor'; // DEFAULT_VISUALIZER;
                     WebGMEGlobal.State.set(settings);
+
+                    console.log(theNode);
+
+                    self.$scope.activeNode = theNode;
+
+                    self.update();
                 };
 
 

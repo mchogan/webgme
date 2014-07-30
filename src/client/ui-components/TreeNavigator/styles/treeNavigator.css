@@ -30,6 +30,8 @@
   .tree-navigator span.node-extra-info {
     color: #aaa;
     font-size: 80%; }
+  .tree-navigator .node-expander {
+    text-decoration: none; }
   .tree-navigator .context-menu {
     position: fixed;
     z-index: 1000; }
@@ -69,3 +71,5 @@
     margin-left: .2ex; }
     .tree-navigator .icon-arrow-down:hover {
       border-top-color: #999; }
+  .tree-navigator .active-node {
+    font-weight: bold; }

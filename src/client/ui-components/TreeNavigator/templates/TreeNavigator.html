@@ -47,7 +47,7 @@
                 data-ng-repeat="parentNode in node.children"
                 data-ng-include="'tree-navigator-node-template'"
                 data-ng-init="node=parentNode"
-                data-ng-class="{ 'expanded': parentNode.expanded }">
+                data-ng-class="{ 'expanded': parentNode.expanded, 'active-node': node.id === activeNode.id }">
             </li>
         </ul>
     </script>
@@ -63,7 +63,7 @@
             <li title="{{ node.label }}"
                 data-ng-repeat="node in treeData.children"
                 data-ng-include="'tree-navigator-node-template'"
-                data-ng-class="{ 'expanded': node.expanded  }">
+                data-ng-class="{ 'expanded': node.expanded, 'active-node': true }">
             </li>
 
         </ul>
