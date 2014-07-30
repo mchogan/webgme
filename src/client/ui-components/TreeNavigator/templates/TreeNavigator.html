@@ -48,7 +48,7 @@
                 data-ng-repeat="parentNode in node.children"
                 data-ng-include="'tree-navigator-node-template'"
                 data-ng-init="node=parentNode"
-                data-ng-class="{ 'expanded': parentNode.expanded, 'active-node': state.activeNode === node.id, 'selected-node': true }">
+                data-ng-class="{ 'expanded': parentNode.expanded, 'active-node': state.activeNode === node.id, 'selected-node': state.selectedNodes && ( state.selectedNodes.indexOf(node.id) > -1 ) }">
             </li>
         </ul>
     </script>
@@ -64,7 +64,7 @@
             <li title="{{ node.label }}"
                 data-ng-repeat="node in treeData.children"
                 data-ng-include="'tree-navigator-node-template'"
-                data-ng-class="{ 'expanded': node.expanded, 'active-node': state.activeNode === node.id }">
+                data-ng-class="{ 'expanded': node.expanded, 'active-node': state.activeNode === node.id, 'selected-node': state.selectedNodes && ( state.selectedNodes.indexOf(node.id) > -1 )}">
             </li>
 
         </ul>

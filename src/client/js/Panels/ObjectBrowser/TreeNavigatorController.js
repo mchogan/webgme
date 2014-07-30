@@ -126,9 +126,6 @@ define([
                 selectedNodes: []
             };
 
-
-            self.$scope.selectedNodes = [];
-
             self.$scope.onContextMenu = function (theNode) {
                 var j,
                     childrenTypes,
@@ -411,6 +408,9 @@ define([
                     WebGMEGlobal.State.set(settings);
 
                     self.$scope.state.activeNode = theNode.id;
+
+                    // TODO: properly update selected nodes
+                    self.$scope.state.selectedNodes = [theNode.id];
                 };
 
 

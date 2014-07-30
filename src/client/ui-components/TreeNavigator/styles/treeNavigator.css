@@ -75,7 +75,7 @@
     color: #00235b; }
     .tree-navigator .active-node > .node-label > .label-text {
       font-weight: bold; }
-  .tree-navigator .selected-node {
+  .tree-navigator .selected-node > div {
     background-color: #c2daf6; }
-    .tree-navigator .selected-node .node-expander {
+    .tree-navigator .selected-node > div .node-expander {
       color: #fff; }
