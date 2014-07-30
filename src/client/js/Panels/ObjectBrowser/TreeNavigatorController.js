@@ -55,7 +55,7 @@ define([
                         items: [
                             {
                                 id: 'project',
-                                label: 'Project',
+                                label: 'Project Hierarchy',
                                 action: function () {
                                     self.$scope.state.activeScope = 'project';
                                     self.$scope.config.selectedScope = self.$scope.config.scopeMenu[0].items[0];
@@ -114,7 +114,8 @@ define([
                 ],
 
                 collapsedIconClass: 'icon-arrow-right',
-                expandedIconClass: 'icon-arrow-down'
+                expandedIconClass: 'icon-arrow-down',
+                showRootLabel: true
 
             };
 
@@ -373,8 +374,13 @@ define([
             };
 
             if (self.gmeClient) {
-                expanderClick = function (theNode) {
-                    self.logger.debug('ExpanderClickHandler: ' + theNode.id + ' ' + theNode.label + ' expended ' + self.expanded);
+                expanderClick = function (theNode, event) {
+
+                    if ( event ) {
+                        event.stopPropagation();
+                    }
+
+                    self.logger.debug('ExpanderClickHandler: ' + theNode.id + ' ' + theNode.label + ' expanded ' + self.expanded);
 
                     if (theNode.children.length === 0 && !theNode.isLoading && !theNode.loaded) {
 
@@ -677,6 +683,7 @@ define([
 
                 // if no parent is given replace the current root node with this node
                 self.$scope.treeData = newTreeNode;
+                self.$scope.treeData.unCollapsible = true;
                 newTreeNode.parentId = null;
             }
 

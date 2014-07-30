@@ -5,7 +5,6 @@
   font-size: 110%;
 
   header {
-    margin-bottom: 1ex;
     padding: 0.75ex;
     border-bottom: 1px solid #eee;
 
@@ -32,8 +31,6 @@
     text-overflow: ellipsis;
     overflow: hidden;
 
-    cursor: pointer;
-
   }
 
   ul.node-list ul.node-list {
@@ -56,6 +53,8 @@
     overflow: hidden;
     white-space: nowrap;
     padding: .4ex;
+
+    cursor: pointer;
   }
 
   .node-label:hover,

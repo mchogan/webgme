@@ -4,57 +4,64 @@
              data-ng-if="config.scopeMenu">
             <a href="#" class="dropdown-toggle item-label icon-arrow-down">{{ config.selectedScope.label }}</a>
             <hierarchical-dropdown role="menu" menu="config.scopeMenu"></hierarchical-dropdown>
-          <!--<ul class="dropdown-menu" role="menu">-->
+            <!--<ul class="dropdown-menu" role="menu">-->
             <!--<li><a href="#">Action</a></li>-->
             <!--<li><a href="#">Another action</a></li>-->
             <!--<li><a href="#">Something else here</a></li>-->
             <!--<li class="divider"></li>-->
             <!--<li><a href="#">Separated link</a></li>-->
-          <!--</ul>-->
+            <!--</ul>-->
         </div>
         <div class="dropdown preferences-menu pull-right"
              data-ng-if="config.preferencesMenu">
             <a href="#" class="dropdown-toggle item-label"><i class="glyphicon glyphicon-cog"></i></a>
-            <hierarchical-dropdown class="pull-right drop-left" role="menu" menu="config.preferencesMenu"></hierarchical-dropdown>
-          <!--<ul class="dropdown-menu" role="menu">-->
+            <hierarchical-dropdown class="pull-right drop-left" role="menu"
+                                   menu="config.preferencesMenu"></hierarchical-dropdown>
+            <!--<ul class="dropdown-menu" role="menu">-->
             <!--<li><a href="#">Action</a></li>-->
             <!--<li><a href="#">Another action</a></li>-->
             <!--<li><a href="#">Something else here</a></li>-->
             <!--<li class="divider"></li>-->
             <!--<li><a href="#">Separated link</a></li>-->
-          <!--</ul>-->
+            <!--</ul>-->
         </div>
     </header>
 
+    <script type="text/ng-template" id="tree-navigator-node-label-template">
+        <a href="#"
+           class="node-expander"
+           data-ng-if="treeData.childrenCount && !treeData.unCollapsible"
+           data-ng-click="treeData.expanderClick(node, $event)">
+            <i data-ng-if="!treeData.expanded" data-ng-class="treeData.collapsedIconClass || config.collapsedIconClass"></i>
+            <i data-ng-if="treeData.expanded" data-ng-class="treeData.expandedIconClass || config.expandedIconClass"></i>
+        </a>
+
+        <i data-ng-if="( treeData.childrenCount && config.folderIconClass || treeData.iconClass || config.nodeIconClass ) && !item.iconPullRight"
+           data-ng-class="treeData.childrenCount && config.folderIconClass || treeData.iconClass || config.nodeIconClass"></i>
+
+        <span class="label-text"
+              data-ng-dblclick="treeData.nodeDblclick(node)"
+              data-ng-if="treeData.label">{{ treeData.label }}</span>
+        <span class="noname"
+              data-ng-dblclick="treeData.nodeDoubleClick(node)"
+              data-ng-if="!treeData.label">No name</span>
+
+        <span data-ng-if="treeData.extraInfo"
+              class="node-extra-info">{{ treeData.extraInfo }}</span>
+        <i data-ng-if="( treeData.childrenCount && config.folderIconClass || treeData.iconClass || config.nodeIconClass ) && item.iconPullRight"
+           data-ng-class="treeData.childrenCount && config.folderIconClass || treeData.iconClass || config.nodeIconClass"></i>
+
+    </script>
+
     <script type="text/ng-template" id="tree-navigator-node-template">
         <div class="node-label"
-           data-ng-class="{ 'loading': node.isLoading }"
-           data-ng-click="node.nodeClick(node)"
-           context-menu="node.onContextMenu(node)"
-           data-target="tree-context-menu" >
+             data-ng-init="treeData = node"
+             data-ng-class="{ 'loading': treeData.isLoading }"
+             data-ng-click="treeData.nodeClick(treeData)"
+             context-menu="treeData.onContextMenu(treeData)"
+             data-target="tree-context-menu"
+             data-ng-include="'tree-navigator-node-label-template'">
 
-            <a href="#"
-               class="node-expander"
-               data-ng-if="node.childrenCount"
-               data-ng-click="node.expanderClick(node)">
-                <i data-ng-if="!node.expanded" data-ng-class="node.collapsedIconClass || config.collapsedIconClass"></i>
-                <i data-ng-if="node.expanded" data-ng-class="node.expandedIconClass || config.expandedIconClass"></i>
-            </a>
-
-            <i data-ng-if="( node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass ) && !item.iconPullRight"
-               data-ng-class="node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass"></i>
-
-            <span class="label-text"
-                  data-ng-dblclick="node.nodeDblclick(node)"
-                  data-ng-if="node.label">{{ node.label }}</span>
-            <span class="noname"
-                  data-ng-dblclick="node.nodeDoubleClick(node)"
-                  data-ng-if="!node.label">No name</span>
-
-            <span data-ng-if="node.extraInfo"
-                  class="node-extra-info">{{ node.extraInfo }}</span>
-            <i data-ng-if="( node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass ) && item.iconPullRight"
-               data-ng-class="node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass"></i>
         </div>
         <ul class="node-list"
             data-ng-if="node.children && node.children.length > 0">
@@ -68,10 +75,18 @@
     </script>
 
     <div class="tree-navigator-nodes">
-        <a class="node-label"
-           data-ng-click="node.nodeClick(node)"
-           data-ng-dblclick="node.nodeDoubleClick(node)"
-           data-ng-if="config.showRootLabel">{{ treeData.label }}</a>
+
+        <div class="node-label"
+
+             data-ng-class="{ 'loading': treeData.isLoading }"
+             data-ng-click="treeData.nodeClick(treeData)"
+             context-menu="treeData.onContextMenu(treeData)"
+             data-target="tree-context-menu"
+             data-ng-include="'tree-navigator-node-label-template'"
+
+             data-ng-if="config.showRootLabel">
+
+        </div>
         <ul class="node-list"
             data-ng-if="treeData.children && treeData.children.length > 0">
 

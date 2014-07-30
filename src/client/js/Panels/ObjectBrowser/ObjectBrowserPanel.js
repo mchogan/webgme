@@ -6,7 +6,7 @@
 
 
 define(
-    ['js/PanelBase/PanelBaseWithHeader',
+    ['js/PanelBase/PanelBase',
         'js/Constants',
         './TreeBrowserControl',
         './InheritanceBrowserControl',
@@ -18,7 +18,7 @@ define(
         './TreeNavigatorController',
 
         'css!./styles/ObjectBrowserPanel.css'], function (
-        PanelBaseWithHeader,
+        PanelBase,
         CONSTANTS,
         TreeBrowserControl,
         InheritanceBrowserControl,
@@ -43,7 +43,7 @@ define(
         );
 
         var ObjectBrowserPanel,
-            __parent__ = PanelBaseWithHeader,
+            __parent__ = PanelBase,
             OBJECT_BROWSER_CLASS = 'object-browser';
 
         ObjectBrowserPanel = function (
@@ -52,8 +52,8 @@ define(
             ) {
             var options = {};
             //set properties from options
-            options[PanelBaseWithHeader.OPTIONS.LOGGER_INSTANCE_NAME] = "ObjectBrowserPanel";
-            options[PanelBaseWithHeader.OPTIONS.HEADER_TITLE] = true;
+            options[PanelBase.OPTIONS.LOGGER_INSTANCE_NAME] = "ObjectBrowserPanel";
+            options[PanelBase.OPTIONS.HEADER_TITLE] = true;
 
             //call parent's constructor
             __parent__.apply(
@@ -71,7 +71,7 @@ define(
             );
         };
 
-        //inherit from PanelBaseWithHeader
+        //inherit from PanelBase
         _.extend(
             ObjectBrowserPanel.prototype, __parent__.prototype
         );
@@ -105,22 +105,20 @@ define(
                 'state="state" ' +
                 '></tree-navigator></div>';
 
-            this.$el.html(
-                '<ul class="nav nav-tabs">' +
-                    '<li class="active"><a href="#composition" data-toggle="tab">Composition</a></li>' +
-                    '<li class=""><a href="#inheritance" data-toggle="tab">Inheritance</a></li>' +
-                    '<li class=""><a href="#crosscut" data-toggle="tab">Crosscut</a></li>' +
-                    '</ul>' + '<div class="tab-content">' +
-                    '<div class="tab-pane active" id="composition">' + treeNavigatorHtml + '</div>' +
-                    '<div class="tab-pane" id="inheritance">inheritance</div>' +
-                    '<div class="tab-pane" id="crosscut">crosscut</div>' +
-                    '</div>'
-            );
+//            this.$el.html(
+//                '<ul class="nav nav-tabs">' +
+//                    '<li class="active"><a href="#composition" data-toggle="tab">Composition</a></li>' +
+//                    '<li class=""><a href="#inheritance" data-toggle="tab">Inheritance</a></li>' +
+//                    '<li class=""><a href="#crosscut" data-toggle="tab">Crosscut</a></li>' +
+//                    '</ul>' + '<div class="tab-content">' +
+//                    '<div class="tab-pane active" id="composition">' + treeNavigatorHtml + '</div>' +
+//                    '<div class="tab-pane" id="inheritance">inheritance</div>' +
+//                    '<div class="tab-pane" id="crosscut">crosscut</div>' +
+//                    '</div>'
+//            );
 
-            //set Widget title
-            this.setTitle(
-                "Object Browser"
-            );
+
+            this.$el.html(treeNavigatorHtml);
 
 //            compositionTreeBrowserWidget = new TreeBrowserWidget(
 //                this.$el.find(
