@@ -22,75 +22,7 @@ define([
     ) {
         "use strict";
 
-        var TreeNavigatorController,
-            defaultConfig;
-
-        defaultConfig = {
-            scopeMenu: [
-                {
-                    items: [
-                        {
-                            id: 'project',
-                            label: 'Project',
-                            action: function () {
-                                console.log('Show projects');
-                            }
-                        },
-                        {
-                            id: 'composition',
-                            label: 'Composition',
-                            action: function () {
-                                console.log('Show composition');
-                            }
-                        }
-                    ]
-                }
-            ],
-
-            preferencesMenu: [
-                {
-                    items: [
-                        {
-                            id: 'preferences 1',
-                            label: 'Preferences 1'
-                        },
-
-                        {
-                            id: 'preferences 2',
-                            label: 'Preferences 2'
-                        },
-
-                        {
-                            id: 'preferences 3',
-                            label: 'Preferences 3',
-                            menu: [
-                                {
-                                    items: [
-                                        {
-                                            id: 'sub_preferences 1',
-                                            label: 'Sub preferences 1'
-                                        },
-                                        {
-                                            id: 'sub_preferences 2',
-                                            label: 'Sub preferences 2',
-                                            action: function (data) {
-                                                console.log('testing2');
-                                            }
-                                        }
-                                    ]
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ],
-
-            collapsedIconClass: 'icon-arrow-right',
-            expandedIconClass: 'icon-arrow-down'
-
-        };
-
-        TreeNavigatorController = function ($scope, gmeClient) {
+        var TreeNavigatorController = function ($scope, gmeClient) {
             var self = this;
 
             // this controller identifier
@@ -114,7 +46,77 @@ define([
         };
 
         TreeNavigatorController.prototype.initialize = function () {
-            var self = this;
+            var self = this,
+                defaultConfig;
+
+            defaultConfig = {
+                scopeMenu: [
+                    {
+                        items: [
+                            {
+                                id: 'project',
+                                label: 'Project',
+                                action: function () {
+                                    self.$scope.state.activeScope = 'project';
+                                    self.$scope.config.selectedScope = self.$scope.config.scopeMenu[0].items[0];
+                                }
+                            },
+                            {
+                                id: 'composition',
+                                label: 'Composition',
+                                action: function () {
+                                    self.$scope.state.activeScope = 'composition';
+                                    self.$scope.config.selectedScope = self.$scope.config.scopeMenu[0].items[1];
+                                }
+                            }
+                        ]
+                    }
+                ],
+
+                selectedScope: null,
+
+                preferencesMenu: [
+                    {
+                        items: [
+                            {
+                                id: 'preferences 1',
+                                label: 'Preferences 1'
+                            },
+
+                            {
+                                id: 'preferences 2',
+                                label: 'Preferences 2'
+                            },
+
+                            {
+                                id: 'preferences 3',
+                                label: 'Preferences 3',
+                                menu: [
+                                    {
+                                        items: [
+                                            {
+                                                id: 'sub_preferences 1',
+                                                label: 'Sub preferences 1'
+                                            },
+                                            {
+                                                id: 'sub_preferences 2',
+                                                label: 'Sub preferences 2',
+                                                action: function (data) {
+                                                    console.log('testing2');
+                                                }
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+
+                collapsedIconClass: 'icon-arrow-right',
+                expandedIconClass: 'icon-arrow-down'
+
+            };
 
             self.logger.debug('Initializing ... ');
 
@@ -122,6 +124,7 @@ define([
             self.$scope.treeData = {};
 
             self.$scope.config = defaultConfig;
+            self.$scope.config.selectedScope = self.$scope.config.scopeMenu[0].items[0];
 
             self.$scope.contextMenuData = null;
 

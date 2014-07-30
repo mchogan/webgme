@@ -2,7 +2,7 @@
     <header data-ng-if="config.scopeMenu || config.preferencesMenu">
         <div class="dropdown scope-selector pull-left"
              data-ng-if="config.scopeMenu">
-            <a href="#" class="dropdown-toggle item-label icon-arrow-down">{{ state.activeScope }}</a>
+            <a href="#" class="dropdown-toggle item-label icon-arrow-down">{{ config.selectedScope.label }}</a>
             <hierarchical-dropdown role="menu" menu="config.scopeMenu"></hierarchical-dropdown>
           <!--<ul class="dropdown-menu" role="menu">-->
             <!--<li><a href="#">Action</a></li>-->
