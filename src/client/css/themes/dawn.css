@@ -2,7 +2,8 @@ a {
   color: #3160ab; }
 
 a:hover {
-  color: #ff7700; }
+  color: #ff7700;
+  text-decoration: none; }
 
 .toolbar-container a {
   color: #00235b;

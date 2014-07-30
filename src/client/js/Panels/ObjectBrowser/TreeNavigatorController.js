@@ -26,57 +26,64 @@ define([
             defaultConfig;
 
         defaultConfig = {
-            scopeSelector: {
-                hidden: true,
-                items: [
-                    {
-                        id: 'project',
-                        label: 'Project',
-                        action: function () {
-                            console.log('Show projects');
-                        },
-                        menu: [
-                            {
-                                items: [
-                                    {
-                                        id: 'preferences 1',
-                                        label: 'Preferences 1'
-                                    },
-                                    {
-                                        id: 'preferences 2',
-                                        label: 'Preferences 2'
-                                    },
-                                    {
-                                        id: 'preferences 3',
-                                        label: 'Preferences 3',
-                                        menu: [
-                                            {
-                                                items: [
-                                                    {
-                                                        id: 'sub_preferences 1',
-                                                        label: 'Sub preferences 1'
-                                                    },
-                                                    {
-                                                        id: 'sub_preferences 2',
-                                                        label: 'Sub preferences 2'
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
+            scopeMenu: [
+                {
+                    items: [
+                        {
+                            id: 'project',
+                            label: 'Project',
+                            action: function () {
+                                console.log('Show projects');
                             }
-                        ]
-                    },
-                    {
-                        id: 'composition',
-                        label: 'Composition',
-                        action: function () {
-                            console.log('Show composition');
+                        },
+                        {
+                            id: 'composition',
+                            label: 'Composition',
+                            action: function () {
+                                console.log('Show composition');
+                            }
                         }
-                    }
-                ]
-            },
+                    ]
+                }
+            ],
+
+            preferencesMenu: [
+                {
+                    items: [
+                        {
+                            id: 'preferences 1',
+                            label: 'Preferences 1'
+                        },
+
+                        {
+                            id: 'preferences 2',
+                            label: 'Preferences 2'
+                        },
+
+                        {
+                            id: 'preferences 3',
+                            label: 'Preferences 3',
+                            menu: [
+                                {
+                                    items: [
+                                        {
+                                            id: 'sub_preferences 1',
+                                            label: 'Sub preferences 1'
+                                        },
+                                        {
+                                            id: 'sub_preferences 2',
+                                            label: 'Sub preferences 2',
+                                            action: function (data) {
+                                                console.log('testing2');
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ],
 
             collapsedIconClass: 'icon-arrow-right',
             expandedIconClass: 'icon-arrow-down'
@@ -123,7 +130,10 @@ define([
                 activeNode: null,
 
                 // ids of selected nodes
-                selectedNodes: []
+                selectedNodes: [],
+
+                // id of active scope
+                activeScope: 'project'
             };
 
             self.$scope.onContextMenu = function (theNode) {

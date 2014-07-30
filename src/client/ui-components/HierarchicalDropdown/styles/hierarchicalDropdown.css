@@ -1,3 +1,6 @@
+.open > .hierarchical-dropdown > .dropdown-menu {
+  display: block; }
+
 .hierarchical-dropdown > .dropdown-menu {
   position: absolute;
   margin-bottom: 0;

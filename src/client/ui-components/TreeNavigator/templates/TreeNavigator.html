@@ -1,15 +1,29 @@
 <nav class="tree-navigator">
-    <header>
-        <span class="dropdown scope-selector" on-toggle="toggled(open)" ng-if="!scopeSelector.hidden">
-            <a href class="dropdown-toggle">
-                Project
-            </a>
-            <ul class="dropdown-menu">
-                <li ng-repeat="choice in config.scopeSelector.items">
-                    <a href="#">{{ choice.label }}</a>
-                </li>
-            </ul>
-        </span>
+    <header data-ng-if="config.scopeMenu || config.preferencesMenu">
+        <div class="dropdown scope-selector pull-left"
+             data-ng-if="config.scopeMenu">
+            <a href="#" class="dropdown-toggle item-label icon-arrow-down">{{ state.activeScope }}</a>
+            <hierarchical-dropdown role="menu" menu="config.scopeMenu"></hierarchical-dropdown>
+          <!--<ul class="dropdown-menu" role="menu">-->
+            <!--<li><a href="#">Action</a></li>-->
+            <!--<li><a href="#">Another action</a></li>-->
+            <!--<li><a href="#">Something else here</a></li>-->
+            <!--<li class="divider"></li>-->
+            <!--<li><a href="#">Separated link</a></li>-->
+          <!--</ul>-->
+        </div>
+        <div class="dropdown preferences-menu pull-right"
+             data-ng-if="config.preferencesMenu">
+            <a href="#" class="dropdown-toggle item-label"><i class="glyphicon glyphicon-cog"></i></a>
+            <hierarchical-dropdown class="pull-right drop-left" role="menu" menu="config.preferencesMenu"></hierarchical-dropdown>
+          <!--<ul class="dropdown-menu" role="menu">-->
+            <!--<li><a href="#">Action</a></li>-->
+            <!--<li><a href="#">Another action</a></li>-->
+            <!--<li><a href="#">Something else here</a></li>-->
+            <!--<li class="divider"></li>-->
+            <!--<li><a href="#">Separated link</a></li>-->
+          <!--</ul>-->
+        </div>
     </header>
 
     <script type="text/ng-template" id="tree-navigator-node-template">

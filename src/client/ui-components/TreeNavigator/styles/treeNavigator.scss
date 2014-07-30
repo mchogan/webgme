@@ -1,8 +1,20 @@
 .tree-navigator {
 
-  padding: .75ex;
+  padding: 0;
 
   font-size: 110%;
+
+  header {
+    margin-bottom: 1ex;
+    padding: 0.75ex;
+    border-bottom: 1px solid #eee;
+
+    height: 2em;
+  }
+
+  .tree-navigator-nodes {
+    padding: 0.75ex;
+  }
 
   ul.node-list {
     list-style-type: none;
@@ -67,7 +79,7 @@
     z-index: 1000;
   }
 
-  .icon-arrow-right {
+  .icon-arrow-right:after {
     display: inline-block;
     content: " ";
     width: 0;
@@ -85,7 +97,7 @@
 
   }
 
-  .icon-arrow-left {
+  .icon-arrow-left:before {
     display: inline-block;
     content: " ";
     width: 0;
@@ -103,7 +115,7 @@
 
   }
 
-  .icon-arrow-down {
+  .icon-arrow-down:after {
     display: inline-block;
     content: " ";
     width: 0;
