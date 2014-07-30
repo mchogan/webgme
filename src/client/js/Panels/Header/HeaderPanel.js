@@ -11,16 +11,38 @@ define(['js/PanelBase/PanelBase',
     'js/Widgets/UserProfile/UserProfileWidget',
     'js/Toolbar/Toolbar',
     './DefaultToolbar',
+
     'ui-components/DropdownNavigator/DropdownNavigator',
-    './ProjectNavigatorController'
-], function (PanelBase, ProjectTitleWidget, UserProfileWidget, toolbar, DefaultToolbar, DropDownNavigator, ProjectNavigatorController) {
+    './ProjectNavigatorController',
+
+    'ui-components/SearchBox/SearchBox',
+    './SearchBoxController',
+
+    'css!./styles/headerPanel.css'
+
+       ],
+       function ( PanelBase, ProjectTitleWidget, UserProfileWidget, toolbar, DefaultToolbar,
+
+            DropDownNavigator,
+            ProjectNavigatorController,
+
+            SearchBox,
+            SearchBoxController
+
+       )
+    {
 
     "use strict";
 
     var HeaderPanel,
         __parent__ = PanelBase;
 
-    angular.module('headerPanel', ['isis.ui.dropdownNavigator']).run(function() {
+    angular.module(
+        'headerPanel',
+        [
+            'isis.ui.dropdownNavigator',
+            'isis.ui.searchBox'
+        ]).run(function() {
 
     });
 
@@ -57,14 +79,23 @@ define(['js/PanelBase/PanelBase',
 
         //project title
         var projectTitleEl = $(
-            '<div data-ng-controller="ProjectNavigatorController"><dropdown-navigator navigator="navigator"></dropdown-navigator></div>', {'class': "inline"}
+            '<div class="header-navigator" data-ng-controller="ProjectNavigatorController"><dropdown-navigator navigator="navigator"></dropdown-navigator></div>'
         );
+
         //new ProjectTitleWidget(projectTitleEl, this._client);
         navBarInner.append(projectTitleEl);
 
+        app.controller('SearchBoxController', SearchBoxController);
+
+        var searchBoxEl = $(
+            '<div class="header-search-box" data-ng-controller="SearchBoxController"><search-box handlers="handlers" config="config"></search-box></div>'
+        );
+
+        navBarInner.append(searchBoxEl);
+
         //user info
         navBarInner.append($('<div class="spacer pull-right"></div>'));
-        var userProfileEl = $('<div/>', {'class': "inline pull-right"});
+        var userProfileEl = $('<div class="header-user-profile"/>', {'class': "inline pull-right"});
         var u = new UserProfileWidget(userProfileEl, this._client);
         navBarInner.append(userProfileEl);
 
