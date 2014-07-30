@@ -58,6 +58,8 @@ define(['logManager',
     var npmJSON = JSON.parse(packagejson);
     WebGMEGlobal.version = npmJSON.version;
 
+    logManager.setLogLevel(CONFIG.clientLogLevel);
+
     var _webGMEStart = function ( afterPanelsLoaded ) {
         var layoutManager,
             client,
