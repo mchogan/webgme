@@ -42,7 +42,7 @@
     content: 'Loading...';
     padding-left: 2ex; }
   .tree-navigator span.node-extra-info {
-    color: #aaa;
+    color: #666;
     font-size: 80%; }
   .tree-navigator .node-expander {
     text-decoration: none; }
@@ -89,7 +89,7 @@
     color: #00235b; }
     .tree-navigator .active-node > .node-label > .label-text {
       font-weight: bold; }
-  .tree-navigator .selected-node .node-label {
+  .tree-navigator .selected-node > .node-label {
     background-color: #f1f5f9; }
-  .tree-navigator .selected-node .node-expander {
+  .tree-navigator .selected-node > .node-expander {
     color: #fff; }

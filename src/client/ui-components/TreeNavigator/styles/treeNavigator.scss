@@ -71,7 +71,7 @@
   }
 
   span.node-extra-info {
-    color: #aaa;
+    color: #666;
     font-size: 80%;
   }
 
@@ -151,11 +151,11 @@
 
   .selected-node {
 
-    .node-label {
+    > .node-label {
       background-color: #f1f5f9;
     }
 
-    .node-expander {
+    > .node-expander {
       color: #fff;
     }
   }
