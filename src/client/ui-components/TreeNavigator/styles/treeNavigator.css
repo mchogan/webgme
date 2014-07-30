@@ -9,7 +9,7 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
-    cursor: default; }
+    cursor: pointer; }
   .tree-navigator ul.node-list ul.node-list {
     padding: 0 0 0 2ex; }
   .tree-navigator ul.node-list > li > ul {
@@ -66,10 +66,12 @@
     height: 0;
     border-color: transparent;
     border-style: solid;
-    border-width: 0.75ex 0.75ex 0 0.75ex;
+    border-width: .75ex .75ex 0 .75ex;
     border-top-color: #ccc;
     margin-left: .2ex; }
     .tree-navigator .icon-arrow-down:hover {
       border-top-color: #999; }
-  .tree-navigator .active-node {
-    font-weight: bold; }
+  .tree-navigator .active-node > .node-label {
+    color: #00235b; }
+    .tree-navigator .active-node > .node-label > .label-text {
+      font-weight: bold; }

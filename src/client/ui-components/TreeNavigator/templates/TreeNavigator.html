@@ -30,7 +30,8 @@
             <i data-ng-if="( node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass ) && !item.iconPullRight"
                data-ng-class="node.childrenCount && config.folderIconClass || node.iconClass || config.nodeIconClass"></i>
 
-            <span data-ng-dblclick="node.nodeDblclick(node)"
+            <span class="label-text"
+                  data-ng-dblclick="node.nodeDblclick(node)"
                   data-ng-if="node.label">{{ node.label }}</span>
             <span class="noname"
                   data-ng-dblclick="node.nodeDoubleClick(node)"
