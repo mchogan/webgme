@@ -1,6 +1,6 @@
 .tree-navigator {
   padding: .75ex;
-  font-size: 103%; }
+  font-size: 110%; }
   .tree-navigator ul.node-list {
     list-style-type: none;
     padding: 0; }
@@ -33,3 +33,39 @@
   .tree-navigator .context-menu {
     position: fixed;
     z-index: 1000; }
+  .tree-navigator .icon-arrow-right {
+    display: inline-block;
+    content: " ";
+    width: 0;
+    height: 0;
+    border-color: transparent;
+    border-style: solid;
+    border-width: .75ex 0 .75ex .75ex;
+    border-left-color: #ccc;
+    margin-left: .2ex; }
+    .tree-navigator .icon-arrow-right:hover {
+      border-left-color: #999; }
+  .tree-navigator .icon-arrow-left {
+    display: inline-block;
+    content: " ";
+    width: 0;
+    height: 0;
+    border-color: transparent;
+    border-style: solid;
+    border-width: .75ex .75ex .75ex 0;
+    border-right-color: #ccc;
+    margin-right: .2ex; }
+    .tree-navigator .icon-arrow-left:hover {
+      border-right-color: #999; }
+  .tree-navigator .icon-arrow-down {
+    display: inline-block;
+    content: " ";
+    width: 0;
+    height: 0;
+    border-color: transparent;
+    border-style: solid;
+    border-width: 0.75ex 0.75ex 0 0.75ex;
+    border-top-color: #ccc;
+    margin-left: .2ex; }
+    .tree-navigator .icon-arrow-down:hover {
+      border-top-color: #999; }

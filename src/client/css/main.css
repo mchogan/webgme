@@ -163,3 +163,7 @@ div.spacer {
 .empty-message {
     font-style: italic;
 }
+
+.smaller-font {
+    font-size: 80%;
+}

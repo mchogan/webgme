@@ -78,8 +78,8 @@ define([
                 ]
             },
 
-            collapsedIconClass: 'fa fa-chevron-right',
-            expandedIconClass: 'fa fa-chevron-down'
+            collapsedIconClass: 'icon-arrow-right',
+            expandedIconClass: 'icon-arrow-down'
 
         };
 
