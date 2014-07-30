@@ -352,8 +352,9 @@ define([
 
             self.logger.debug('Adding a new node ' + id + (parentTreeNode ? ' to ' + parentTreeNode.id : ' as ROOT'));
 
-            nodeClick = function (theNode) {
-                self.logger.debug('NodeClickHandler: ' + theNode.id + ' ' + theNode.label + ' was clicked');
+            nodeDblclick = function (theNode) {
+                nodeClick(theNode);
+                expanderClick(theNode);
             };
 
             if (self.gmeClient) {
@@ -395,13 +396,15 @@ define([
                     }
                 };
 
-                nodeDblclick = function (theNode) {
+                nodeClick = function (theNode) {
                     var settings = {};
                     settings[CONSTANTS.STATE_ACTIVE_OBJECT] = theNode.id;
                     settings[CONSTANTS.STATE_ACTIVE_ASPECT] = CONSTANTS.ASPECT_ALL;
                     settings[CONSTANTS.STATE_ACTIVE_VISUALIZER] = 'ModelEditor'; // DEFAULT_VISUALIZER;
                     WebGMEGlobal.State.set(settings);
                 };
+
+
             } else {
                 expanderClick = function (theNode) {
                     self.logger.debug('ExpanderClickHandler: ' + theNode.id + ' ' + theNode.label + ' expended ' + self.expanded);
@@ -431,9 +434,10 @@ define([
                     }
                 };
 
-                nodeDblclick = function (theNode) {
-                    self.logger.debug('Node Double ClickHandler: ' + theNode.id + ' ' + theNode.label + ' was clicked');
+                nodeClick = function (theNode) {
+                    self.logger.debug('NodeClickHandler: ' + theNode.id + ' ' + theNode.label + ' was clicked');
                 };
+
             }
 
             // node structure
