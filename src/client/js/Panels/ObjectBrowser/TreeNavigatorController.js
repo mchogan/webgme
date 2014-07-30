@@ -304,7 +304,7 @@ define([
                             // update all relevant properties
                             treeNode.label = self.gmeClient.getNode(event.eid).getAttribute('name');
                             treeNode.childrenCount = self.gmeClient.getNode(event.eid).getChildrenIds().length;
-                            treeNode.extraInfo = '<<' + self.gmeClient.getMetaTypeName(event.eid) + '>>';
+                            treeNode.extraInfo = '«' + self.gmeClient.getMetaTypeName(event.eid) + '»';
 
                             for (j = 0; j < treeNode.contextMenu[0].items.length; j += 1) {
                                 menuItem = treeNode.contextMenu[0].items[j];

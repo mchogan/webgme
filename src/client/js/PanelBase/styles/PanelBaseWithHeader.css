@@ -97,10 +97,10 @@
   -webkit-border-radius: 0;
   -moz-border-radius: 0;
   border-radius: 0;
-  background-color: whitesmoke; }
+  background-color: #fefefe; }
   .side-panel .panel-base-wh .panel-header {
     padding: 3px;
-    background-color: whitesmoke;
+    background-color: #fefefe;
     border-bottom: 3px solid transparent; }
     .side-panel .panel-base-wh .panel-header .ro-icon {
       position: relative;
@@ -116,7 +116,7 @@
     .side-panel .panel-base-wh .panel-header .panel-header-toolbar {
       display: block; }
   .side-panel .panel-base-wh .panel-body {
-    background-color: whitesmoke;
+    background-color: #fefefe;
     padding: 0; }
   .side-panel .panel-base-wh.read-only .panel-body {
     background-color: #fbfbfb; }

@@ -10,7 +10,7 @@
   }
 
   ul.node-list > li {
-    padding: .2ex 0 .2ex .2ex;
+    padding: .4ex;
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
@@ -122,6 +122,14 @@
       > .label-text {
         font-weight: bold;
       }
+    }
+  }
+
+  .selected-node {
+    background-color: #c2daf6;
+
+    .node-expander {
+      color: #fff;
     }
   }
 
