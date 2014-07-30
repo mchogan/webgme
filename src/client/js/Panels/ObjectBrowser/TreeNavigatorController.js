@@ -1,4 +1,4 @@
-/*globals define, console*/
+/*globals define, console, WebGMEGlobal*/
 /**
  * @author nabana / https://github.com/nabana
  * @author lattmann / https://github.com/lattmann
@@ -9,14 +9,16 @@ define([
     'js/Utils/GMEConcepts',
     'js/Utils/ExportManager',
     'js/Utils/ImportManager',
-    'logManager'
+    'logManager',
+    'js/Constants'
 ],
     function (
         GUID,
         GMEConcepts,
         ExportManager,
         ImportManager,
-        logManager
+        logManager,
+        CONSTANTS
     ) {
         "use strict";
 
@@ -354,10 +356,6 @@ define([
                 self.logger.debug('NodeClickHandler: ' + theNode.id + ' ' + theNode.label + ' was clicked');
             };
 
-            nodeDblclick = function (theNode) {
-                self.logger.debug('Node Double ClickHandler: ' + theNode.id + ' ' + theNode.label + ' was clicked');
-            };
-
             if (self.gmeClient) {
                 expanderClick = function (theNode) {
                     self.logger.debug('ExpanderClickHandler: ' + theNode.id + ' ' + theNode.label + ' expended ' + self.expanded);
@@ -396,6 +394,14 @@ define([
 //                        }
                     }
                 };
+
+                nodeDblclick = function (theNode) {
+                    var settings = {};
+                    settings[CONSTANTS.STATE_ACTIVE_OBJECT] = theNode.id;
+                    settings[CONSTANTS.STATE_ACTIVE_ASPECT] = CONSTANTS.ASPECT_ALL;
+                    settings[CONSTANTS.STATE_ACTIVE_VISUALIZER] = 'ModelEditor'; // DEFAULT_VISUALIZER;
+                    WebGMEGlobal.State.set(settings);
+                };
             } else {
                 expanderClick = function (theNode) {
                     self.logger.debug('ExpanderClickHandler: ' + theNode.id + ' ' + theNode.label + ' expended ' + self.expanded);
@@ -423,6 +429,10 @@ define([
                         // Expand-collapse
                         theNode.expanded = !theNode.expanded;
                     }
+                };
+
+                nodeDblclick = function (theNode) {
+                    self.logger.debug('Node Double ClickHandler: ' + theNode.id + ' ' + theNode.label + ' was clicked');
                 };
             }
 
