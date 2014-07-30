@@ -5,7 +5,7 @@
     list-style-type: none;
     padding: 0; }
   .tree-navigator ul.node-list > li {
-    padding: .4ex;
+    padding: 0;
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
@@ -19,6 +19,11 @@
   .tree-navigator .node-list > li:not(.expanded) > ul {
     opacity: 0;
     height: 0; }
+  .tree-navigator .node-label {
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    padding: .4ex; }
   .tree-navigator .node-label:hover,
   .tree-navigator .node-label:active {
     text-decoration: none;
@@ -75,7 +80,7 @@
     color: #00235b; }
     .tree-navigator .active-node > .node-label > .label-text {
       font-weight: bold; }
-  .tree-navigator .selected-node > div {
-    background-color: #c2daf6; }
-    .tree-navigator .selected-node > div .node-expander {
-      color: #fff; }
+  .tree-navigator .selected-node .node-label {
+    background-color: #f1f5f9; }
+  .tree-navigator .selected-node .node-expander {
+    color: #fff; }

@@ -10,7 +10,7 @@
   }
 
   ul.node-list > li {
-    padding: .4ex;
+    padding: 0;
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
@@ -32,6 +32,13 @@
   .node-list > li:not(.expanded) > ul {
     opacity: 0;
     height: 0;
+  }
+
+  .node-label {
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    padding: .4ex;
   }
 
   .node-label:hover,
@@ -125,8 +132,11 @@
     }
   }
 
-  .selected-node > div {
-    background-color: #c2daf6;
+  .selected-node {
+
+    .node-label {
+      background-color: #f1f5f9;
+    }
 
     .node-expander {
       color: #fff;
