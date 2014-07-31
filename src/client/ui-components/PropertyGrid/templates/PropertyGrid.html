@@ -1,7 +1,10 @@
 <div class="property-grid">
 
     <script type="text/ng-template" id="property-grid-item-template">
-        {{ item.label }}
+        <div class="item">
+            <label>{{ item.label }}</label>
+            <div>{{ item.value }}</div>
+        </div>
     </script>
 
    <ul class="item-list">
