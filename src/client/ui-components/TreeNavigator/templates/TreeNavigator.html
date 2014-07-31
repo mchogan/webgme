@@ -31,7 +31,7 @@
         <a href="#"
            class="node-expander"
            data-ng-if="treeData.childrenCount && !treeData.unCollapsible"
-           data-ng-click="treeData.expanderClick(node, $event)">
+           data-ng-click="treeData.expanderClick($event, node)">
             <i data-ng-if="!treeData.expanded" data-ng-class="treeData.collapsedIconClass || config.collapsedIconClass"></i>
             <i data-ng-if="treeData.expanded" data-ng-class="treeData.expandedIconClass || config.expandedIconClass"></i>
         </a>
@@ -40,10 +40,10 @@
            data-ng-class="treeData.childrenCount && config.folderIconClass || treeData.iconClass || config.nodeIconClass"></i>
 
         <span class="label-text"
-              data-ng-dblclick="treeData.nodeDblclick(node)"
+              data-ng-dblclick="treeData.nodeDblclick($event, node)"
               data-ng-if="treeData.label">{{ treeData.label }}</span>
         <span class="noname"
-              data-ng-dblclick="treeData.nodeDoubleClick(node)"
+              data-ng-dblclick="treeData.nodeDblClick($event, node)"
               data-ng-if="!treeData.label">No name</span>
 
         <span data-ng-if="treeData.extraInfo"
@@ -57,7 +57,7 @@
         <div class="node-label"
              data-ng-init="treeData = node"
              data-ng-class="{ 'loading': treeData.isLoading }"
-             data-ng-click="treeData.nodeClick(treeData)"
+             data-ng-click="treeData.nodeClick($event, treeData)"
              context-menu="treeData.onContextMenu(treeData)"
              data-target="tree-context-menu"
              data-ng-include="'tree-navigator-node-label-template'">
@@ -79,7 +79,7 @@
         <div class="node-label"
 
              data-ng-class="{ 'loading': treeData.isLoading }"
-             data-ng-click="treeData.nodeClick(treeData)"
+             data-ng-click="treeData.nodeClick($event, treeData)"
              context-menu="treeData.onContextMenu(treeData)"
              data-target="tree-context-menu"
              data-ng-include="'tree-navigator-node-label-template'"

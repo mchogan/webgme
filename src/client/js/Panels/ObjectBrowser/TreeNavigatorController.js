@@ -140,6 +140,9 @@ define([
                 activeScope: 'project'
             };
 
+            // clears selection
+            self.updateSelection();
+
             self.$scope.onContextMenu = function (theNode) {
                 var j,
                     childrenTypes,
@@ -368,16 +371,22 @@ define([
 
             self.logger.debug('Adding a new node ' + id + (parentTreeNode ? ' to ' + parentTreeNode.id : ' as ROOT'));
 
-            nodeDblclick = function (theNode) {
-                nodeClick(theNode);
-                expanderClick(theNode);
+            nodeDblclick = function ($event, theNode) {
+                nodeClick($event, theNode);
+                expanderClick($event, theNode);
+
+                // one active node
+                self.$scope.state.activeNode = theNode.id;
+
+                // one selected node
+                self.$scope.state.selectedNodes = [theNode.id];
             };
 
             if (self.gmeClient) {
-                expanderClick = function (theNode, event) {
+                expanderClick = function ($event, theNode) {
 
-                    if ( event ) {
-                        event.stopPropagation();
+                    if ( $event ) {
+                        $event.stopPropagation();
                     }
 
                     self.logger.debug('ExpanderClickHandler: ' + theNode.id + ' ' + theNode.label + ' expanded ' + self.expanded);
@@ -415,9 +424,11 @@ define([
 //                            self.removeSubtree(theNode.id);
 //                        }
                     }
+
+                    self.updateSelection(null, theNode);
                 };
 
-                nodeClick = function (theNode) {
+                nodeClick = function ($event, theNode) {
 
                     var settings = {};
 
@@ -426,15 +437,12 @@ define([
                     settings[CONSTANTS.STATE_ACTIVE_VISUALIZER] = 'ModelEditor'; // DEFAULT_VISUALIZER;
                     WebGMEGlobal.State.set(settings);
 
-                    self.$scope.state.activeNode = theNode.id;
-
-                    // TODO: properly update selected nodes
-                    self.$scope.state.selectedNodes = [theNode.id];
+                    self.updateSelection($event, theNode);
                 };
 
 
             } else {
-                expanderClick = function (theNode) {
+                expanderClick = function ($event, theNode) {
                     self.logger.debug('ExpanderClickHandler: ' + theNode.id + ' ' + theNode.label + ' expended ' + self.expanded);
 
                     if (theNode.children.length === 0 && !theNode.isLoading && !theNode.loaded) {
@@ -460,10 +468,14 @@ define([
                         // Expand-collapse
                         theNode.expanded = !theNode.expanded;
                     }
+
+                    self.updateSelection(null, theNode);
                 };
 
-                nodeClick = function (theNode) {
+                nodeClick = function ($event, theNode) {
                     self.logger.debug('NodeClickHandler: ' + theNode.id + ' ' + theNode.label + ' was clicked');
+
+                    self.updateSelection($event, theNode);
                 };
 
             }
@@ -779,6 +791,51 @@ define([
             }
 
             self.update();
+        };
+
+        TreeNavigatorController.prototype.updateSelection = function ($event, theNode) {
+            var self = this,
+                index;
+
+            if (theNode) {
+
+                if ( $event ) {
+                    if ( $event.shiftKey ) {
+                        // TODO: properly update selected nodes
+                        // start node is active node
+                        // end node is theNode
+                        // select all opened tree elements between the two nodes
+                        self.$scope.state.selectedNodes = [theNode.id];
+                        self.logger.warning( 'Range selection is not implemented properly yet.' );
+
+                    } else if ( $event.ctrlKey || $event.metaKey ) {
+                        index = self.$scope.state.selectedNodes.indexOf( theNode.id );
+
+                        if ( index > -1 ) {
+                            // already selected, remove this node
+                            self.$scope.state.selectedNodes.splice(index, 1);
+                        } else {
+                            // select it
+                            self.$scope.state.selectedNodes.push(theNode.id);
+                        }
+
+                    } else {
+                        self.$scope.state.selectedNodes = [theNode.id];
+
+                    }
+
+                } else {
+                    // event is not given
+                    self.$scope.state.selectedNodes = [theNode.id];
+                }
+
+                // active node is the clicked node
+                self.$scope.state.activeNode = theNode.id;
+
+            } else {
+                self.$scope.state.selectedNodes = [];
+                self.$scope.state.activeNode = null;
+            }
         };
 
         TreeNavigatorController.prototype.dummyTreeDataGenerator = function (
