@@ -1,6 +1,6 @@
-define([],function(){
+define([], function () {
 
-return {
- data: 1
-}
+  return {
+    data: 1
+  }
 });

@@ -2,31 +2,31 @@
  * Created by zsolt on 4/19/14.
  */
 
-define(['stream', 'util'], function(Stream, util) {
-    var StringStreamWriter = function (str, opt) {
-        Stream.Writable.call(this, opt);
-        this._buffer = new Buffer(0);
-    };
+define(['stream', 'util'], function (Stream, util) {
+  var StringStreamWriter = function (str, opt) {
+    Stream.Writable.call(this, opt);
+    this._buffer = new Buffer(0);
+  };
 
-    util.inherits(StringStreamWriter, Stream.Writable);
+  util.inherits(StringStreamWriter, Stream.Writable);
 
-    StringStreamWriter.prototype._write = function (chunk, encoding, callback) {
-        // FIXME: This might be slow for big files.
-        this._buffer = Buffer.concat([this._buffer, new Buffer(chunk)]);
-        callback(null);
-    };
+  StringStreamWriter.prototype._write = function (chunk, encoding, callback) {
+    // FIXME: This might be slow for big files.
+    this._buffer = Buffer.concat([this._buffer, new Buffer(chunk)]);
+    callback(null);
+  };
 
-    StringStreamWriter.prototype.getBuffer = function () {
-        return this._buffer;
-    };
+  StringStreamWriter.prototype.getBuffer = function () {
+    return this._buffer;
+  };
 
-    StringStreamWriter.prototype.toString = function () {
-        return this._buffer.toString();
-    };
+  StringStreamWriter.prototype.toString = function () {
+    return this._buffer.toString();
+  };
 
-    StringStreamWriter.prototype.toJSON = function () {
-        return JSON.parse(this.toString());
-    };
+  StringStreamWriter.prototype.toJSON = function () {
+    return JSON.parse(this.toString());
+  };
 
-    return StringStreamWriter;
+  return StringStreamWriter;
 });

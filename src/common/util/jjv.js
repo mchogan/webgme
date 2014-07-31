@@ -10,54 +10,57 @@
 
 (function () {
   var clone = function (obj) {
-      // Handle the 3 simple types (string, number, function), and null or undefined
-      if (obj === null || typeof obj !== 'object') return obj;
-      var copy;
+    // Handle the 3 simple types (string, number, function), and null or undefined
+    if (obj === null || typeof obj !== 'object') return obj;
+    var copy;
 
-      // Handle Date
-      if (obj instanceof Date) {
-          copy = new Date();
-          copy.setTime(obj.getTime());
-          return copy;
+    // Handle Date
+    if (obj instanceof Date) {
+      copy = new Date();
+      copy.setTime(obj.getTime());
+      return copy;
+    }
+
+    // handle RegExp
+    if (obj instanceof RegExp) {
+      copy = new RegExp(obj);
+      return copy;
+    }
+
+    // Handle Array
+    if (obj instanceof Array) {
+      copy = [];
+      for (var i = 0, len = obj.length; i < len; i++)
+        copy[i] = clone(obj[i]);
+      return copy;
+    }
+
+    // Handle Object
+    if (obj instanceof Object) {
+      copy = {};
+      //           copy = Object.create(Object.getPrototypeOf(obj));
+      for (var attr in obj) {
+        if (obj.hasOwnProperty(attr))
+          copy[attr] = clone(obj[attr]);
       }
+      return copy;
+    }
 
-      // handle RegExp
-      if (obj instanceof RegExp) {
-        copy = new RegExp(obj);
-        return copy;
-      }
-
-      // Handle Array
-      if (obj instanceof Array) {
-          copy = [];
-          for (var i = 0, len = obj.length; i < len; i++)
-              copy[i] = clone(obj[i]);
-          return copy;
-      }
-
-      // Handle Object
-      if (obj instanceof Object) {
-          copy = {};
-//           copy = Object.create(Object.getPrototypeOf(obj));
-          for (var attr in obj) {
-              if (obj.hasOwnProperty(attr))
-                copy[attr] = clone(obj[attr]);
-          }
-          return copy;
-      }
-
-      throw new Error("Unable to clone object!");
+    throw new Error("Unable to clone object!");
   };
 
   var clone_stack = function (stack) {
-    var stack_last = stack.length-1, key = stack[stack_last].key;
+    var stack_last = stack.length - 1,
+      key = stack[stack_last].key;
     var new_stack = stack.slice(0);
-    new_stack[stack_last].object[key] = clone(new_stack[stack_last].object[key]);
+    new_stack[stack_last].object[key] = clone(new_stack[stack_last].object[
+      key]);
     return new_stack;
   };
 
   var copy_stack = function (new_stack, old_stack) {
-    var stack_last = new_stack.length-1, key = new_stack[stack_last].key;
+    var stack_last = new_stack.length - 1,
+      key = new_stack[stack_last].key;
     old_stack[stack_last].object[key] = new_stack[stack_last].object[key];
   };
 
@@ -99,7 +102,7 @@
       return typeof x === 'number' && !isNaN(x);
     },
     'integer': function (x) {
-      return typeof x === 'number' && x%1 === 0;
+      return typeof x === 'number' && x % 1 === 0;
     },
     'object': function (x) {
       return x && typeof x === 'object' && !Array.isArray(x);
@@ -139,13 +142,19 @@
       return v === v.toLowerCase();
     },
     'hostname': function (v) {
-      return v.length < 256 && (/^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*$/).test(v);
+      return v.length < 256 && (
+        /^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*$/
+      ).test(v);
     },
     'uri': function (v) {
-      return (/[-a-zA-Z0-9@:%_\+.~#?&//=]{2,256}\.[a-z]{2,4}\b(\/[-a-zA-Z0-9@:%_\+.~#?&//=]*)?/).test(v);
+      return (
+        /[-a-zA-Z0-9@:%_\+.~#?&//=]{2,256}\.[a-z]{2,4}\b(\/[-a-zA-Z0-9@:%_\+.~#?&//=]*)?/
+      ).test(v);
     },
     'email': function (v) { // email, ipv4 and ipv6 adapted from node-validator
-      return (/^(?:[\w\!\#\$\%\&\'\*\+\-\/\=\?\^\`\{\|\}\~]+\.)*[\w\!\#\$\%\&\'\*\+\-\/\=\?\^\`\{\|\}\~]+@(?:(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-](?!\.)){0,61}[a-zA-Z0-9]?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9\-](?!$)){0,61}[a-zA-Z0-9]?)|(?:\[(?:(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\.){3}(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\]))$/).test(v);
+      return (
+        /^(?:[\w\!\#\$\%\&\'\*\+\-\/\=\?\^\`\{\|\}\~]+\.)*[\w\!\#\$\%\&\'\*\+\-\/\=\?\^\`\{\|\}\~]+@(?:(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-](?!\.)){0,61}[a-zA-Z0-9]?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9\-](?!$)){0,61}[a-zA-Z0-9]?)|(?:\[(?:(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\.){3}(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\]))$/
+      ).test(v);
     },
     'ipv4': function (v) {
       if ((/^(\d?\d?\d)\.(\d?\d?\d)\.(\d?\d?\d)\.(\d?\d?\d)$/).test(v)) {
@@ -155,9 +164,11 @@
       }
       return false;
     },
-    'ipv6': function(v) {
-      return (/^((?=.*::)(?!.*::.+::)(::)?([\dA-F]{1,4}:(:|\b)|){5}|([\dA-F]{1,4}:){6})((([\dA-F]{1,4}((?!\3)::|:\b|$))|(?!\2\3)){2}|(((2[0-4]|1\d|[1-9])?\d|25[0-5])\.?\b){4})$/).test(v);
-     /*  return (/^::|^::1|^([a-fA-F0-9]{1,4}::?){1,7}([a-fA-F0-9]{1,4})$/).test(v); */
+    'ipv6': function (v) {
+      return (
+        /^((?=.*::)(?!.*::.+::)(::)?([\dA-F]{1,4}:(:|\b)|){5}|([\dA-F]{1,4}:){6})((([\dA-F]{1,4}((?!\3)::|:\b|$))|(?!\2\3)){2}|(((2[0-4]|1\d|[1-9])?\d|25[0-5])\.?\b){4})$/
+      ).test(v);
+      /*  return (/^::|^::1|^([a-fA-F0-9]{1,4}::?){1,7}([a-fA-F0-9]{1,4})$/).test(v); */
     }
   };
 
@@ -173,7 +184,7 @@
       return !(v > p || schema.exclusiveMaximum && v >= p);
     },
     'multipleOf': function (v, p) {
-      return (v/p)%1 === 0 || typeof v !== 'number';
+      return (v / p) % 1 === 0 || typeof v !== 'number';
     },
     // ****** string validation ******
     'pattern': function (v, p) {
@@ -181,10 +192,10 @@
         return true;
       var pattern, modifiers;
       if (typeof p === 'string')
-        pattern=p;
+        pattern = p;
       else {
-        pattern=p[0];
-        modifiers=p[1];
+        pattern = p[0];
+        modifiers = p[1];
       }
       var regex = new RegExp(pattern, modifiers);
       return regex.test(v);
@@ -203,7 +214,8 @@
       return v.length <= p || !Array.isArray(v);
     },
     'uniqueItems': function (v, p) {
-      var hash = {}, key;
+      var hash = {},
+        key;
       for (var i = 0, len = v.length; i < len; i++) {
         key = JSON.stringify(v[i]);
         if (hash.hasOwnProperty(key))
@@ -218,14 +230,16 @@
       if (typeof v !== 'object')
         return true;
       var count = 0;
-      for (var attr in v) if (v.hasOwnProperty(attr)) count = count + 1;
+      for (var attr in v)
+        if (v.hasOwnProperty(attr)) count = count + 1;
       return count >= p;
     },
     'maxProperties': function (v, p) {
       if (typeof v !== 'object')
         return true;
       var count = 0;
-      for (var attr in v) if (v.hasOwnProperty(attr)) count = count + 1;
+      for (var attr in v)
+        if (v.hasOwnProperty(attr)) count = count + 1;
       return count <= p;
     },
     // ****** all *****
@@ -262,7 +276,7 @@
 
     if (hash_idx > 0) {
       name = uri.substr(0, hash_idx);
-      uri = uri.substr(hash_idx+1);
+      uri = uri.substr(hash_idx + 1);
       if (!env.schema.hasOwnProperty(name)) {
         if (schema_stack && schema_stack[0].id === name)
           schema_stack = [schema_stack[0]];
@@ -296,14 +310,15 @@
   };
 
   var resolveObjectRef = function (object_stack, uri) {
-    var components, object, last_frame = object_stack.length-1, skip_frames, frame, m = /^(\d+)/.exec(uri);
+    var components, object, last_frame = object_stack.length - 1,
+      skip_frames, frame, m = /^(\d+)/.exec(uri);
 
     if (m) {
       uri = uri.substr(m[0].length);
       skip_frames = parseInt(m[1], 10);
       if (skip_frames < 0 || skip_frames > last_frame)
         return;
-      frame = object_stack[last_frame-skip_frames];
+      frame = object_stack[last_frame - skip_frames];
       if (uri === '#')
         return frame.key;
     } else
@@ -318,7 +333,8 @@
       uri = uri.substr(1);
       components = uri.split('/');
       while (components.length > 0) {
-        components[0] = components[0].replace(/~1/g, '/').replace(/~0/g, '~');
+        components[0] = components[0].replace(/~1/g, '/').replace(/~0/g,
+          '~');
         if (!object.hasOwnProperty(components[0]))
           return;
         object = object[components[0]];
@@ -331,14 +347,23 @@
 
   var checkValidity = function (env, schema_stack, object_stack, options) {
     var i, len, count, hasProp, hasPattern;
-    var p, v, malformed = false, objerrs = {}, objerr, objreq, errors = {}, props, matched, isArray;
-    var sl = schema_stack.length-1, schema = schema_stack[sl];
-    var ol = object_stack.length-1, object = object_stack[ol].object, name = object_stack[ol].key, prop = object[name];
+    var p, v, malformed = false,
+      objerrs = {},
+      objerr, objreq, errors = {},
+      props, matched, isArray;
+    var sl = schema_stack.length - 1,
+      schema = schema_stack[sl];
+    var ol = object_stack.length - 1,
+      object = object_stack[ol].object,
+      name = object_stack[ol].key,
+      prop = object[name];
 
     if (schema.hasOwnProperty('$ref')) {
-      schema_stack= resolveURI(env, schema_stack, schema.$ref);
+      schema_stack = resolveURI(env, schema_stack, schema.$ref);
       if (!schema_stack)
-        return {'$ref': schema.$ref};
+        return {
+          '$ref': schema.$ref
+        };
       else
         return checkValidity(env, schema_stack, object_stack, options);
     }
@@ -348,20 +373,25 @@
         if (options.useCoerce && env.coerceType.hasOwnProperty(schema.type))
           prop = object[name] = env.coerceType[schema.type](prop);
         if (!env.fieldType[schema.type](prop))
-          return {'type': schema.type};
+          return {
+            'type': schema.type
+          };
       } else {
         malformed = true;
         for (i = 0, len = schema.type.length; i < len && malformed; i++)
           if (env.fieldType[schema.type[i]](prop))
             malformed = false;
         if (malformed)
-          return {'type': schema.type};
+          return {
+            'type': schema.type
+          };
       }
     }
 
     if (schema.hasOwnProperty('allOf')) {
       for (i = 0, len = schema.allOf.length; i < len; i++) {
-        objerr = checkValidity(env, schema_stack.concat(schema.allOf[i]), object_stack, options);
+        objerr = checkValidity(env, schema_stack.concat(schema.allOf[i]),
+          object_stack, options);
         if (objerr)
           return objerr;
       }
@@ -370,7 +400,8 @@
     if (!options.useCoerce && !options.useDefault && !options.removeAdditional) {
       if (schema.hasOwnProperty('oneOf')) {
         for (i = 0, len = schema.oneOf.length, count = 0; i < len; i++) {
-          objerr = checkValidity(env, schema_stack.concat(schema.oneOf[i]), object_stack, options);
+          objerr = checkValidity(env, schema_stack.concat(schema.oneOf[i]),
+            object_stack, options);
           if (!objerr) {
             count = count + 1;
             if (count > 1)
@@ -380,7 +411,9 @@
           }
         }
         if (count > 1)
-          return {'oneOf': true};
+          return {
+            'oneOf': true
+          };
         else if (count < 1)
           return objerrs;
         objerrs = {};
@@ -388,7 +421,8 @@
 
       if (schema.hasOwnProperty('anyOf')) {
         for (i = 0, len = schema.anyOf.length; i < len; i++) {
-          objerr = checkValidity(env, schema_stack.concat(schema.anyOf[i]), object_stack, options);
+          objerr = checkValidity(env, schema_stack.concat(schema.anyOf[i]),
+            object_stack, options);
           if (!objerr)
             break;
         }
@@ -397,15 +431,19 @@
       }
 
       if (schema.hasOwnProperty('not')) {
-        objerr = checkValidity(env, schema_stack.concat(schema.not), object_stack, options);
+        objerr = checkValidity(env, schema_stack.concat(schema.not),
+          object_stack, options);
         if (!objerr)
-          return {'not': true};
+          return {
+            'not': true
+          };
       }
     } else {
       if (schema.hasOwnProperty('oneOf')) {
         for (i = 0, len = schema.oneOf.length, count = 0; i < len; i++) {
           new_stack = clone_stack(object_stack);
-          objerr = checkValidity(env, schema_stack.concat(schema.oneOf[i]), new_stack, options);
+          objerr = checkValidity(env, schema_stack.concat(schema.oneOf[i]),
+            new_stack, options);
           if (!objerr) {
             count = count + 1;
             if (count > 1)
@@ -417,7 +455,9 @@
           }
         }
         if (count > 1)
-          return {'oneOf': true};
+          return {
+            'oneOf': true
+          };
         else if (count < 1)
           return objerrs;
         objerrs = {};
@@ -426,7 +466,8 @@
       if (schema.hasOwnProperty('anyOf')) {
         for (i = 0, len = schema.anyOf.length; i < len; i++) {
           new_stack = clone_stack(object_stack);
-          objerr = checkValidity(env, schema_stack.concat(schema.anyOf[i]), new_stack, options);
+          objerr = checkValidity(env, schema_stack.concat(schema.anyOf[i]),
+            new_stack, options);
           if (!objerr) {
             copy_stack(new_stack, object_stack);
             break;
@@ -437,9 +478,12 @@
       }
 
       if (schema.hasOwnProperty('not')) {
-        objerr = checkValidity(env, schema_stack.concat(schema.not), clone_stack(object_stack), options);
+        objerr = checkValidity(env, schema_stack.concat(schema.not),
+          clone_stack(object_stack), options);
         if (!objerr)
-          return {'not': true};
+          return {
+            'not': true
+          };
       }
     }
 
@@ -449,10 +493,13 @@
           if (Array.isArray(schema.dependencies[p])) {
             for (i = 0, len = schema.dependencies[p].length; i < len; i++)
               if (!prop.hasOwnProperty(schema.dependencies[p][i])) {
-                return {'dependencies': true};
+                return {
+                  'dependencies': true
+                };
               }
           } else {
-            objerr = checkValidity(env, schema_stack.concat(schema.dependencies[p]), object_stack, options);
+            objerr = checkValidity(env, schema_stack.concat(schema.dependencies[
+              p]), object_stack, options);
             if (objerr)
               return objerr;
           }
@@ -469,7 +516,9 @@
       if (options.checkRequired && schema.required) {
         for (i = 0, len = schema.required.length; i < len; i++)
           if (!prop.hasOwnProperty(schema.required[i])) {
-            objerrs[schema.required[i]] = {'required': true};
+            objerrs[schema.required[i]] = {
+              'required': true
+            };
             malformed = true;
           }
       }
@@ -482,7 +531,11 @@
           matched = false;
           if (hasProp && schema.properties.hasOwnProperty(props[i])) {
             matched = true;
-            objerr = checkValidity(env, schema_stack.concat(schema.properties[props[i]]), object_stack.concat({object: prop, key: props[i]}), options);
+            objerr = checkValidity(env, schema_stack.concat(schema.properties[
+              props[i]]), object_stack.concat({
+              object: prop,
+              key: props[i]
+            }), options);
             if (objerr !== null) {
               objerrs[props[i]] = objerr;
               malformed = true;
@@ -490,9 +543,14 @@
           }
           if (hasPattern) {
             for (p in schema.patternProperties)
-              if (schema.patternProperties.hasOwnProperty(p) && props[i].match(p)) {
+              if (schema.patternProperties.hasOwnProperty(p) && props[i].match(
+                p)) {
                 matched = true;
-                objerr = checkValidity(env, schema_stack.concat(schema.patternProperties[p]), object_stack.concat({object: prop, key: props[i]}), options);
+                objerr = checkValidity(env, schema_stack.concat(schema.patternProperties[
+                  p]), object_stack.concat({
+                  object: prop,
+                  key: props[i]
+                }), options);
                 if (objerr !== null) {
                   objerrs[props[i]] = objerr;
                   malformed = true;
@@ -506,11 +564,13 @@
 
       if (options.useDefault && hasProp && !malformed) {
         for (p in schema.properties)
-          if (schema.properties.hasOwnProperty(p) && !prop.hasOwnProperty(p) && schema.properties[p].hasOwnProperty('default'))
+          if (schema.properties.hasOwnProperty(p) && !prop.hasOwnProperty(p) &&
+            schema.properties[p].hasOwnProperty('default'))
             prop[p] = schema.properties[p]['default'];
       }
 
-      if (options.removeAdditional && hasProp && schema.additionalProperties !== true && typeof schema.additionalProperties !== 'object') {
+      if (options.removeAdditional && hasProp && schema.additionalProperties !==
+        true && typeof schema.additionalProperties !== 'object') {
         for (i = 0, len = props.length; i < len; i++)
           delete prop[props[i]];
       } else {
@@ -518,13 +578,19 @@
           if (typeof schema.additionalProperties === 'boolean') {
             if (!schema.additionalProperties) {
               for (i = 0, len = props.length; i < len; i++) {
-                objerrs[props[i]] = {'additional': true};
+                objerrs[props[i]] = {
+                  'additional': true
+                };
                 malformed = true;
               }
             }
           } else {
             for (i = 0, len = props.length; i < len; i++) {
-              objerr = checkValidity(env, schema_stack.concat(schema.additionalProperties), object_stack.concat({object: prop, key: props[i]}), options);
+              objerr = checkValidity(env, schema_stack.concat(schema.additionalProperties),
+                object_stack.concat({
+                  object: prop,
+                  key: props[i]
+                }), options);
               if (objerr !== null) {
                 objerrs[props[i]] = objerr;
                 malformed = true;
@@ -534,12 +600,18 @@
         }
       }
       if (malformed)
-        return {'schema': objerrs};
+        return {
+          'schema': objerrs
+        };
     } else {
       if (schema.hasOwnProperty('items')) {
         if (Array.isArray(schema.items)) {
           for (i = 0, len = schema.items.length; i < len; i++) {
-            objerr = checkValidity(env, schema_stack.concat(schema.items[i]), object_stack.concat({object: prop, key: i}), options);
+            objerr = checkValidity(env, schema_stack.concat(schema.items[i]),
+              object_stack.concat({
+                object: prop,
+                key: i
+              }), options);
             if (objerr !== null) {
               objerrs[i] = objerr;
               malformed = true;
@@ -548,10 +620,16 @@
           if (prop.length > len && schema.hasOwnProperty('additionalItems')) {
             if (typeof schema.additionalItems === 'boolean') {
               if (!schema.additionalItems)
-                return {'additionalItems': true};
+                return {
+                  'additionalItems': true
+                };
             } else {
               for (i = len, len = prop.length; i < len; i++) {
-                objerr = checkValidity(env, schema_stack.concat(schema.additionalItems), object_stack.concat({object: prop, key: i}), options);
+                objerr = checkValidity(env, schema_stack.concat(schema.additionalItems),
+                  object_stack.concat({
+                    object: prop,
+                    key: i
+                  }), options);
                 if (objerr !== null) {
                   objerrs[i] = objerr;
                   malformed = true;
@@ -561,7 +639,11 @@
           }
         } else {
           for (i = 0, len = prop.length; i < len; i++) {
-            objerr = checkValidity(env, schema_stack.concat(schema.items), object_stack.concat({object: prop, key: i}), options);
+            objerr = checkValidity(env, schema_stack.concat(schema.items),
+              object_stack.concat({
+                object: prop,
+                key: i
+              }), options);
             if (objerr !== null) {
               objerrs[i] = objerr;
               malformed = true;
@@ -571,7 +653,11 @@
       } else if (schema.hasOwnProperty('additionalItems')) {
         if (typeof schema.additionalItems !== 'boolean') {
           for (i = 0, len = prop.length; i < len; i++) {
-            objerr = checkValidity(env, schema_stack.concat(schema.additionalItems), object_stack.concat({object: prop, key: i}), options);
+            objerr = checkValidity(env, schema_stack.concat(schema.additionalItems),
+              object_stack.concat({
+                object: prop,
+                key: i
+              }), options);
             if (objerr !== null) {
               objerrs[i] = objerr;
               malformed = true;
@@ -580,18 +666,24 @@
         }
       }
       if (malformed)
-        return {'schema': objerrs};
+        return {
+          'schema': objerrs
+        };
     }
 
     for (v in schema) {
       if (schema.hasOwnProperty(v) && !handled.hasOwnProperty(v)) {
         if (v === 'format') {
-          if (env.fieldFormat.hasOwnProperty(schema[v]) && !env.fieldFormat[schema[v]](prop, schema, object_stack, options)) {
+          if (env.fieldFormat.hasOwnProperty(schema[v]) && !env.fieldFormat[
+            schema[v]](prop, schema, object_stack, options)) {
             objerrs[v] = true;
             malformed = true;
           }
         } else {
-          if (env.fieldValidate.hasOwnProperty(v) && !env.fieldValidate[v](prop, schema[v].hasOwnProperty('$data') ? resolveObjectRef(object_stack, schema[v].$data) : schema[v], schema, object_stack, options)) {
+          if (env.fieldValidate.hasOwnProperty(v) && !env.fieldValidate[v](
+            prop, schema[v].hasOwnProperty('$data') ? resolveObjectRef(
+              object_stack, schema[v].$data) : schema[v], schema,
+            object_stack, options)) {
             objerrs[v] = true;
             malformed = true;
           }
@@ -626,7 +718,14 @@
 
   Environment.prototype = {
     validate: function (name, object, options) {
-      var schema_stack = [name], errors = null, object_stack = [{object: {'__root__': object}, key: '__root__'}];
+      var schema_stack = [name],
+        errors = null,
+        object_stack = [{
+          object: {
+            '__root__': object
+          },
+          key: '__root__'
+        }];
 
       if (typeof name === 'string') {
         schema_stack = resolveURI(this, null, name);
@@ -638,14 +737,17 @@
         options = this.defaultOptions;
       } else {
         for (var p in this.defaultOptions)
-          if (this.defaultOptions.hasOwnProperty(p) && !options.hasOwnProperty(p))
+          if (this.defaultOptions.hasOwnProperty(p) && !options.hasOwnProperty(
+            p))
             options[p] = this.defaultOptions[p];
       }
 
       errors = checkValidity(this, schema_stack, object_stack, options);
 
       if (errors)
-        return {validation: errors.hasOwnProperty('schema') ? errors.schema : errors};
+        return {
+          validation: errors.hasOwnProperty('schema') ? errors.schema : errors
+        };
       else
         return null;
     },
@@ -675,7 +777,8 @@
         schema = name;
         name = undefined;
       }
-      if (schema.hasOwnProperty('id') && typeof schema.id === 'string' && schema.id !== name) {
+      if (schema.hasOwnProperty('id') && typeof schema.id === 'string' &&
+        schema.id !== name) {
         if (schema.id.charAt(0) === '/')
           throw new Error('jjv: schema id\'s starting with / are invalid.');
         this.schema[normalizeID(schema.id)] = schema;
@@ -691,7 +794,9 @@
   if (typeof module !== 'undefined' && typeof module.exports !== 'undefined')
     module.exports = Environment;
   else if (typeof define === 'function' && define.amd)
-    define(function () {return Environment;});
+    define(function () {
+      return Environment;
+    });
   else
     window.jjv = Environment;
 })();

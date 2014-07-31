@@ -1,89 +1,98 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
 define(['logManager',
-    'js/Controls/DropDownMenu',
-    'js/Controls/PopoverBox'], function (logManager,
-                                        DropDownMenu,
-                                        PopoverBox) {
+  'js/Controls/DropDownMenu',
+  'js/Controls/PopoverBox'
+], function (logManager,
+  DropDownMenu,
+  PopoverBox) {
 
-    "use strict";
+  "use strict";
 
-    var NetworkStatusWidget,
-        ITEM_VALUE_CONNECT = 'connect';
+  var NetworkStatusWidget,
+    ITEM_VALUE_CONNECT = 'connect';
 
-    NetworkStatusWidget = function (containerEl, client) {
-        this._logger = logManager.create("NetworkStatusWidget");
+  NetworkStatusWidget = function (containerEl, client) {
+    this._logger = logManager.create("NetworkStatusWidget");
 
-        this._client = client;
-        this._el = containerEl;
+    this._client = client;
+    this._el = containerEl;
 
-        this._initializeUI();
+    this._initializeUI();
 
-        this._logger.debug("Created");
+    this._logger.debug("Created");
+  };
+
+  NetworkStatusWidget.prototype._initializeUI = function () {
+    var self = this;
+
+    this._el.empty();
+
+    //#1 - NetworkStatus
+    this._ddNetworkStatus = new DropDownMenu({
+      "dropUp": true,
+      "pullRight": true,
+      "size": "micro",
+      "sort": true
+    });
+    this._ddNetworkStatus.setTitle('NETWORKSTATUS');
+
+    this._el.append(this._ddNetworkStatus.getEl());
+
+    this._ddNetworkStatus.onItemClicked = function (value) {
+      if (value === ITEM_VALUE_CONNECT) {
+        self._client.connect();
+      }
     };
 
-    NetworkStatusWidget.prototype._initializeUI = function () {
-        var self = this;
+    this._client.addEventListener(this._client.events.NETWORKSTATUS_CHANGED,
+      function ( /*__project, state*/ ) {
+        self._refreshNetworkStatus();
+      });
 
-        this._el.empty();
+    this._refreshNetworkStatus();
+  };
 
-        //#1 - NetworkStatus
-        this._ddNetworkStatus = new DropDownMenu({"dropUp": true,
-            "pullRight": true,
-            "size": "micro",
-            "sort": true});
-        this._ddNetworkStatus.setTitle('NETWORKSTATUS');
+  NetworkStatusWidget.prototype._refreshNetworkStatus = function () {
+    var status = this._client.getActualNetworkStatus();
 
-        this._el.append(this._ddNetworkStatus.getEl());
+    switch (status) {
+    case this._client.networkStates.CONNECTED:
+      this._modeConnected();
+      break;
+    case this._client.networkStates.DISCONNECTED:
+      this._modeDisconnected();
+      break;
+    }
+  };
 
-        this._ddNetworkStatus.onItemClicked = function (value) {
-            if (value === ITEM_VALUE_CONNECT) {
-                self._client.connect();
-            }
-        };
+  NetworkStatusWidget.prototype._modeConnected = function () {
+    this._ddNetworkStatus.clear();
+    this._ddNetworkStatus.setTitle('CONNECTED');
+    this._ddNetworkStatus.setColor(DropDownMenu.prototype.COLORS.GREEN);
 
-        this._client.addEventListener(this._client.events.NETWORKSTATUS_CHANGED, function (/*__project, state*/) {
-            self._refreshNetworkStatus();
-        });
+    if (this._disconnected === true) {
+      this._popoverBox.show('Connection to the server has been restored...',
+        this._popoverBox.alertLevels.SUCCESS, true);
+      delete this._disconnected;
+    }
+  };
 
-        this._refreshNetworkStatus();
-    };
+  NetworkStatusWidget.prototype._modeDisconnected = function () {
+    this._ddNetworkStatus.clear();
+    this._ddNetworkStatus.setTitle('DISCONNECTED');
+    this._ddNetworkStatus.addItem({
+      "text": 'Connect...',
+      "value": ITEM_VALUE_CONNECT
+    });
+    this._ddNetworkStatus.setColor(DropDownMenu.prototype.COLORS.ORANGE);
 
-    NetworkStatusWidget.prototype._refreshNetworkStatus = function () {
-        var status = this._client.getActualNetworkStatus();
+    this._disconnected = true;
+    this._popoverBox = this._popoverBox || new PopoverBox(this._ddNetworkStatus
+      .getEl());
+    this._popoverBox.show('Connection to the server has been lost...', this._popoverBox
+      .alertLevels.WARNING, false);
+  };
 
-        switch (status) {
-            case this._client.networkStates.CONNECTED:
-                this._modeConnected();
-                break;
-            case this._client.networkStates.DISCONNECTED:
-                this._modeDisconnected();
-                break;
-        }
-    };
-
-    NetworkStatusWidget.prototype._modeConnected = function () {
-        this._ddNetworkStatus.clear();
-        this._ddNetworkStatus.setTitle('CONNECTED');
-        this._ddNetworkStatus.setColor(DropDownMenu.prototype.COLORS.GREEN);
-
-        if (this._disconnected === true) {
-            this._popoverBox.show('Connection to the server has been restored...', this._popoverBox.alertLevels.SUCCESS, true);
-            delete this._disconnected;
-        }
-    };
-
-    NetworkStatusWidget.prototype._modeDisconnected = function () {
-        this._ddNetworkStatus.clear();
-        this._ddNetworkStatus.setTitle('DISCONNECTED');
-        this._ddNetworkStatus.addItem({"text": 'Connect...',
-            "value": ITEM_VALUE_CONNECT});
-        this._ddNetworkStatus.setColor(DropDownMenu.prototype.COLORS.ORANGE);
-
-        this._disconnected = true;
-        this._popoverBox = this._popoverBox || new PopoverBox(this._ddNetworkStatus.getEl());
-        this._popoverBox.show('Connection to the server has been lost...', this._popoverBox.alertLevels.WARNING, false);
-    };
-
-    return NetworkStatusWidget;
+  return NetworkStatusWidget;
 });

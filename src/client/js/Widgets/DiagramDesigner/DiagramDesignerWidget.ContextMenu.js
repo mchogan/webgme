@@ -2,28 +2,33 @@
 
 define(['js/Controls/ContextMenu'], function (ContextMenu) {
 
-    "use strict";
+  "use strict";
 
-    var DiagramDesignerWidgetContextMenu;
+  var DiagramDesignerWidgetContextMenu;
 
-    DiagramDesignerWidgetContextMenu = function () {
+  DiagramDesignerWidgetContextMenu = function () {};
+
+  DiagramDesignerWidgetContextMenu.prototype.createMenu = function (menuItems,
+    fnCallback, position) {
+    var logger = this.logger,
+      menu;
+
+    menu = new ContextMenu({
+      'items': menuItems,
+      'callback': function (key) {
+        logger.debug('DiagramDesignerWidgetContextMenu_clicked: ' + key);
+        if (fnCallback) {
+          fnCallback(key);
+        }
+      }
+    });
+
+    position = position || {
+      x: 200,
+      y: 200
     };
+    menu.show(position);
+  };
 
-    DiagramDesignerWidgetContextMenu.prototype.createMenu = function (menuItems, fnCallback, position) {
-        var logger = this.logger,
-            menu;
-
-        menu = new ContextMenu({'items': menuItems,
-                                    'callback': function (key) {
-                                        logger.debug('DiagramDesignerWidgetContextMenu_clicked: ' + key);
-                                        if (fnCallback) {
-                                            fnCallback(key);
-                                        }
-                                    }});
-
-        position = position || {x: 200, y: 200};
-        menu.show(position);
-    };
-
-    return DiagramDesignerWidgetContextMenu;
+  return DiagramDesignerWidgetContextMenu;
 });

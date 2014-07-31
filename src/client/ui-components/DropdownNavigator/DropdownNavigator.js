@@ -6,33 +6,33 @@
  */
 
 define([
-    'angular',
-    'text!./templates/DropdownNavigator.html',
-    'css!./styles/DropdownNavigator.css',
+  'angular',
+  'text!./templates/DropdownNavigator.html',
+  'css!./styles/DropdownNavigator.css',
 
-    './../HierarchicalDropdown/HierarchicalDropdown'
+  './../HierarchicalDropdown/HierarchicalDropdown'
 
-], function(
-    ng,
-    template ){
+], function (
+  ng,
+  template) {
 
-    "use strict";
+  "use strict";
 
-    angular.module(
-        'isis.ui.dropdownNavigator',
-        [ 'isis.ui.hierarchicalDropdown' ]
-    ).directive(
-        'dropdownNavigator',
-         function () {
+  angular.module(
+    'isis.ui.dropdownNavigator', ['isis.ui.hierarchicalDropdown']
+  ).directive(
+    'dropdownNavigator',
+    function () {
 
-             return {
-                 scope: { navigator: '=' },
-                 restrict: 'E',
-                 replace: true,
-                 template: template
+      return {
+        scope: {
+          navigator: '='
+        },
+        restrict: 'E',
+        replace: true,
+        template: template
 
-             };
+      };
     });
-
 
 });

@@ -5,176 +5,187 @@
  */
 
 define(['clientUtil',
-        'js/Constants',
-        'text!./templates/MetaEditorPointerNamesDialog.html',
-        'css!./styles/MetaEditorPointerNamesDialog.css'], function ( util,
-                                                                                CONSTANTS,
-                                                               metaEditorPointerNamesDialogTemplate) {
+  'js/Constants',
+  'text!./templates/MetaEditorPointerNamesDialog.html',
+  'css!./styles/MetaEditorPointerNamesDialog.css'
+], function (util,
+  CONSTANTS,
+  metaEditorPointerNamesDialogTemplate) {
 
-    "use strict";
+  "use strict";
 
-    var MetaEditorPointerNamesDialog,
-        POPULAR_POINTER_NAMES = [CONSTANTS.POINTER_SOURCE, CONSTANTS.POINTER_TARGET];
+  var MetaEditorPointerNamesDialog,
+    POPULAR_POINTER_NAMES = [CONSTANTS.POINTER_SOURCE, CONSTANTS.POINTER_TARGET];
 
-    MetaEditorPointerNamesDialog = function () {
-      
+  MetaEditorPointerNamesDialog = function () {
+
+  };
+
+  MetaEditorPointerNamesDialog.prototype.show = function (
+    existingPointerNames, notAllowedPointerNames, isSet, callBack) {
+    var self = this;
+
+    this._initDialog(existingPointerNames, notAllowedPointerNames, isSet,
+      callBack);
+
+    this._dialog.modal('show');
+
+    this._dialog.on('shown.bs.modal', function () {
+      if (existingPointerNames.length === 0) {
+        self._txtNewPointerName.focus();
+      }
+    });
+
+    this._dialog.on('hidden.bs.modal', function () {
+      self._dialog.remove();
+      self._dialog.empty();
+      self._dialog = undefined;
+    });
+  };
+
+  MetaEditorPointerNamesDialog.prototype._initDialog = function (
+    existingPointerNames, notAllowedPointerNames, isSet, callBack) {
+    var self = this,
+      i,
+      len = existingPointerNames.length,
+      closeAndCallback,
+      popularsAdded,
+      isValidPointerName;
+
+    closeAndCallback = function (selectedName) {
+      self._dialog.modal('hide');
+
+      if (callBack) {
+        callBack.call(self, selectedName);
+      }
     };
 
-    MetaEditorPointerNamesDialog.prototype.show = function (existingPointerNames, notAllowedPointerNames, isSet, callBack) {
-        var self = this;
-
-        this._initDialog(existingPointerNames, notAllowedPointerNames, isSet, callBack);
-
-        this._dialog.modal('show');
-
-        this._dialog.on('shown.bs.modal', function () {
-            if (existingPointerNames.length === 0) {
-                self._txtNewPointerName.focus();
-            }
-        });
-
-        this._dialog.on('hidden.bs.modal', function () {
-            self._dialog.remove();
-            self._dialog.empty();
-            self._dialog = undefined;
-        });
+    isValidPointerName = function (name) {
+      return !(name === "" || existingPointerNames.indexOf(name) !== -1 ||
+        notAllowedPointerNames.indexOf(name) !== -1);
     };
 
-    MetaEditorPointerNamesDialog.prototype._initDialog = function (existingPointerNames, notAllowedPointerNames, isSet, callBack) {
-        var self = this,
-            i,
-            len = existingPointerNames.length,
-            closeAndCallback,
-            popularsAdded,
-            isValidPointerName;
+    this._dialog = $(metaEditorPointerNamesDialogTemplate);
 
-        closeAndCallback = function (selectedName) {
-            self._dialog.modal('hide');
+    //by default the template is for single pointer
+    //in case of pointer list, update labels in the dialog
+    if (isSet === true) {
+      this._dialog.find('.modal-header > h3').text('Create new set');
+      this._dialog.find('.pick-existing-label').text(
+        'Pick one of the existing sets:');
+      this._dialog.find('.create-new-label').text('Or create a new set:');
+      this._dialog.find('.txt-pointer-name').attr('placeholder',
+        'New set name...');
+    }
 
-            if (callBack) {
-                callBack.call(self, selectedName);
-            }
-        };
+    //get controls
+    this._el = this._dialog.find('.modal-body').first();
+    this._btnGroup = this._el.find('.btn-group-existing').first();
+    this._btnGroupPopular = this._dialog.find('.btn-group-popular').first();
 
-        isValidPointerName = function (name) {
-            return !(name === "" || existingPointerNames.indexOf(name) !== -1 || notAllowedPointerNames.indexOf(name) !== -1);
-        };
+    //fill pointer names
+    existingPointerNames.sort();
 
-        this._dialog = $(metaEditorPointerNamesDialogTemplate);
+    if (len) {
 
-        //by default the template is for single pointer
-        //in case of pointer list, update labels in the dialog
-        if (isSet === true) {
-            this._dialog.find('.modal-header > h3').text('Create new set');
-            this._dialog.find('.pick-existing-label').text('Pick one of the existing sets:');
-            this._dialog.find('.create-new-label').text('Or create a new set:');
-            this._dialog.find('.txt-pointer-name').attr('placeholder', 'New set name...');
+      this._btnGroup.empty();
+
+      for (i = 0; i < len; i += 1) {
+        this._btnGroup.append($('<button class="btn btn-default">' + util.toSafeString(
+          existingPointerNames[i]) + '</button>'));
+      }
+
+    } else {
+
+      if (isSet === true) {
+        this._btnGroup.html(
+          '<span class="empty-message">No exisiting sets defined yet...</i>');
+      } else {
+        this._btnGroup.html(
+          '<span class="empty-message">No exisiting pointers defined yet...</i>'
+        );
+      }
+    }
+
+    //add most popular ones
+    popularsAdded = false;
+    if (isSet !== true) {
+      len = POPULAR_POINTER_NAMES.length;
+
+      for (i = 0; i < len; i += 1) {
+        if (existingPointerNames.indexOf(POPULAR_POINTER_NAMES[i]) === -1) {
+          this._btnGroupPopular.append($('<button class="btn btn-default">' +
+            POPULAR_POINTER_NAMES[i] + '</button>'));
+          popularsAdded = true;
         }
+      }
+    }
 
-        //get controls
-        this._el = this._dialog.find('.modal-body').first();
-        this._btnGroup = this._el.find('.btn-group-existing').first();
-        this._btnGroupPopular = this._dialog.find('.btn-group-popular').first();
+    //if all the popular ones were there already, remove popular panel completely
+    if (!popularsAdded) {
+      this._dialog.find('.panel-popular').remove();
+    }
 
-		//fill pointer names
-        existingPointerNames.sort();
+    //create UI for new pointer name
+    this._txtNewPointerName = this._dialog.find('.txt-pointer-name');
+    this._btnCreateNew = this._dialog.find('.btn-create').disable(true);
+    this._panelCreateNew = this._dialog.find('.panel-create-new');
 
-        if (len) {
+    //hook up event handlers
+    this._btnGroup.on('click', '.btn', function (event) {
+      var selectedPointerName = $(this).text();
 
-            this._btnGroup.empty();
+      event.stopPropagation();
+      event.preventDefault();
 
-            for (i = 0; i < len ; i += 1) {
-                this._btnGroup.append($('<button class="btn btn-default">' + util.toSafeString(existingPointerNames[i]) + '</button>'));
-            }
+      closeAndCallback(selectedPointerName);
+    });
 
-        } else {
+    //hook up event handlers
+    this._btnGroupPopular.on('click', '.btn', function (event) {
+      var selectedPointerName = $(this).text();
 
-            if (isSet === true) {
-                this._btnGroup.html('<span class="empty-message">No exisiting sets defined yet...</i>');
-            } else {
-                this._btnGroup.html('<span class="empty-message">No exisiting pointers defined yet...</i>');
-            }
-        }
+      event.stopPropagation();
+      event.preventDefault();
 
-        //add most popular ones
-        popularsAdded = false;
-        if (isSet !== true) {
-            len = POPULAR_POINTER_NAMES.length;
+      closeAndCallback(selectedPointerName);
+    });
 
-            for (i = 0; i < len ; i += 1) {
-                if (existingPointerNames.indexOf(POPULAR_POINTER_NAMES[i]) === -1) {
-                    this._btnGroupPopular.append($('<button class="btn btn-default">' + POPULAR_POINTER_NAMES[i] + '</button>'));
-                    popularsAdded = true;
-                }
-            }
-        }
+    this._txtNewPointerName.on('keyup', function () {
+      var val = self._txtNewPointerName.val();
 
-        //if all the popular ones were there already, remove popular panel completely
-        if (!popularsAdded) {
-            this._dialog.find('.panel-popular').remove();
-        }
+      if (!isValidPointerName(val)) {
+        self._panelCreateNew.addClass("has-error");
+        self._btnCreateNew.disable(true);
+      } else {
+        self._panelCreateNew.removeClass("has-error");
+        self._btnCreateNew.disable(false);
+      }
+    });
 
-        //create UI for new pointer name
-        this._txtNewPointerName =  this._dialog.find('.txt-pointer-name');
-        this._btnCreateNew = this._dialog.find('.btn-create').disable(true);
-        this._panelCreateNew = this._dialog.find('.panel-create-new');
+    this._txtNewPointerName.on('keydown', function (event) {
+      var enterPressed = event.which === 13,
+        selectedPointerName = self._txtNewPointerName.val();
 
-        //hook up event handlers
-        this._btnGroup.on('click', '.btn', function (event) {
-        var selectedPointerName = $(this).text();
-            
-            event.stopPropagation();
-            event.preventDefault();
+      if (enterPressed && isValidPointerName(selectedPointerName)) {
+        closeAndCallback(selectedPointerName);
 
-            closeAndCallback(selectedPointerName);
-        });
+        event.stopPropagation();
+        event.preventDefault();
+      }
+    });
 
-        //hook up event handlers
-        this._btnGroupPopular.on('click', '.btn', function (event) {
-            var selectedPointerName = $(this).text();
+    this._btnCreateNew.on('click', function (event) {
+      var selectedPointerName = self._txtNewPointerName.val();
 
-            event.stopPropagation();
-            event.preventDefault();
+      event.stopPropagation();
+      event.preventDefault();
 
-            closeAndCallback(selectedPointerName);
-        });
+      if (!($(this).hasClass('disabled'))) {
+        closeAndCallback(selectedPointerName);
+      }
+    });
+  };
 
-        this._txtNewPointerName.on('keyup', function () {
-            var val = self._txtNewPointerName.val();
-
-            if (!isValidPointerName(val)) {
-                self._panelCreateNew.addClass("has-error");
-                self._btnCreateNew.disable(true);
-            } else {
-                self._panelCreateNew.removeClass("has-error");
-                self._btnCreateNew.disable(false);
-            }
-        });
-
-        this._txtNewPointerName.on('keydown', function (event) {
-            var enterPressed = event.which === 13,
-                selectedPointerName = self._txtNewPointerName.val();
-
-            if (enterPressed && isValidPointerName(selectedPointerName)) {
-                closeAndCallback(selectedPointerName);
-
-                event.stopPropagation();
-                event.preventDefault();
-            }
-        });
-
-        this._btnCreateNew.on('click', function (event) {
-            var selectedPointerName = self._txtNewPointerName.val();
-            
-            event.stopPropagation();
-            event.preventDefault();
-
-            if (!($(this).hasClass('disabled'))) {
-                closeAndCallback(selectedPointerName);
-            }
-        });
-    };
-
-
-    return MetaEditorPointerNamesDialog;
+  return MetaEditorPointerNamesDialog;
 });

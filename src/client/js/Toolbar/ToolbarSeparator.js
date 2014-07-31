@@ -6,19 +6,20 @@
  */
 
 define(['./ButtonBase',
-        './ToolbarItemBase'], function (buttonBase,
-                                        ToolbarItemBase) {
+  './ToolbarItemBase'
+], function (buttonBase,
+  ToolbarItemBase) {
 
-    "use strict";
+  "use strict";
 
-    var ToolbarSeparator,
-        EL_BASE = $('<div class="separator"></div>');
+  var ToolbarSeparator,
+    EL_BASE = $('<div class="separator"></div>');
 
-    ToolbarSeparator = function () {
-        this.el = EL_BASE.clone();
-    };
+  ToolbarSeparator = function () {
+    this.el = EL_BASE.clone();
+  };
 
-    _.extend(ToolbarSeparator.prototype, ToolbarItemBase.prototype);
+  _.extend(ToolbarSeparator.prototype, ToolbarItemBase.prototype);
 
-    return ToolbarSeparator;
+  return ToolbarSeparator;
 });

@@ -1,22 +1,22 @@
 /*
  * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- * 
+ *
  * Author: Miklos Maroti
  */
 
 define(function () {
-	"use strict";
+  "use strict";
 
-	var assert = function (cond, msg) {
-		if( !cond ) {
-			var error = new Error(msg || "ASSERT failed");
+  var assert = function (cond, msg) {
+    if (!cond) {
+      var error = new Error(msg || "ASSERT failed");
 
-			console.log("Throwing", error.stack);
-			console.log();
-			
-			throw error;
-		}
-	};
+      console.log("Throwing", error.stack);
+      console.log();
 
-	return assert;
+      throw error;
+    }
+  };
+
+  return assert;
 });

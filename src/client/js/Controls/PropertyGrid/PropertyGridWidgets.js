@@ -2,9 +2,9 @@
 
 define([], function () {
 
-    "use strict";
+  "use strict";
 
-    return {
-        DIALOG_WIDGET: 'DIALOG_WIDGET'
-    };
+  return {
+    DIALOG_WIDGET: 'DIALOG_WIDGET'
+  };
 });

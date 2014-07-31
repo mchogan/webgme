@@ -5,198 +5,206 @@
  * @author nabana / https://github.com/nabana
  */
 
-(function( global ){
+(function (global) {
 
-"use strict";
+  "use strict";
 
-//This is the only module which doesn't check for requirejs, and this is the only which defines the baseUrl
-var PATH = require('path'),
+  //This is the only module which doesn't check for requirejs, and this is the only which defines the baseUrl
+  var PATH = require('path'),
     FS = require('fs'),
     requirejs = require('requirejs'),
     baseDir = __dirname + '/src/',
     paths = {
-        "logManager": "common/LogManager",
-        "storage": "common/storage",
-        "core": "common/core",
-        "server": "server",
-        "auth": "server/auth",
-        "util": "common/util",
-        "baseConfig" : "bin/getconfig",
-        "webgme": "webgme",
-        "plugin": "plugin",
-        "worker": "server/worker",
-        "coreclient": "common/core/users",
-        "blob": "middleware/blob"
+      "logManager": "common/LogManager",
+      "storage": "common/storage",
+      "core": "common/core",
+      "server": "server",
+      "auth": "server/auth",
+      "util": "common/util",
+      "baseConfig": "bin/getconfig",
+      "webgme": "webgme",
+      "plugin": "plugin",
+      "worker": "server/worker",
+      "coreclient": "common/core/users",
+      "blob": "middleware/blob"
     };
 
-//All other modules should only configure new path in respect with this base URL
-requirejs.config({
+  //All other modules should only configure new path in respect with this base URL
+  requirejs.config({
     nodeRequire: require,
     baseUrl: baseDir,
-    paths:paths
-});
+    paths: paths
+  });
 
-var __CONFIG = requirejs('baseConfig' ),
+  var __CONFIG = requirejs('baseConfig'),
     webGMEGlobal;
 
-var getConfig = function(){
+  var getConfig = function () {
     return JSON.parse(JSON.stringify(__CONFIG));
-};
-var setConfig = function(configObject){
+  };
+  var setConfig = function (configObject) {
     var keys, i, j,
-        isGoodExtraAsset = function(name,filePath){
-            try{
-                var file = FS.readFileSync(filePath+'/'+name+'.js','utf-8');
-                if(file === undefined || file === null){
-                    return false;
-                } else {
-                    return true;
-                }
-            } catch(e){
-                return false;
+      isGoodExtraAsset = function (name, filePath) {
+        try {
+          var file = FS.readFileSync(filePath + '/' + name + '.js', 'utf-8');
+          if (file === undefined || file === null) {
+            return false;
+          } else {
+            return true;
+          }
+        } catch (e) {
+          return false;
+        }
+      },
+      getPluginNames = function (basePaths) {
+        var names = []; //we add only the "*.js" files from the directories
+        basePaths = basePaths || [];
+        for (var i = 0; i < basePaths.length; i++) {
+          var additional = FS.readdirSync(basePaths[i]);
+          for (var j = 0; j < additional.length; j++) {
+            if (names.indexOf(additional[j]) === -1) {
+              if (isGoodExtraAsset(additional[j], PATH.join(basePaths[i],
+                additional[j]))) {
+                names.push(additional[j]);
+              }
             }
-        },
-        getPluginNames = function(basePaths){
-            var names = []; //we add only the "*.js" files from the directories
-            basePaths = basePaths || [];
-            for(var i=0;i<basePaths.length;i++){
-                var additional = FS.readdirSync(basePaths[i]);
-                for(var j=0;j<additional.length;j++){
-                    if(names.indexOf(additional[j]) === -1){
-                        if(isGoodExtraAsset(additional[j],PATH.join(basePaths[i],additional[j]))){
-                            names.push(additional[j]);
-                        }
-                    }
+          }
+        }
+        return names;
+      },
+      addPluginPathsToRequirejs = function (basepaths) {
+        var requirejsBase = webGMEGlobal.baseDir,
+          pluginNames = getPluginNames(basepaths),
+          i, j;
+
+        //we go through every plugin and we check where we are able to find the main part of it so we can set the plugin/pluginName path according that in requirejs
+        var pluginPaths = {};
+        for (i in pluginNames) {
+          var found = false;
+          for (j = 0; j < basepaths.length; j++) {
+            if (!found) {
+              try {
+                var items = FS.readdirSync(basepaths[j]);
+                if (items.indexOf(pluginNames[i]) !== -1) {
+                  pluginPaths['plugin/' + pluginNames[i]] = PATH.relative(
+                    requirejsBase, PATH.resolve(basepaths[j]));
+                  found = true;
                 }
+              } catch (e) {
+                //do nothing as we will go on anyway
+                //console.error(e);
+              }
+            } else {
+              break;
             }
-            return names;
-        },
-        addPluginPathsToRequirejs = function(basepaths){
-            var requirejsBase = webGMEGlobal.baseDir,
-                pluginNames = getPluginNames(basepaths),
-                i,j;
+          }
+        }
 
-            //we go through every plugin and we check where we are able to find the main part of it so we can set the plugin/pluginName path according that in requirejs
-            var pluginPaths = {};
-            for(i in pluginNames) {
-                var found = false;
-                for (j = 0; j < basepaths.length; j++) {
-                    if (!found) {
-                        try {
-                            var items = FS.readdirSync(basepaths[j]);
-                            if(items.indexOf(pluginNames[i]) !== -1){
-                                pluginPaths['plugin/' + pluginNames[i]] = PATH.relative(requirejsBase,PATH.resolve(basepaths[j]));
-                                found = true;
-                            }
-                        } catch (e) {
-                            //do nothing as we will go on anyway
-                            //console.error(e);
-                        }
-                    } else {
-                        break;
-                    }
-                }
-            }
-
-
-            requirejs.config({
-                paths: pluginPaths
+        requirejs.config({
+          paths: pluginPaths
         });
-        },
-        addToRequireJSPath = function (requireJSPaths) {
-            if (!requireJSPaths) {
-                return;
-            }
+      },
+      addToRequireJSPath = function (requireJSPaths) {
+        if (!requireJSPaths) {
+          return;
+        }
 
-            var requirejsBase = webGMEGlobal.baseDir,
-                configPaths = {};
+        var requirejsBase = webGMEGlobal.baseDir,
+          configPaths = {};
 
-            var keys = Object.keys(requireJSPaths);
+        var keys = Object.keys(requireJSPaths);
 
-            for (var i = 0; i < keys.length; i += 1) {
-                configPaths[keys[i]] = PATH.relative(requirejsBase,PATH.resolve(requireJSPaths[keys[i]]));
-            }
+        for (var i = 0; i < keys.length; i += 1) {
+          configPaths[keys[i]] = PATH.relative(requirejsBase, PATH.resolve(
+            requireJSPaths[keys[i]]));
+        }
 
-            requirejs.config({
-                paths: configPaths
-            });
-        };
+        requirejs.config({
+          paths: configPaths
+        });
+      };
 
     //setting simple values
     keys = Object.keys(configObject);
-    for(i=0;i<keys.length;i++){
-        if (typeof configObject[keys[i]] === "number" ||
-            typeof configObject[keys[i]] === "boolean" ||
-            typeof configObject[keys[i]] === "string") {
+    for (i = 0; i < keys.length; i++) {
+      if (typeof configObject[keys[i]] === "number" ||
+        typeof configObject[keys[i]] === "boolean" ||
+        typeof configObject[keys[i]] === "string") {
 
-            __CONFIG[keys[i]] = configObject[keys[i]];
-        }
+        __CONFIG[keys[i]] = configObject[keys[i]];
+      }
     }
 
     //adding the paths
-    if(configObject.paths){
-        for(i in configObject.paths){
-            __CONFIG.paths[i] = configObject.paths[i];
-        }
+    if (configObject.paths) {
+      for (i in configObject.paths) {
+        __CONFIG.paths[i] = configObject.paths[i];
+      }
     }
 
     //merge plugin base paths
-    if(configObject.pluginBasePaths && configObject.pluginBasePaths.length){
-        __CONFIG.pluginBasePaths = configObject.pluginBasePaths.concat(__CONFIG.pluginBasePaths);
+    if (configObject.pluginBasePaths && configObject.pluginBasePaths.length) {
+      __CONFIG.pluginBasePaths = configObject.pluginBasePaths.concat(
+        __CONFIG.pluginBasePaths);
     }
 
     if (__CONFIG.pluginBasePaths) {
-        addPluginPathsToRequirejs(__CONFIG.pluginBasePaths);
+      addPluginPathsToRequirejs(__CONFIG.pluginBasePaths);
     }
 
     //merge decorator base paths
-    if(configObject.decoratorpaths && configObject.decoratorpaths.length){
-        __CONFIG.decoratorpaths = configObject.decoratorpaths.concat(__CONFIG.decoratorpaths);
+    if (configObject.decoratorpaths && configObject.decoratorpaths.length) {
+      __CONFIG.decoratorpaths = configObject.decoratorpaths.concat(__CONFIG
+        .decoratorpaths);
     }
 
     //merge visualizer descriptor paths
-    if(configObject.visualizerDescriptors && configObject.visualizerDescriptors.length){
-        __CONFIG.visualizerDescriptors = __CONFIG.visualizerDescriptors.concat(configObject.visualizerDescriptors);
+    if (configObject.visualizerDescriptors && configObject.visualizerDescriptors
+      .length) {
+      __CONFIG.visualizerDescriptors = __CONFIG.visualizerDescriptors.concat(
+        configObject.visualizerDescriptors);
     }
 
     if (__CONFIG.paths) {
-        addToRequireJSPath(__CONFIG.paths);
+      addToRequireJSPath(__CONFIG.paths);
     }
 
     //merge rextrast moduls - keeping the older ones
-    if(configObject.rextrast){
-        keys = Object.keys(configObject.rextrast);
-        for(i=0;i<keys.length;i++){
-            __CONFIG.rextrast = __CONFIG.rextrast || {};
-            if(!__CONFIG.rextrast[keys[i]]){
-                __CONFIG.rextrast[keys[i]] = PATH.relative(webGMEGlobal.baseDir,PATH.resolve(configObject.rextrast[keys[i]]));
-            }
+    if (configObject.rextrast) {
+      keys = Object.keys(configObject.rextrast);
+      for (i = 0; i < keys.length; i++) {
+        __CONFIG.rextrast = __CONFIG.rextrast || {};
+        if (!__CONFIG.rextrast[keys[i]]) {
+          __CONFIG.rextrast[keys[i]] = PATH.relative(webGMEGlobal.baseDir,
+            PATH.resolve(configObject.rextrast[keys[i]]));
         }
+      }
     }
-};
+  };
 
-//creating a global variable
-webGMEGlobal = {
-    baseDir : PATH.resolve(baseDir),
-    getConfig : getConfig,
-    setConfig : setConfig
-};
+  //creating a global variable
+  webGMEGlobal = {
+    baseDir: PATH.resolve(baseDir),
+    getConfig: getConfig,
+    setConfig: setConfig
+  };
 
-//setting the default array elements
-//TODO this should be done already in getconfig !!!
-webGMEGlobal.setConfig({
-    decoratorpaths : [PATH.join(PATH.join(baseDir,'/client'),"/decorators")],
-    pluginBasePaths : [PATH.join(baseDir,"/plugin/coreplugins")],
-    visualizerDescriptors : [PATH.join(baseDir,"/client/js/Visualizers.json")]/*,
+  //setting the default array elements
+  //TODO this should be done already in getconfig !!!
+  webGMEGlobal.setConfig({
+    decoratorpaths: [PATH.join(PATH.join(baseDir, '/client'), "/decorators")],
+    pluginBasePaths: [PATH.join(baseDir, "/plugin/coreplugins")],
+    visualizerDescriptors: [PATH.join(baseDir,
+      "/client/js/Visualizers.json")]
+    /*,
     rextrast : {
         'example' : PATH.join(baseDir,"/middlewares/exampleRExtraST")
     }*/
-});
+  });
 
-global.webGMEGlobal = webGMEGlobal;
+  global.webGMEGlobal = webGMEGlobal;
 
-
-module.exports = {
+  module.exports = {
     clientStorage: requirejs('storage/clientstorage'),
     serverStorage: requirejs('storage/serverstorage'),
     serverUserStorage: requirejs('storage/serveruserstorage'),
@@ -204,6 +212,6 @@ module.exports = {
     standaloneServer: requirejs('server/standalone'),
     logManager: requirejs('logManager'),
     runPlugin: requirejs('server/runplugin')
-};
+  };
 
-})( global );
+})(global);

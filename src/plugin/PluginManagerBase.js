@@ -13,283 +13,299 @@
 
 'use strict';
 define([
-        './PluginBase',
-        './PluginContext',
-        'logManager'],
-    function (PluginBase, PluginContext, LogManager) {
+    './PluginBase',
+    './PluginContext',
+    'logManager'
+  ],
+  function (PluginBase, PluginContext, LogManager) {
 
-        var PluginManagerBase = function (storage, Core, plugins) {
-            this.logger = LogManager.create("PluginManager");
-            this._Core = Core;       // webgme core class is used to operate on objects
-            this._storage = storage; // webgme storage
-            this._plugins = plugins; // key value pair of pluginName: pluginType - plugins are already loaded/downloaded
-            this._pluginConfigs = {}; // keeps track of the current configuration for each plugins by name
+    var PluginManagerBase = function (storage, Core, plugins) {
+      this.logger = LogManager.create("PluginManager");
+      this._Core = Core; // webgme core class is used to operate on objects
+      this._storage = storage; // webgme storage
+      this._plugins = plugins; // key value pair of pluginName: pluginType - plugins are already loaded/downloaded
+      this._pluginConfigs = {}; // keeps track of the current configuration for each plugins by name
 
-            var pluginNames = Object.keys(this._plugins);
-            for (var i = 0; i < pluginNames.length; i += 1) {
-                var p = new this._plugins[pluginNames[i]]();
-                this._pluginConfigs[pluginNames[i]] = p.getDefaultConfig();
+      var pluginNames = Object.keys(this._plugins);
+      for (var i = 0; i < pluginNames.length; i += 1) {
+        var p = new this._plugins[pluginNames[i]]();
+        this._pluginConfigs[pluginNames[i]] = p.getDefaultConfig();
+      }
+    };
+
+    PluginManagerBase.prototype.initialize = function (managerConfiguration,
+      configCallback, callbackContext) {
+      var self = this,
+        plugins = this._plugins;
+
+      //#1: PluginManagerBase should load the plugins
+
+      //#2: PluginManagerBase iterates through each plugin and collects the config data
+      var pluginConfigs = {};
+
+      for (var p in plugins) {
+        if (plugins.hasOwnProperty(p)) {
+          var plugin = new plugins[p]();
+          pluginConfigs[p] = plugin.getConfigStructure();
+        }
+      }
+
+      if (configCallback) {
+        configCallback.call(callbackContext, pluginConfigs, function (
+          updatedPluginConfig) {
+          for (var p in updatedPluginConfig) {
+            if (updatedPluginConfig.hasOwnProperty(p)) {
+              //save it back to the plugin
+              self._pluginConfigs[p] = updatedPluginConfig[p];
             }
-        };
+          }
+        });
+      }
+    };
 
-        PluginManagerBase.prototype.initialize = function (managerConfiguration, configCallback, callbackContext) {
-            var self = this,
-                plugins = this._plugins;
+    /**
+     * Gets a new instance of a plugin by name.
+     *
+     * @param {string} name
+     * @returns {plugin.PluginBase}
+     */
+    PluginManagerBase.prototype.getPluginByName = function (name) {
+      return this._plugins[name];
+    };
 
-            //#1: PluginManagerBase should load the plugins
+    PluginManagerBase.prototype.loadMetaNodes = function (pluginContext,
+      callback) {
+      var self = this;
 
-            //#2: PluginManagerBase iterates through each plugin and collects the config data
-            var pluginConfigs = {};
+      this.logger.debug('Loading meta nodes');
 
-            for (var p in plugins) {
-                if (plugins.hasOwnProperty(p)) {
-                    var plugin = new plugins[p]();
-                    pluginConfigs[p] = plugin.getConfigStructure();
-                }
-            }
+      // get meta members
+      var metaIDs = pluginContext.core.getMemberPaths(pluginContext.rootNode,
+        'MetaAspectSet');
 
-            if (configCallback) {
-                configCallback.call(callbackContext, pluginConfigs, function (updatedPluginConfig) {
-                    for (var p in updatedPluginConfig) {
-                        if (updatedPluginConfig.hasOwnProperty(p)) {
-                            //save it back to the plugin
-                            self._pluginConfigs[p] = updatedPluginConfig[p];
-                        }
-                    }
-                });
-            }
-        };
+      var len = metaIDs.length;
 
-        /**
-         * Gets a new instance of a plugin by name.
-         *
-         * @param {string} name
-         * @returns {plugin.PluginBase}
-         */
-        PluginManagerBase.prototype.getPluginByName = function (name) {
-            return this._plugins[name];
-        };
+      var nodeObjs = [];
 
-        PluginManagerBase.prototype.loadMetaNodes = function (pluginContext, callback) {
-            var self = this;
+      var allObjectsLoadedHandler = function () {
+        var len2 = nodeObjs.length;
 
-            this.logger.debug('Loading meta nodes');
+        var nameObjMap = {};
 
-            // get meta members
-            var metaIDs = pluginContext.core.getMemberPaths(pluginContext.rootNode, 'MetaAspectSet');
+        while (len2--) {
+          var nodeObj = nodeObjs[len2];
 
-            var len = metaIDs.length;
+          nameObjMap[pluginContext.core.getAttribute(nodeObj, 'name')] =
+            nodeObj;
+        }
 
-            var nodeObjs = [];
+        pluginContext.META = nameObjMap;
 
+        self.logger.debug('Meta nodes are loaded');
 
-            var allObjectsLoadedHandler = function () {
-                var len2 = nodeObjs.length;
+        callback(null, pluginContext);
+      };
 
-                var nameObjMap = {};
+      var loadedMetaObjectHandler = function (err, nodeObj) {
+        nodeObjs.push(nodeObj);
 
-                while (len2--) {
-                    var nodeObj = nodeObjs[len2];
+        if (nodeObjs.length === metaIDs.length) {
+          allObjectsLoadedHandler();
+        }
+      };
 
-                    nameObjMap[pluginContext.core.getAttribute(nodeObj, 'name')] = nodeObj;
-                }
+      while (len--) {
+        pluginContext.core.loadByPath(pluginContext.rootNode, metaIDs[len],
+          loadedMetaObjectHandler);
+      }
+    };
 
-                pluginContext.META = nameObjMap;
+    /**
+     *
+     * @param {plugin.PluginManagerConfiguration} managerConfiguration
+     * @param {function} callback
+     */
+    PluginManagerBase.prototype.getPluginContext = function (
+      managerConfiguration, callback) {
 
-                self.logger.debug('Meta nodes are loaded');
+      // TODO: check if callback is a function
 
-                callback(null, pluginContext);
-            };
+      var self = this;
 
-            var loadedMetaObjectHandler = function (err, nodeObj) {
-                nodeObjs.push(nodeObj);
+      var pluginContext = new PluginContext();
 
-                if (nodeObjs.length === metaIDs.length) {
-                    allObjectsLoadedHandler();
-                }
-            };
+      // based on the string values get the node objects
+      // 1) Open project
+      // 2) Load branch OR commit hash
+      // 3) Load rootNode
+      // 4) Load active object
+      // 5) Load active selection
+      // 6) Update context
+      // 7) return
 
-            while (len--) {
-                pluginContext.core.loadByPath(pluginContext.rootNode, metaIDs[len], loadedMetaObjectHandler);
-            }
-        };
+      pluginContext.project = this._storage;
+      pluginContext.projectName = managerConfiguration.project;
+      pluginContext.core = new self._Core(pluginContext.project);
+      pluginContext.commitHash = managerConfiguration.commit;
+      pluginContext.activeNode = null; // active object
+      pluginContext.activeSelection = []; // selected objects
 
-        /**
-         *
-         * @param {plugin.PluginManagerConfiguration} managerConfiguration
-         * @param {function} callback
-         */
-        PluginManagerBase.prototype.getPluginContext = function (managerConfiguration, callback) {
+      // add activeSelection
+      var loadActiveSelectionAndMetaNodes = function () {
+        if (managerConfiguration.activeSelection.length === 0) {
+          self.loadMetaNodes(pluginContext, callback);
+        } else {
+          var remaining = managerConfiguration.activeSelection.length;
 
-            // TODO: check if callback is a function
+          for (var i = 0; i < managerConfiguration.activeSelection.length; i +=
+            1) {
+            (function (activeNodePath) {
+              pluginContext.core.loadByPath(pluginContext.rootNode,
+                activeNodePath, function (err, activeNode) {
+                  remaining -= 1;
 
-            var self = this;
+                  if (err) {
+                    self.logger.error('unable to load active selection: ' +
+                      activeNodePath);
+                    return;
+                  }
 
-            var pluginContext = new PluginContext();
+                  pluginContext.activeSelection.push(activeNode);
 
-            // based on the string values get the node objects
-            // 1) Open project
-            // 2) Load branch OR commit hash
-            // 3) Load rootNode
-            // 4) Load active object
-            // 5) Load active selection
-            // 6) Update context
-            // 7) return
-
-            pluginContext.project = this._storage;
-            pluginContext.projectName = managerConfiguration.project;
-            pluginContext.core = new self._Core(pluginContext.project);
-            pluginContext.commitHash = managerConfiguration.commit;
-            pluginContext.activeNode = null;    // active object
-            pluginContext.activeSelection = []; // selected objects
-
-            // add activeSelection
-            var loadActiveSelectionAndMetaNodes = function () {
-                if (managerConfiguration.activeSelection.length === 0) {
+                  if (remaining === 0) {
+                    // all nodes from active selection are loaded
                     self.loadMetaNodes(pluginContext, callback);
-                } else {
-                    var remaining = managerConfiguration.activeSelection.length;
-
-                    for (var i = 0; i < managerConfiguration.activeSelection.length; i += 1) {
-                        (function (activeNodePath) {
-                            pluginContext.core.loadByPath(pluginContext.rootNode, activeNodePath, function (err, activeNode) {
-                                remaining -= 1;
-
-                                if (err) {
-                                    self.logger.error('unable to load active selection: ' + activeNodePath);
-                                    return;
-                                }
-
-                                pluginContext.activeSelection.push(activeNode);
-
-                                if (remaining === 0) {
-                                    // all nodes from active selection are loaded
-                                    self.loadMetaNodes(pluginContext, callback);
-                                }
-                            });
-                        })(managerConfiguration.activeSelection[i]);
-                    }
-                }
-            };
-
-            // add activeNode
-            var loadCommitHashAndRun = function (commitHash) {
-                self.logger.info('Loading commit ' + commitHash);
-                pluginContext.project.loadObject(commitHash, function (err, commitObj) {
-                    if (err) {
-                        callback(err, pluginContext);
-                        return;
-                    }
-
-                    if (typeof commitObj === 'undefined' || commitObj === null) {
-                        callback('cannot find commit', pluginContext);
-                        return;
-                    }
-
-                    pluginContext.core.loadRoot(commitObj.root, function (err, rootNode) {
-                        if (err) {
-                            callback("unable to load root", pluginContext);
-                            return;
-                        }
-
-                        pluginContext.rootNode = rootNode;
-                        if (typeof managerConfiguration.activeNode === 'string') {
-                            pluginContext.core.loadByPath(pluginContext.rootNode, managerConfiguration.activeNode, function (err, activeNode) {
-                                if (err) {
-                                    callback("unable to load selected object", pluginContext);
-                                    return;
-                                }
-
-                                pluginContext.activeNode = activeNode;
-                                loadActiveSelectionAndMetaNodes();
-                            });
-                        } else {
-                            pluginContext.activeNode = null;
-                            loadActiveSelectionAndMetaNodes();
-                        }
-                    });
+                  }
                 });
-            };
+            })(managerConfiguration.activeSelection[i]);
+          }
+        }
+      };
 
-            // load commit hash and run based on branch name or commit hash
-            if (managerConfiguration.branchName) {
-                pluginContext.project.getBranchNames(function (err, branchNames) {
-                    self.logger.debug(branchNames);
+      // add activeNode
+      var loadCommitHashAndRun = function (commitHash) {
+        self.logger.info('Loading commit ' + commitHash);
+        pluginContext.project.loadObject(commitHash, function (err, commitObj) {
+          if (err) {
+            callback(err, pluginContext);
+            return;
+          }
 
-                    if (branchNames.hasOwnProperty(managerConfiguration.branchName)) {
-                        pluginContext.commitHash = branchNames[managerConfiguration.branchName];
-                        pluginContext.branchName = managerConfiguration.branchName;
-                        loadCommitHashAndRun(pluginContext.commitHash);
-                    } else {
-                        callback('cannot find branch \'' + managerConfiguration.branchName + '\'', pluginContext);
-                    }
+          if (typeof commitObj === 'undefined' || commitObj === null) {
+            callback('cannot find commit', pluginContext);
+            return;
+          }
+
+          pluginContext.core.loadRoot(commitObj.root, function (err,
+            rootNode) {
+            if (err) {
+              callback("unable to load root", pluginContext);
+              return;
+            }
+
+            pluginContext.rootNode = rootNode;
+            if (typeof managerConfiguration.activeNode === 'string') {
+              pluginContext.core.loadByPath(pluginContext.rootNode,
+                managerConfiguration.activeNode, function (err,
+                  activeNode) {
+                  if (err) {
+                    callback("unable to load selected object",
+                      pluginContext);
+                    return;
+                  }
+
+                  pluginContext.activeNode = activeNode;
+                  loadActiveSelectionAndMetaNodes();
                 });
             } else {
-                loadCommitHashAndRun(pluginContext.commitHash);
+              pluginContext.activeNode = null;
+              loadActiveSelectionAndMetaNodes();
             }
+          });
+        });
+      };
 
-        };
+      // load commit hash and run based on branch name or commit hash
+      if (managerConfiguration.branchName) {
+        pluginContext.project.getBranchNames(function (err, branchNames) {
+          self.logger.debug(branchNames);
 
-        PluginManagerBase.prototype.executePlugin = function (name, managerConfiguration, callback) {
-            // TODO: check if name is a string
-            // TODO: check if managerConfiguration is an instance of PluginManagerConfiguration
-            // TODO: check if callback is a function
-            var self = this;
+          if (branchNames.hasOwnProperty(managerConfiguration.branchName)) {
+            pluginContext.commitHash = branchNames[managerConfiguration.branchName];
+            pluginContext.branchName = managerConfiguration.branchName;
+            loadCommitHashAndRun(pluginContext.commitHash);
+          } else {
+            callback('cannot find branch \'' + managerConfiguration.branchName +
+              '\'', pluginContext);
+          }
+        });
+      } else {
+        loadCommitHashAndRun(pluginContext.commitHash);
+      }
 
-            var PluginClass = this.getPluginByName(name);
+    };
 
-            var plugin = new PluginClass();
+    PluginManagerBase.prototype.executePlugin = function (name,
+      managerConfiguration, callback) {
+      // TODO: check if name is a string
+      // TODO: check if managerConfiguration is an instance of PluginManagerConfiguration
+      // TODO: check if callback is a function
+      var self = this;
 
-            var pluginLogger = LogManager.create('Plugin.' + name);
+      var PluginClass = this.getPluginByName(name);
 
-            plugin.initialize(pluginLogger, managerConfiguration.blobClient);
+      var plugin = new PluginClass();
 
-            plugin.setCurrentConfig(this._pluginConfigs[name]);
-            for (var key in managerConfiguration.pluginConfig) {
-                if (managerConfiguration.pluginConfig.hasOwnProperty(key) && plugin._currentConfig.hasOwnProperty(key)) {
-                    plugin._currentConfig[key] = managerConfiguration.pluginConfig[key];
-                }
-            }
-            self.getPluginContext(managerConfiguration, function (err, pluginContext) {
-                if (err) {
-                    // TODO: this has to return with an empty PluginResult object and NOT with null.
-                    callback(err, null);
-                    return;
+      var pluginLogger = LogManager.create('Plugin.' + name);
 
-                }
+      plugin.initialize(pluginLogger, managerConfiguration.blobClient);
 
-                //set logging level at least to INFO level since the plugins write messages with INFO level onto the console
-                var logLevel = LogManager.getLogLevel();
-                if (logLevel < LogManager.logLevels.INFO) {
-                    // elevate log level if it is less then info
-                    LogManager.setLogLevel(LogManager.logLevels.INFO);
-                }
+      plugin.setCurrentConfig(this._pluginConfigs[name]);
+      for (var key in managerConfiguration.pluginConfig) {
+        if (managerConfiguration.pluginConfig.hasOwnProperty(key) && plugin._currentConfig
+          .hasOwnProperty(key)) {
+          plugin._currentConfig[key] = managerConfiguration.pluginConfig[key];
+        }
+      }
+      self.getPluginContext(managerConfiguration, function (err, pluginContext) {
+        if (err) {
+          // TODO: this has to return with an empty PluginResult object and NOT with null.
+          callback(err, null);
+          return;
 
-                // TODO: Would be nice to log to file and to console at the same time.
-                //LogManager.setFileLogPath('PluginManager.log');
+        }
 
-                plugin.configure(pluginContext);
+        //set logging level at least to INFO level since the plugins write messages with INFO level onto the console
+        var logLevel = LogManager.getLogLevel();
+        if (logLevel < LogManager.logLevels.INFO) {
+          // elevate log level if it is less then info
+          LogManager.setLogLevel(LogManager.logLevels.INFO);
+        }
 
-                var startTime = (new Date()).toISOString();
+        // TODO: Would be nice to log to file and to console at the same time.
+        //LogManager.setFileLogPath('PluginManager.log');
 
-                plugin.main(function (err, result) {
-                    //set logging level back to previous value
-                    LogManager.setLogLevel(logLevel);
+        plugin.configure(pluginContext);
 
-                    // set common information (meta info) about the plugin and measured execution times
-                    result.setFinishTime((new Date()).toISOString());
-                    result.setStartTime(startTime);
+        var startTime = (new Date()).toISOString();
 
-                    result.setPluginName(plugin.getName());
-                    result.setError(err);
+        plugin.main(function (err, result) {
+          //set logging level back to previous value
+          LogManager.setLogLevel(logLevel);
 
-                    callback(err, result);
-                });
+          // set common information (meta info) about the plugin and measured execution times
+          result.setFinishTime((new Date()).toISOString());
+          result.setStartTime(startTime);
 
-            });
+          result.setPluginName(plugin.getName());
+          result.setError(err);
 
-        };
+          callback(err, result);
+        });
 
+      });
 
-        return PluginManagerBase;
-    });
+    };
+
+    return PluginManagerBase;
+  });

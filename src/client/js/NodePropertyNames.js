@@ -2,9 +2,13 @@
 
 define([], function () {
 
-    "use strict";
+  "use strict";
 
-    var attributeNames = {  "name" : "name" };
+  var attributeNames = {
+    "name": "name"
+  };
 
-    return { "Attributes": attributeNames};
+  return {
+    "Attributes": attributeNames
+  };
 });
