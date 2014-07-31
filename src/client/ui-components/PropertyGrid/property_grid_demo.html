@@ -53,12 +53,18 @@
             var demoApp = angular.module( 'demoApp', ['ui.bootstrap', 'isis.ui.propertyGrid'] );
 
             demoApp.controller( 'PropertyGridDemoController', function ( $scope ) {
-                var items = [
+                var onChange = function (item) {
+
+                            console.log('Item changed > ' + item.label, item);
+
+                        },
+
+                        items = [
                             {
                                 id: 'Name',
                                 label: 'Name',
-                                value: 'This is my name'
-
+                                value: 'This is my name',
+                                onChange: onChange
                             },
                             {
 
@@ -78,7 +84,8 @@
                                         value: 30
                                         //valueWidget: integerValueWidget,
                                     }
-                                ]
+                                ],
+                                onChange: onChange
                             },
                             {
                                 id: 'is_happy',
@@ -110,7 +117,8 @@
                                             value: 'eng'
                                         }
                                     ]
-                                }
+                                },
+                                onChange: onChange
                             },
                             {
                                 id: 'color',
@@ -118,8 +126,8 @@
                                 value: '#ff0066',
                                 valueWidget: {
                                     type: 'colorPicker'
-                                }
-
+                                },
+                                onChange: onChange
                             }
                         ],
                         config = {

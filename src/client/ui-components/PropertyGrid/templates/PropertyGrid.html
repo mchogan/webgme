@@ -1,3 +1,12 @@
 <div class="property-grid">
-    Hello lelo!
+
+    <script type="text/ng-template" id="property-grid-item-template">
+        {{ item.label }}
+    </script>
+
+   <ul class="item-list">
+        <li data-ng-repeat="item in items"
+            data-ng-include="'property-grid-item-template'">
+        </li>
+    </ul>
 </div>
