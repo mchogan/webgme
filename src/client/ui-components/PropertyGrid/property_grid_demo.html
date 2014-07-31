@@ -1,4 +1,4 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head lang="en">
     <meta charset="UTF-8">
@@ -10,78 +10,129 @@
 
     <script type="text/javascript">
         var DEBUG = true,
-            _jqueryVersion = '2.1.0',
-            _jqueryUIVersion = '1.10.4',
-            _bootsrapVersion = '3.1.1';
+                _jqueryVersion = '2.1.0',
+                _jqueryUIVersion = '1.10.4',
+                _bootsrapVersion = '3.1.1';
 
 
-        require.config({
-            baseUrl: "../../",
+        require.config( {
+                            baseUrl: "../../",
 
-            map: {
-                '*': {
-                    'css': 'lib/require/require-css/css',
-                    'text': 'lib/require/require-text/text'
-                }
-            },
+                            map: {
+                                '*': {
+                                    'css': 'lib/require/require-css/css',
+                                    'text': 'lib/require/require-text/text'
+                                }
+                            },
 
-            paths: {
-                'jquery': 'lib/jquery/jquery-' + _jqueryVersion + ( DEBUG ? '.min' : '' ),
-                'bootstrap': 'lib/bootstrap/' + _bootsrapVersion + '/js/bootstrap' + ( DEBUG ? '.min' : '' ),
+                            paths: {
+                                'jquery': 'lib/jquery/jquery-' + _jqueryVersion + ( DEBUG ? '.min' : '' ),
+                                'bootstrap': 'lib/bootstrap/' + _bootsrapVersion + '/js/bootstrap' + ( DEBUG ? '.min' : '' ),
 
-                'angular': 'lib/angular/angular-1.2.19/angular' + ( DEBUG ? '.min' : '' ),
-                'angular-ui-bootstrap': 'lib/angular/ui-bootstrap/ui-bootstrap-tpls-0.11.0.min'
-            },
+                                'angular': 'lib/angular/angular-1.2.19/angular' + ( DEBUG ? '.min' : '' ),
+                                'angular-ui-bootstrap': 'lib/angular/ui-bootstrap/ui-bootstrap-tpls-0.11.0.min'
+                            },
 
-            shim: {
-                'angular-ui-bootstrap': ['angular', 'bootstrap'],
+                            shim: {
+                                'angular-ui-bootstrap': ['angular', 'bootstrap'],
 
-                'bootstrap': [
-                    'jquery',
-                            'css!lib/bootstrap/' + _bootsrapVersion + '/css/bootstrap.min.css',
-                            'css!lib/bootstrap/' + _bootsrapVersion + '/css/bootstrap-theme.min.css'
-                ]
-            },
+                                'bootstrap': [
+                                    'jquery',
+                                    'css!lib/bootstrap/' + _bootsrapVersion + '/css/bootstrap.min.css',
+                                    'css!lib/bootstrap/' + _bootsrapVersion + '/css/bootstrap-theme.min.css'
+                                ]
+                            },
 
-            waitSeconds: 15
-        });
+                            waitSeconds: 15
+                        } );
 
-        requirejs([
-            'angular-ui-bootstrap',
-            'ui-components/PropertyGrid/PropertyGrid'], function (ngBootstrap, PropertyGrid){
+        requirejs( [
+                       'angular-ui-bootstrap',
+                       'ui-components/PropertyGrid/PropertyGrid'], function ( ngBootstrap, PropertyGrid ) {
 
-            var demoApp = angular.module('demoApp', ['ui.bootstrap', 'isis.ui.propertyGrid']);
+            var demoApp = angular.module( 'demoApp', ['ui.bootstrap', 'isis.ui.propertyGrid'] );
 
-            demoApp.controller('PropertyGridDemoController', function ($scope) {
+            demoApp.controller( 'PropertyGridDemoController', function ( $scope ) {
                 var items = [
-                    {
-                        id: 'newProject',
-                        label: 'New project ...',
-                        iconClass: 'glyphicon glyphicon-plus',
-                        action: function () {
-                            console.log('Show all items...');
-                        },
-                        actionData: {}
-                    },
-                    {
-                        id: 'importProject',
-                        label: 'Import project ...',
-                        iconClass: 'glyphicon glyphicon-import',
-                        action: function () {
-                            console.log('Show all items...');
-                        },
-                        actionData: {}
-                    }
-                    ],
-                    config = {};
+                            {
+                                id: 'Name',
+                                label: 'Name',
+                                value: 'This is my name'
+
+                            },
+                            {
+
+                                id: 'Position',
+                                label: 'Position',
+                                cssClass: '',
+                                value: [
+                                    {
+                                        id: 'Position_x',
+                                        label: 'X',
+                                        value: 10
+                                        //valueWidget: integerValueWidget,
+                                    },
+                                    {
+                                        id: 'Position_y',
+                                        label: 'Y',
+                                        value: 30
+                                        //valueWidget: integerValueWidget,
+                                    }
+                                ]
+                            },
+                            {
+                                id: 'is_happy',
+                                label: 'Happy or not?',
+                                value: true,
+                                valueWidget: {
+                                    type: 'boolean'
+                                }
+                            },
+                            {
+                                id: 'country',
+                                label: 'Country',
+                                value: 'usa',
+                                valueWidget: {
+                                    type: 'select',
+                                    defaultValue: 'pol',
+                                    multi: false,
+                                    options: [
+                                        {
+                                            label: 'U.S.A.',
+                                            value: 'usa'
+                                        },
+                                        {
+                                            label: 'Poland',
+                                            value: 'pol'
+                                        },
+                                        {
+                                            label: 'England',
+                                            value: 'eng'
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                id: 'color',
+                                label: 'Color',
+                                value: '#ff0066',
+                                valueWidget: {
+                                    type: 'colorPicker'
+                                }
+
+                            }
+                        ],
+                        config = {
+
+                        };
 
                 $scope.items = items;
                 $scope.config = config;
 
-            });
+            } );
 
-            angular.bootstrap(document, ['demoApp']);
-        });
+            angular.bootstrap( document, ['demoApp'] );
+        } );
 
     </script>
 
