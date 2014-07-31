@@ -1,0 +1,96 @@
+    <!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title></title>
+
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.14/require.min.js"></script>
+
+    <!--<script src="//cdnjs.cloudflare.com/ajax/libs/angular.js/1.2.20/angular.min.js"></script>-->
+
+    <script type="text/javascript">
+        var DEBUG = true,
+            _jqueryVersion = '2.1.0',
+            _jqueryUIVersion = '1.10.4',
+            _bootsrapVersion = '3.1.1';
+
+
+        require.config({
+            baseUrl: "../../",
+
+            map: {
+                '*': {
+                    'css': 'lib/require/require-css/css',
+                    'text': 'lib/require/require-text/text'
+                }
+            },
+
+            paths: {
+                'jquery': 'lib/jquery/jquery-' + _jqueryVersion + ( DEBUG ? '.min' : '' ),
+                'bootstrap': 'lib/bootstrap/' + _bootsrapVersion + '/js/bootstrap' + ( DEBUG ? '.min' : '' ),
+
+                'angular': 'lib/angular/angular-1.2.19/angular' + ( DEBUG ? '.min' : '' ),
+                'angular-ui-bootstrap': 'lib/angular/ui-bootstrap/ui-bootstrap-tpls-0.11.0.min'
+            },
+
+            shim: {
+                'angular-ui-bootstrap': ['angular', 'bootstrap'],
+
+                'bootstrap': [
+                    'jquery',
+                            'css!lib/bootstrap/' + _bootsrapVersion + '/css/bootstrap.min.css',
+                            'css!lib/bootstrap/' + _bootsrapVersion + '/css/bootstrap-theme.min.css'
+                ]
+            },
+
+            waitSeconds: 15
+        });
+
+        requirejs([
+            'angular-ui-bootstrap',
+            'ui-components/PropertyGrid/PropertyGrid'], function (ngBootstrap, PropertyGrid){
+
+            var demoApp = angular.module('demoApp', ['ui.bootstrap', 'isis.ui.propertyGrid']);
+
+            demoApp.controller('PropertyGridDemoController', function ($scope) {
+                var items = [
+                    {
+                        id: 'newProject',
+                        label: 'New project ...',
+                        iconClass: 'glyphicon glyphicon-plus',
+                        action: function () {
+                            console.log('Show all items...');
+                        },
+                        actionData: {}
+                    },
+                    {
+                        id: 'importProject',
+                        label: 'Import project ...',
+                        iconClass: 'glyphicon glyphicon-import',
+                        action: function () {
+                            console.log('Show all items...');
+                        },
+                        actionData: {}
+                    }
+                    ],
+                    config = {};
+
+                $scope.items = items;
+                $scope.config = config;
+
+            });
+
+            angular.bootstrap(document, ['demoApp']);
+        });
+
+    </script>
+
+</head>
+<body>
+
+<div data-ng-controller="PropertyGridDemoController">
+    <property-grid items="items"></property-grid>
+</div>
+
+</body>
+</html>
