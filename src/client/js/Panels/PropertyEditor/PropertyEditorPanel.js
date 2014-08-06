@@ -2,10 +2,26 @@
 
 define(['js/PanelBase/PanelBaseWithHeader',
     'js/Controls/PropertyGrid/PropertyGrid',
-    './PropertyEditorPanelController'], function (PanelBaseWithHeader,
+    './PropertyEditorPanelController',
+
+    'ui-components/PropertyGrid/PropertyGrid',
+    './PropertyGridController'
+
+       ], function (PanelBaseWithHeader,
                                                                      PropertyGrid,
-                                                                     PropertyEditorPanelController) {
+                                                                     PropertyEditorPanelController,
+
+                                                                     PropertyGridUIComponent,
+                                                                     PropertyGridController) {
     "use strict";
+
+    angular.module(
+        'headerPanel',
+        [
+            'isis.ui.propertyGrid'
+        ]).run(function() {
+
+               });
 
     var PropertyEditorPanel,
         __parent__ = PanelBaseWithHeader;
@@ -35,11 +51,19 @@ define(['js/PanelBase/PanelBaseWithHeader',
         this.setTitle("Property Editor");
 
         //load PropertyEditor control
-        this.propertyGrid = new PropertyGrid();
-        this.$el.append(this.propertyGrid.$el);
+        //this.propertyGrid = new PropertyGrid();
+
+        // TODO: would be nice to get the app as a parameter
+        var app = angular.module('gmeApp');
+        app.controller('PropertyGridController', PropertyGridController);
+
+
+        this.$el.append($('<div data-ng-controller="PropertyGridController">' +
+        '    <property-grid items="items"></property-grid>' +
+        '</div>'));
 
         //attach control to the PropertyGrid
-        var p = new PropertyEditorPanelController(this._client, this.propertyGrid);
+        //var p = new PropertyEditorPanelController(this._client, this.propertyGrid);
     };
 
     /* OVERRIDE FROM WIDGET-WITH-HEADER */
@@ -48,7 +72,8 @@ define(['js/PanelBase/PanelBaseWithHeader',
         //apply parent's onReadOnlyChanged
         __parent__.prototype.onReadOnlyChanged.call(this, isReadOnly);
 
-        this.propertyGrid.setReadOnly(isReadOnly);
+        // TODO: fix me in new implementation
+        //this.propertyGrid.setReadOnly(isReadOnly);
     };
 
     return PropertyEditorPanel;

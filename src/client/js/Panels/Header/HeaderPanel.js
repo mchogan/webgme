@@ -38,7 +38,7 @@ define(['js/PanelBase/PanelBase',
         __parent__ = PanelBase;
 
     angular.module(
-        'headerPanel',
+        'propertyGrid',
         [
             'isis.ui.dropdownNavigator',
             'isis.ui.searchBox'

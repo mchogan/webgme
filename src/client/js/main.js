@@ -200,7 +200,8 @@ require(
                     'ui.bootstrap',
 
                     'headerPanel',
-                    'objectBrowserPanel'
+                    'objectBrowserPanel',
+                    'propertyGrid'
                 ]);
 
             webGME.start( function(client) {
