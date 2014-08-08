@@ -5,22 +5,23 @@
  * @author nabana / https://github.com/nabana
  */
 
-define([ 'logManager',
-    'text!./templates/ProjectRepositoryDialog.html',
-    'js/Widgets/ProjectRepository/ProjectRepositoryWidget' ], function ( logManager,
+define(['logManager',
+  'text!./templates/ProjectRepositoryDialog.html',
+  'js/Widgets/ProjectRepository/ProjectRepositoryWidget'
+], function (logManager,
   projectRepositoryDialogTemplate,
-  ProjectRepositoryWidget ) {
+  ProjectRepositoryWidget) {
 
   'use strict';
 
   var ProjectRepositoryDialog;
 
-  ProjectRepositoryDialog = function ( client ) {
-    this._logger = logManager.create( 'ProjectRepositoryDialog' );
+  ProjectRepositoryDialog = function (client) {
+    this._logger = logManager.create('ProjectRepositoryDialog');
 
     this._client = client;
 
-    this._logger.debug( 'Created' );
+    this._logger.debug('Created');
   };
 
   ProjectRepositoryDialog.prototype.show = function () {
@@ -28,62 +29,60 @@ define([ 'logManager',
 
     this._initDialog();
 
-    this._dialog.on( 'hide.bs.modal', function () {
+    this._dialog.on('hide.bs.modal', function () {
       self._dialog.remove();
       self._dialog.empty();
       self._dialog = undefined;
     });
 
-    this._dialog.modal( 'show' );
+    this._dialog.modal('show');
 
   };
 
   ProjectRepositoryDialog.prototype._initDialog = function () {
     var projectRepositoryWidget,
-    modalBody,
-    client = this._client,
-    self = this,
-    WINDOW_PADDING = 20,
-    wH = $( window ).height(),
-    wW = $( window ).width();
+      modalBody,
+      client = this._client,
+      self = this,
+      WINDOW_PADDING = 20,
+      wH = $(window).height(),
+      wW = $(window).width();
 
-    this._dialog = $( projectRepositoryDialogTemplate );
+    this._dialog = $(projectRepositoryDialogTemplate);
 
-    modalBody = this._dialog.find( '.modal-body' );
+    modalBody = this._dialog.find('.modal-body');
 
     projectRepositoryWidget = new ProjectRepositoryWidget(
       modalBody,
-      client,
-    {
-      'commit_count': 100
-    }
+      client, {
+        'commit_count': 100
+      }
     );
 
-    this._dialog.on( 'show.bs.modal', function () {
-      var dialogHeaderH = self._dialog.find( '.modal-header' ).outerHeight( true ),
-      dialogFooterH = self._dialog.find( '.modal-footer' ).outerHeight( true ),
-      modalBodyVPadding = parseInt( modalBody.css( 'padding-top' ), 10 ) + parseInt( modalBody.css( 'padding-bottom' ), 10 ),
+    this._dialog.on('show.bs.modal', function () {
+      var dialogHeaderH = self._dialog.find('.modal-header').outerHeight(true),
+        dialogFooterH = self._dialog.find('.modal-footer').outerHeight(true),
+        modalBodyVPadding = parseInt(modalBody.css('padding-top'), 10) + parseInt(modalBody.css('padding-bottom'),
+          10),
         //dW,
-      dH;
+        dH;
 
       //make it almost full screen
       //dW = wW - 2 * WINDOW_PADDING;
       dH = wH - 2 * WINDOW_PADDING;
 
-      self._dialog.removeClass( 'fade' );
+      self._dialog.removeClass('fade');
 
-      modalBody.css(
-      {
+      modalBody.css({
         'max-height': dH - modalBodyVPadding - dialogHeaderH - dialogFooterH,
         'height': dH - modalBodyVPadding - dialogHeaderH - dialogFooterH
-      }
-      );
+      });
 
       //initiate the first load of commits
       projectRepositoryWidget.loadMoreCommits();
     });
 
-    this._dialog.on( 'hide', function () {
+    this._dialog.on('hide', function () {
       projectRepositoryWidget.clear();
     });
   };

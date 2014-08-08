@@ -5,11 +5,12 @@
  * @author brollb / https://github/brollb
  */
 
-define([ 'logManager',
-    'util/assert',
-    './AutoRouter.Constants',
-    './AutoRouter.Utils',
-    './AutoRouter.Point' ], function ( logManager, assert, CONSTANTS, UTILS, ArPoint ) {
+define(['logManager',
+  'util/assert',
+  './AutoRouter.Constants',
+  './AutoRouter.Utils',
+  './AutoRouter.Point'
+], function (logManager, assert, CONSTANTS, UTILS, ArPoint) {
 
   'use strict';
 
@@ -112,42 +113,41 @@ define([ 'logManager',
 
   };
 
+  AutoRouterEdge.prototype.assign = function (otherEdge) {
 
-  AutoRouterEdge.prototype.assign = function ( otherEdge ) {
+    if (otherEdge !== null) {
+      this.setOwner(otherEdge.getOwner());
+      this.setStartPoint(otherEdge.getStartPointPtr(), false);
+      this.setEndPoint(otherEdge.getEndPointPtr(), otherEdge.getEndPointPtr() !== null); //Only calculateDirection if this.endpoint is not null
 
-    if ( otherEdge !== null ) {
-      this.setOwner( otherEdge.getOwner());
-      this.setStartPoint( otherEdge.getStartPointPtr(), false );
-      this.setEndPoint( otherEdge.getEndPointPtr(), otherEdge.getEndPointPtr() !== null ); //Only calculateDirection if this.endpoint is not null
+      this.setStartPointPrev(otherEdge.getStartPointPrev());
+      this.setEndPointNext(otherEdge.getEndPointNext());
 
-      this.setStartPointPrev( otherEdge.getStartPointPrev());
-      this.setEndPointNext( otherEdge.getEndPointNext());
+      this.setPositionY(otherEdge.getPositionY());
+      this.setPositionX1(otherEdge.getPositionX1());
+      this.setPositionX2(otherEdge.getPositionX2());
+      this.setBracketClosing(otherEdge.getBracketClosing(), false);
+      this.setBracketOpening(otherEdge.getBracketOpening());
 
-      this.setPositionY( otherEdge.getPositionY());
-      this.setPositionX1( otherEdge.getPositionX1());
-      this.setPositionX2( otherEdge.getPositionX2());
-      this.setBracketClosing( otherEdge.getBracketClosing(), false );
-      this.setBracketOpening( otherEdge.getBracketOpening());
+      this.setOrderNext(otherEdge.getOrderNext());
+      this.setOrderPrev(otherEdge.getOrderPrev());
 
-      this.setOrderNext( otherEdge.getOrderNext());
-      this.setOrderPrev( otherEdge.getOrderPrev());
+      this.setSectionX1(otherEdge.getSectionX1());
+      this.setSectionX2(otherEdge.getSectionX2());
+      this.setSectionNext(otherEdge.getSectionNext(true));
+      this.setSectionDown(otherEdge.getSectionDown(true));
 
-      this.setSectionX1( otherEdge.getSectionX1());
-      this.setSectionX2( otherEdge.getSectionX2());
-      this.setSectionNext( otherEdge.getSectionNext( true ));
-      this.setSectionDown( otherEdge.getSectionDown( true ));
+      this.setEdgeFixed(otherEdge.getEdgeFixed());
+      this.setEdgeCustomFixed(otherEdge.getEdgeCustomFixed());
+      this.setEdgeCanpassed(otherEdge.getEdgeCanpassed());
+      this.setDirection(otherEdge.getDirection());
 
-      this.setEdgeFixed( otherEdge.getEdgeFixed());
-      this.setEdgeCustomFixed( otherEdge.getEdgeCustomFixed());
-      this.setEdgeCanpassed( otherEdge.getEdgeCanpassed());
-      this.setDirection( otherEdge.getDirection());
+      this.setBlockPrev(otherEdge.getBlockPrev());
+      this.setBlockNext(otherEdge.getBlockNext());
+      this.setBlockTrace(otherEdge.getBlockTrace());
 
-      this.setBlockPrev( otherEdge.getBlockPrev());
-      this.setBlockNext( otherEdge.getBlockNext());
-      this.setBlockTrace( otherEdge.getBlockTrace());
-
-      this.setClosestPrev( otherEdge.getClosestPrev());
-      this.setClosestNext( otherEdge.getClosestNext());
+      this.setClosestPrev(otherEdge.getClosestPrev());
+      this.setClosestNext(otherEdge.getClosestNext());
 
       return this;
     }
@@ -155,7 +155,7 @@ define([ 'logManager',
     return null;
   };
 
-  AutoRouterEdge.prototype.equals = function ( otherEdge ) {
+  AutoRouterEdge.prototype.equals = function (otherEdge) {
     return this === otherEdge; //This checks if they reference the same object
   };
 
@@ -163,19 +163,19 @@ define([ 'logManager',
     return this.owner;
   };
 
-  AutoRouterEdge.prototype.setOwner = function ( newOwner ) {
+  AutoRouterEdge.prototype.setOwner = function (newOwner) {
     this.owner = newOwner;
   };
 
   AutoRouterEdge.prototype.getStartPointPrev = function () {
-    return this.startpoint_prev !== null ? this.startpoint_prev[ 0 ] || this.startpoint_prev : null;
+    return this.startpoint_prev !== null ? this.startpoint_prev[0] || this.startpoint_prev : null;
   };
 
   AutoRouterEdge.prototype.isStartPointPrevNull = function () {
     return this.startpoint_prev === null;
   };
 
-  AutoRouterEdge.prototype.setStartPointPrev = function ( point ) {
+  AutoRouterEdge.prototype.setStartPointPrev = function (point) {
     this.startpoint_prev = point || null;
   };
 
@@ -189,95 +189,98 @@ define([ 'logManager',
 
   AutoRouterEdge.prototype.getStartPoint = function () {
     return this.startpoint !== null ?
-      ( this.startpoint instanceof Array ? new ArPoint( this.startpoint[ 0 ]) : new ArPoint( this.startpoint )) : CONSTANTS.EMPTY_POINT;//returning copy of this.startpoint
+      (this.startpoint instanceof Array ? new ArPoint(this.startpoint[0]) : new ArPoint(this.startpoint)) : CONSTANTS
+      .EMPTY_POINT; //returning copy of this.startpoint
   };
 
-  AutoRouterEdge.prototype.isSameStartPoint = function ( point ) {
-    return this.startpoint[ 0 ] === point;
+  AutoRouterEdge.prototype.isSameStartPoint = function (point) {
+    return this.startpoint[0] === point;
   };
 
   AutoRouterEdge.prototype.isStartPointNull = function () {
     return this.startpoint === null;
   };
 
-  AutoRouterEdge.prototype.setStartPoint = function ( point, b ) {
-    if ( point instanceof Array ) {
+  AutoRouterEdge.prototype.setStartPoint = function (point, b) {
+    if (point instanceof Array) {
       this.startpoint = point;
 
-    }else if ( !this.startpoint ) {
-      this.startpoint = [ point ];
+    } else if (!this.startpoint) {
+      this.startpoint = [point];
 
-    }else{
-      this.startpoint[ 0 ] = point;
+    } else {
+      this.startpoint[0] = point;
     }
 
-    if ( b !== false ) {
+    if (b !== false) {
       this.recalculateDirection();
     }
   };
 
-  AutoRouterEdge.prototype.setStartPointX = function ( _x ) {
-    this.startpoint[ 0 ].x = _x;
+  AutoRouterEdge.prototype.setStartPointX = function (_x) {
+    this.startpoint[0].x = _x;
   };
 
-  AutoRouterEdge.prototype.setStartPointY = function ( _y ) {
-    this.startpoint[ 0 ].y = _y;
+  AutoRouterEdge.prototype.setStartPointY = function (_y) {
+    this.startpoint[0].y = _y;
   };
 
   AutoRouterEdge.prototype.getEndPoint = function () {
-    return this.endpoint !== null ? ( this.endpoint instanceof Array ? new ArPoint( this.endpoint[ 0 ]) : new ArPoint( this.endpoint )) : CONSTANTS.EMPTY_POINT;
+    return this.endpoint !== null ? (this.endpoint instanceof Array ? new ArPoint(this.endpoint[0]) : new ArPoint(
+      this.endpoint)) : CONSTANTS.EMPTY_POINT;
   };
 
   AutoRouterEdge.prototype.isEndPointNull = function () {
     return this.endpoint === null;
   };
 
-  AutoRouterEdge.prototype.setEndPoint = function ( point, b ) {
-    if ( point instanceof Array ) {
+  AutoRouterEdge.prototype.setEndPoint = function (point, b) {
+    if (point instanceof Array) {
       this.endpoint = point;
 
-    }else if ( !this.endpoint ) {
-      this.endpoint = [ point ];
+    } else if (!this.endpoint) {
+      this.endpoint = [point];
 
-    }else{
-      this.endpoint[ 0 ] = point;
+    } else {
+      this.endpoint[0] = point;
     }
 
-    if ( b !== false ) {
+    if (b !== false) {
       this.recalculateDirection();
     }
   };
 
-  AutoRouterEdge.prototype.setStartAndEndPoint = function ( startPoint, endPoint ) {
-    this.setStartPoint( startPoint, false ); //wait until setting the this.endpoint to recalculateDirection
-    this.setEndPoint( endPoint );
+  AutoRouterEdge.prototype.setStartAndEndPoint = function (startPoint, endPoint) {
+    this.setStartPoint(startPoint, false); //wait until setting the this.endpoint to recalculateDirection
+    this.setEndPoint(endPoint);
   };
 
-  AutoRouterEdge.prototype.setEndPointX = function ( _x ) {
-    if ( !this.endpoint || this.endpoint instanceof Array ) {
-      this.endpoint[ 0 ].x = _x;
+  AutoRouterEdge.prototype.setEndPointX = function (_x) {
+    if (!this.endpoint || this.endpoint instanceof Array) {
+      this.endpoint[0].x = _x;
     } else {
       this.endpoint.x = _x;
     }
   };
 
-  AutoRouterEdge.prototype.setEndPointY = function ( _y ) {
-    if ( !this.endpoint || this.endpoint instanceof Array ) {
-      this.endpoint[ 0 ].y = _y;
+  AutoRouterEdge.prototype.setEndPointY = function (_y) {
+    if (!this.endpoint || this.endpoint instanceof Array) {
+      this.endpoint[0].y = _y;
     } else {
       this.endpoint.y = _y;
     }
   };
 
   AutoRouterEdge.prototype.getEndPointNext = function () {
-    return this.endpoint_next !== null ? (( this.endpoint_next instanceof Array ) ? new ArPoint( this.endpoint_next[ 0 ]) : new ArPoint( this.endpoint_next )) : CONSTANTS.EMPTY_POINT;
+    return this.endpoint_next !== null ? ((this.endpoint_next instanceof Array) ? new ArPoint(this.endpoint_next[0]) :
+      new ArPoint(this.endpoint_next)) : CONSTANTS.EMPTY_POINT;
   };
 
   AutoRouterEdge.prototype.isEndPointNextNull = function () {
     return this.endpoint_next === null;
   };
 
-  AutoRouterEdge.prototype.setEndPointNext = function ( point ) {
+  AutoRouterEdge.prototype.setEndPointNext = function (point) {
     this.endpoint_next = point;
   };
 
@@ -285,11 +288,11 @@ define([ 'logManager',
     return this.position_y;
   };
 
-  AutoRouterEdge.prototype.setPositionY = function ( _y ) {
+  AutoRouterEdge.prototype.setPositionY = function (_y) {
     this.position_y = _y;
   };
 
-  AutoRouterEdge.prototype.addToPositionY = function ( dy ) {
+  AutoRouterEdge.prototype.addToPositionY = function (dy) {
     this.position_y += dy;
   };
 
@@ -297,7 +300,7 @@ define([ 'logManager',
     return this.position_x1;
   };
 
-  AutoRouterEdge.prototype.setPositionX1 = function ( _x1 ) {
+  AutoRouterEdge.prototype.setPositionX1 = function (_x1) {
     this.position_x1 = _x1;
   };
 
@@ -305,7 +308,7 @@ define([ 'logManager',
     return this.position_x2;
   };
 
-  AutoRouterEdge.prototype.setPositionX2 = function ( _x2 ) {
+  AutoRouterEdge.prototype.setPositionX2 = function (_x2) {
     this.position_x2 = _x2;
   };
 
@@ -313,7 +316,7 @@ define([ 'logManager',
     return this.bracket_closing;
   };
 
-  AutoRouterEdge.prototype.setBracketClosing = function ( bool, debug ) {
+  AutoRouterEdge.prototype.setBracketClosing = function (bool, debug) {
     this.bracket_closing = bool;
   };
 
@@ -321,7 +324,7 @@ define([ 'logManager',
     return this.bracket_opening;
   };
 
-  AutoRouterEdge.prototype.setBracketOpening = function ( bool ) {
+  AutoRouterEdge.prototype.setBracketOpening = function (bool) {
     this.bracket_opening = bool;
   };
 
@@ -329,7 +332,7 @@ define([ 'logManager',
     return this.order_next;
   };
 
-  AutoRouterEdge.prototype.setOrderNext = function ( orderNext ) {
+  AutoRouterEdge.prototype.setOrderNext = function (orderNext) {
     this.order_next = orderNext;
   };
 
@@ -337,7 +340,7 @@ define([ 'logManager',
     return this.order_prev;
   };
 
-  AutoRouterEdge.prototype.setOrderPrev = function ( orderPrev ) {
+  AutoRouterEdge.prototype.setOrderPrev = function (orderPrev) {
     this.order_prev = orderPrev;
   };
 
@@ -345,7 +348,7 @@ define([ 'logManager',
     return this.section_x1;
   };
 
-  AutoRouterEdge.prototype.setSectionX1 = function ( x1 ) {
+  AutoRouterEdge.prototype.setSectionX1 = function (x1) {
     this.section_x1 = x1;
   };
 
@@ -353,23 +356,23 @@ define([ 'logManager',
     return this.section_x2;
   };
 
-  AutoRouterEdge.prototype.setSectionX2 = function ( x2 ) {
+  AutoRouterEdge.prototype.setSectionX2 = function (x2) {
     this.section_x2 = x2;
   };
 
-  AutoRouterEdge.prototype.getSectionNext = function ( arg ) {
+  AutoRouterEdge.prototype.getSectionNext = function (arg) {
 
-    return this.section_next !== undefined ? this.section_next[ 0 ] : null;
+    return this.section_next !== undefined ? this.section_next[0] : null;
   };
 
   AutoRouterEdge.prototype.getSectionNextPtr = function () {
-    if ( !this.section_next || !this.section_next[ 0 ]) {
-      this.section_next = [ new AutoRouterEdge()];
+    if (!this.section_next || !this.section_next[0]) {
+      this.section_next = [new AutoRouterEdge()];
     }
     return this.section_next;
   };
 
-  AutoRouterEdge.prototype.setSectionNext = function ( nextSection ) {
+  AutoRouterEdge.prototype.setSectionNext = function (nextSection) {
     /*
            if(nextSection instanceof Array){
            this.section_next = nextSection;  //Don't want to actually change the pointer
@@ -377,33 +380,33 @@ define([ 'logManager',
            this.section_next = [nextSection];
            }
          */
-    nextSection = nextSection instanceof Array ? nextSection[ 0 ] : nextSection;
-    if ( this.section_next instanceof Array ) {
-      this.section_next[ 0 ] = nextSection;
+    nextSection = nextSection instanceof Array ? nextSection[0] : nextSection;
+    if (this.section_next instanceof Array) {
+      this.section_next[0] = nextSection;
     } else {
-      this.section_next = [ nextSection ];
+      this.section_next = [nextSection];
     }
   };
 
   AutoRouterEdge.prototype.getSectionDown = function () { //Returns pointer - if not null
 
-    return this.section_down !== undefined ? this.section_down[ 0 ] : null;
+    return this.section_down !== undefined ? this.section_down[0] : null;
 
   };
 
   AutoRouterEdge.prototype.getSectionDownPtr = function () {
-    if ( !this.section_down || !this.section_down[ 0 ]) {
-      this.section_down = [ new AutoRouterEdge()];
+    if (!this.section_down || !this.section_down[0]) {
+      this.section_down = [new AutoRouterEdge()];
     }
     return this.section_down;
   };
 
-  AutoRouterEdge.prototype.setSectionDown = function ( downSection ) {
-    downSection = downSection instanceof Array ? downSection[ 0 ] : downSection;
-    if ( this.section_down instanceof Array ) {
-      this.section_down[ 0 ] = downSection;
+  AutoRouterEdge.prototype.setSectionDown = function (downSection) {
+    downSection = downSection instanceof Array ? downSection[0] : downSection;
+    if (this.section_down instanceof Array) {
+      this.section_down[0] = downSection;
     } else {
-      this.section_down = [ downSection ];
+      this.section_down = [downSection];
     }
   };
 
@@ -411,7 +414,7 @@ define([ 'logManager',
     return this.edge_fixed;
   };
 
-  AutoRouterEdge.prototype.setEdgeFixed = function ( ef ) { //boolean
+  AutoRouterEdge.prototype.setEdgeFixed = function (ef) { //boolean
     this.edge_fixed = ef;
   };
 
@@ -419,15 +422,15 @@ define([ 'logManager',
     return this.edge_customFixed;
   };
 
-  AutoRouterEdge.prototype.setEdgeCustomFixed = function ( ecf ) {
+  AutoRouterEdge.prototype.setEdgeCustomFixed = function (ecf) {
     this.edge_customFixed = ecf;
   };
 
-  AutoRouterEdge.prototype.getEdgeCanpassed =  function () {
+  AutoRouterEdge.prototype.getEdgeCanpassed = function () {
     return this.edge_canpassed;
   };
 
-  AutoRouterEdge.prototype.setEdgeCanpassed =  function ( ecp ) {
+  AutoRouterEdge.prototype.setEdgeCanpassed = function (ecp) {
     this.edge_canpassed = ecp;
   };
 
@@ -435,16 +438,19 @@ define([ 'logManager',
     return this.edge_direction;
   };
 
-  AutoRouterEdge.prototype.setDirection = function ( dir ) {
+  AutoRouterEdge.prototype.setDirection = function (dir) {
     this.edge_direction = dir;
   };
 
   AutoRouterEdge.prototype.recalculateDirection = function () {
-    assert( this.startpoint !== null && this.endpoint !== null, 'AREdge.recalculateDirection: this.startpoint !== null && this.endpoint !== null FAILED!' );
-    if ( this.endpoint instanceof Array ) {
-      this.edge_direction = UTILS.getDir( this.endpoint[ 0 ].minus(( this.startpoint instanceof Array ? this.startpoint[ 0 ] : this.startpoint )));
+    assert(this.startpoint !== null && this.endpoint !== null,
+      'AREdge.recalculateDirection: this.startpoint !== null && this.endpoint !== null FAILED!');
+    if (this.endpoint instanceof Array) {
+      this.edge_direction = UTILS.getDir(this.endpoint[0].minus((this.startpoint instanceof Array ? this.startpoint[0] :
+        this.startpoint)));
     } else {
-      this.edge_direction = UTILS.getDir( this.endpoint.minus(( this.startpoint instanceof Array ? this.startpoint[ 0 ] : this.startpoint )));
+      this.edge_direction = UTILS.getDir(this.endpoint.minus((this.startpoint instanceof Array ? this.startpoint[0] :
+        this.startpoint)));
     }
   };
 
@@ -452,7 +458,7 @@ define([ 'logManager',
     return this.block_prev;
   };
 
-  AutoRouterEdge.prototype.setBlockPrev = function ( prevBlock ) {
+  AutoRouterEdge.prototype.setBlockPrev = function (prevBlock) {
     this.block_prev = prevBlock;
   };
 
@@ -460,7 +466,7 @@ define([ 'logManager',
     return this.block_next;
   };
 
-  AutoRouterEdge.prototype.setBlockNext = function ( nextBlock ) {
+  AutoRouterEdge.prototype.setBlockNext = function (nextBlock) {
     this.block_next = nextBlock;
   };
 
@@ -468,7 +474,7 @@ define([ 'logManager',
     return this.block_trace;
   };
 
-  AutoRouterEdge.prototype.setBlockTrace = function ( traceBlock ) {
+  AutoRouterEdge.prototype.setBlockTrace = function (traceBlock) {
     this.block_trace = traceBlock;
   };
 
@@ -476,7 +482,7 @@ define([ 'logManager',
     return this.closest_prev;
   };
 
-  AutoRouterEdge.prototype.setClosestPrev = function ( cp ) {
+  AutoRouterEdge.prototype.setClosestPrev = function (cp) {
     this.closest_prev = cp;
   };
 
@@ -484,7 +490,7 @@ define([ 'logManager',
     return this.closest_next;
   };
 
-  AutoRouterEdge.prototype.setClosestNext = function ( cp ) {
+  AutoRouterEdge.prototype.setClosestNext = function (cp) {
     this.closest_next = cp;
   };
 

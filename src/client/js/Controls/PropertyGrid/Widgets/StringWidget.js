@@ -1,75 +1,77 @@
 /*globals define, _, requirejs, WebGMEGlobal, Raphael*/
 
-define([ 'js/Controls/PropertyGrid/Widgets/WidgetBase' ],
-function ( WidgetBase ) {
+define(['js/Controls/PropertyGrid/Widgets/WidgetBase'],
+  function (WidgetBase) {
 
-  'use strict';
+    'use strict';
 
-  var StringWidget,
-  INPUT_BASE = $( '<input/>', { 'type': 'text' });
+    var StringWidget,
+      INPUT_BASE = $('<input/>', {
+        'type': 'text'
+      });
 
-  StringWidget = function ( propertyDesc ) {
-    StringWidget.superclass.call( this, propertyDesc );
+    StringWidget = function (propertyDesc) {
+      StringWidget.superclass.call(this, propertyDesc);
 
-    var _self = this;
+      var _self = this;
 
-    this.__input = INPUT_BASE.clone();
-    this.__input.val( this.propertyValue );
+      this.__input = INPUT_BASE.clone();
+      this.__input.val(this.propertyValue);
 
-    if ( propertyDesc.regex ) {
-      propertyDesc.regexMessage = propertyDesc.regexMessage || 'Value has to match regex: ' + propertyDesc.regex;
-      this.__input.attr( 'pattern', propertyDesc.regex );
-      this.__input.attr( 'title', propertyDesc.regexMessage );
-    }
-
-    this.__input.on( 'keyup change', function ( e ) {
-      e.stopPropagation();
-      e.preventDefault();
-
-      _self.setValue( _self.__input.val());
-    });
-
-    this.__input.on( 'blur', function ( e ) {
-      _self.fireFinishChange();
-    });
-
-    this.__input.on( 'keydown', function ( e ) {
-      if ( e.keyCode === 13 ) {
-        this.blur();
+      if (propertyDesc.regex) {
+        propertyDesc.regexMessage = propertyDesc.regexMessage || 'Value has to match regex: ' + propertyDesc.regex;
+        this.__input.attr('pattern', propertyDesc.regex);
+        this.__input.attr('title', propertyDesc.regexMessage);
       }
-    });
 
-    this.updateDisplay();
+      this.__input.on('keyup change', function (e) {
+        e.stopPropagation();
+        e.preventDefault();
 
-    this.el.append( this.__input );
-  };
+        _self.setValue(_self.__input.val());
+      });
 
-  StringWidget.superclass = WidgetBase;
+      this.__input.on('blur', function (e) {
+        _self.fireFinishChange();
+      });
 
-  _.extend(
-    StringWidget.prototype,
-    WidgetBase.prototype
-  );
+      this.__input.on('keydown', function (e) {
+        if (e.keyCode === 13) {
+          this.blur();
+        }
+      });
 
-  StringWidget.prototype.updateDisplay = function () {
-    // Stops the caret from moving on account of:
-    // keyup -> setValue -> updateDisplay
-    if ( document.activeElement !== this.__input[ 0 ]) {
-      this.__input.val( this.getValue());
-    }
-    return StringWidget.superclass.prototype.updateDisplay.call( this );
-  };
+      this.updateDisplay();
 
-  StringWidget.prototype.setReadOnly = function ( isReadOnly ) {
-    StringWidget.superclass.prototype.setReadOnly.call( this, isReadOnly );
+      this.el.append(this.__input);
+    };
 
-    if ( isReadOnly === true ) {
-      this.__input.attr( 'disabled', 'disabled' );
-    } else {
-      this.__input.removeAttr( 'disabled' );
-    }
-  };
+    StringWidget.superclass = WidgetBase;
 
-  return StringWidget;
+    _.extend(
+      StringWidget.prototype,
+      WidgetBase.prototype
+    );
 
-});
+    StringWidget.prototype.updateDisplay = function () {
+      // Stops the caret from moving on account of:
+      // keyup -> setValue -> updateDisplay
+      if (document.activeElement !== this.__input[0]) {
+        this.__input.val(this.getValue());
+      }
+      return StringWidget.superclass.prototype.updateDisplay.call(this);
+    };
+
+    StringWidget.prototype.setReadOnly = function (isReadOnly) {
+      StringWidget.superclass.prototype.setReadOnly.call(this, isReadOnly);
+
+      if (isReadOnly === true) {
+        this.__input.attr('disabled', 'disabled');
+      } else {
+        this.__input.removeAttr('disabled');
+      }
+    };
+
+    return StringWidget;
+
+  });

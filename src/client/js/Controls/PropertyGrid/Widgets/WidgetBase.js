@@ -4,9 +4,11 @@ define([], function () {
 
   'use strict';
 
-  var EL_BASE = $( '<div/>', { 'class': 'widget' });
+  var EL_BASE = $('<div/>', {
+    'class': 'widget'
+  });
 
-  var WidgetBase = function ( propertyDesc ) {
+  var WidgetBase = function (propertyDesc) {
     this.el = EL_BASE.clone();
 
     this.propertyValue = propertyDesc.value;
@@ -26,26 +28,28 @@ define([], function () {
     this.__onFinishChange = undefined;
   };
 
-  WidgetBase.prototype.onChange = function ( fnc ) {
+  WidgetBase.prototype.onChange = function (fnc) {
     this.__onChange = fnc;
     return this;
   };
 
-  WidgetBase.prototype.onFinishChange = function ( fnc ) {
+  WidgetBase.prototype.onFinishChange = function (fnc) {
     this.__onFinishChange = fnc;
     return this;
   };
 
-  WidgetBase.prototype.setValue = function ( newValue ) {
+  WidgetBase.prototype.setValue = function (newValue) {
     var _oldValue = this.propertyValue;
 
-    if ( this._isReadOnly !== true ) {
-      if ( newValue !== _oldValue ) {
+    if (this._isReadOnly !== true) {
+      if (newValue !== _oldValue) {
         this.propertyValue = newValue;
-        if ( this.__onChange ) {
-          this.__onChange.call( this, { 'id': this.propertyID,
+        if (this.__onChange) {
+          this.__onChange.call(this, {
+            'id': this.propertyID,
             'oldValue': _oldValue,
-            'newValue': newValue });
+            'newValue': newValue
+          });
         }
         this.updateDisplay();
       }
@@ -55,11 +59,13 @@ define([], function () {
   };
 
   WidgetBase.prototype.fireFinishChange = function () {
-    if ( this.originalValue !== this.propertyValue ) {
-      if ( this.__onFinishChange ) {
-        this.__onFinishChange.call( this, { 'id': this.propertyID,
+    if (this.originalValue !== this.propertyValue) {
+      if (this.__onFinishChange) {
+        this.__onFinishChange.call(this, {
+          'id': this.propertyID,
           'oldValue': this.originalValue,
-          'newValue': this.propertyValue });
+          'newValue': this.propertyValue
+        });
       }
       this.originalValue = this.propertyValue;
     }
@@ -80,12 +86,11 @@ define([], function () {
     this.el.remove();
   };
 
-  WidgetBase.prototype.setReadOnly = function ( isReadOnly ) {
+  WidgetBase.prototype.setReadOnly = function (isReadOnly) {
     this._isReadOnly = isReadOnly;
   };
 
-  WidgetBase.prototype.destroy = function () {
-  };
+  WidgetBase.prototype.destroy = function () {};
 
   return WidgetBase;
 });

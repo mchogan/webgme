@@ -1,50 +1,52 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define([ 'js/Utils/GMEConcepts',
-    'js/DragDrop/DragHelper',
-    'js/NodePropertyNames',
-    'js/RegistryKeys',
-    './../Crosscut/CrosscutConstants',
-    'js/Panels/ControllerBase/DiagramDesignerWidgetMultiTabMemberListControllerBase' ], function (
+define(['js/Utils/GMEConcepts',
+  'js/DragDrop/DragHelper',
+  'js/NodePropertyNames',
+  'js/RegistryKeys',
+  './../Crosscut/CrosscutConstants',
+  'js/Panels/ControllerBase/DiagramDesignerWidgetMultiTabMemberListControllerBase'
+], function (
   GMEConcepts,
   DragHelper,
   nodePropertyNames,
   REGISTRY_KEYS,
   ManualAspectConstants,
-  DiagramDesignerWidgetMultiTabMemberListControllerBase ) {
-
+  DiagramDesignerWidgetMultiTabMemberListControllerBase) {
 
   'use strict';
 
   var SetEditorController;
 
-  SetEditorController = function ( options ) {
+  SetEditorController = function (options) {
     options = options || {};
     options.loggerName = 'SetEditorController';
 
-    DiagramDesignerWidgetMultiTabMemberListControllerBase.call( this, options );
+    DiagramDesignerWidgetMultiTabMemberListControllerBase.call(this, options);
 
-    this.logger.debug( 'SetEditorController ctor finished' );
+    this.logger.debug('SetEditorController ctor finished');
   };
 
-  _.extend( SetEditorController.prototype, DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype );
+  _.extend(SetEditorController.prototype, DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype);
 
-  SetEditorController.prototype.getOrderedMemberListInfo = function ( memberListContainerObject ) {
+  SetEditorController.prototype.getOrderedMemberListInfo = function (memberListContainerObject) {
     var result = [],
-    memberListContainerID = this._memberListContainerID,
-    setNames = GMEConcepts.getSets( memberListContainerID ),
-    len;
+      memberListContainerID = this._memberListContainerID,
+      setNames = GMEConcepts.getSets(memberListContainerID),
+      len;
 
     len = setNames.length;
-    while ( len-- ) {
-      result.push({ 'memberListID': setNames[ len ],
-        'title': setNames[ len ],
+    while (len--) {
+      result.push({
+        'memberListID': setNames[len],
+        'title': setNames[len],
         'enableDeleteTab': false,
-        'enableRenameTab': false });
+        'enableRenameTab': false
+      });
     }
 
-    result.sort(function ( a,b ) {
-      if ( a.title.toLowerCase() < b.title.toLowerCase()) {
+    result.sort(function (a, b) {
+      if (a.title.toLowerCase() < b.title.toLowerCase()) {
         return -1;
       } else {
         return 1;
@@ -54,18 +56,18 @@ define([ 'js/Utils/GMEConcepts',
     return result;
   };
 
-
   /**********************************************************/
   /*         HANDLE OBJECT DRAG & DROP ACCEPTANCE           */
   /**********************************************************/
-  SetEditorController.prototype._onBackgroundDroppableAccept = function ( event, dragInfo ) {
-    var gmeIDList = DragHelper.getDragItems( dragInfo ),
-    accept = DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._onBackgroundDroppableAccept.call( this, event, dragInfo );
+  SetEditorController.prototype._onBackgroundDroppableAccept = function (event, dragInfo) {
+    var gmeIDList = DragHelper.getDragItems(dragInfo),
+      accept = DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._onBackgroundDroppableAccept.call(this,
+        event, dragInfo);
 
-    if ( accept === true ) {
+    if (accept === true) {
       //if based on the DiagramDesignerWidgetMultiTabMemberListControllerBase check it could be accepted, ie items are not members of the set so far
       //we need to see if we can accept them based on the META rules
-      accept = GMEConcepts.canAddToSet( this._memberListContainerID, this._selectedMemberListID, gmeIDList );
+      accept = GMEConcepts.canAddToSet(this._memberListContainerID, this._selectedMemberListID, gmeIDList);
     }
 
     return accept;
@@ -75,12 +77,12 @@ define([ 'js/Utils/GMEConcepts',
   /**********************************************************/
 
   /*
-     * Overwrite 'no tab' warning message to the user
-     */
+   * Overwrite 'no tab' warning message to the user
+   */
   SetEditorController.prototype.displayNoTabMessage = function () {
     var msg = 'The currently selected object does not contain any sets.';
 
-    this._widget.setBackgroundText( msg );
+    this._widget.setBackgroundText(msg);
   };
 
   return SetEditorController;

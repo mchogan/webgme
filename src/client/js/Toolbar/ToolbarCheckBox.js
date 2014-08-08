@@ -1,21 +1,22 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define([ 'js/Controls/iCheckBox',
-    './ToolbarItemBase' ], function ( iCheckBox,
-  ToolbarItemBase ) {
+define(['js/Controls/iCheckBox',
+  './ToolbarItemBase'
+], function (iCheckBox,
+  ToolbarItemBase) {
   'use strict';
 
   var ToolbarCheckBox;
 
-  ToolbarCheckBox = function ( params ) {
+  ToolbarCheckBox = function (params) {
 
-    iCheckBox.apply( this, [ params ]);
+    iCheckBox.apply(this, [params]);
 
-    this.el.addClass( 'toolbar-checkbox' );
+    this.el.addClass('toolbar-checkbox');
   };
 
-  _.extend( ToolbarCheckBox.prototype, iCheckBox.prototype );
-  _.extend( ToolbarCheckBox.prototype, ToolbarItemBase.prototype );
+  _.extend(ToolbarCheckBox.prototype, iCheckBox.prototype);
+  _.extend(ToolbarCheckBox.prototype, ToolbarItemBase.prototype);
 
   return ToolbarCheckBox;
 });

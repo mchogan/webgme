@@ -1,35 +1,33 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define ([
+define([
     'clientUtil'
   ],
-function ( util ) {
+  function (util) {
 
-  'use strict';
+    'use strict';
 
-  var parseInitialThingsToDoFromUrl, serializeStateToUrl;
+    var parseInitialThingsToDoFromUrl, serializeStateToUrl;
 
+    parseInitialThingsToDoFromUrl = function () {
+      return {
 
-  parseInitialThingsToDoFromUrl = function () {
-    return {
-
-      layoutToLoad: util.getURLParameterByName( 'layout' ) || 'DefaultLayout',
-      commitToLoad: util.getURLParameterByName( 'commit' ).toLowerCase(),
-      projectToLoad:  util.getURLParameterByName( 'project' ),
-      objectToLoad: util.getURLParameterByName( 'activeObject' ).toLowerCase(),
-      createNewProject: util.getURLParameterByName( 'create' ) === 'true',
-      branchToLoad: util.getURLParameterByName( 'branch' )
+        layoutToLoad: util.getURLParameterByName('layout') || 'DefaultLayout',
+        commitToLoad: util.getURLParameterByName('commit').toLowerCase(),
+        projectToLoad: util.getURLParameterByName('project'),
+        objectToLoad: util.getURLParameterByName('activeObject').toLowerCase(),
+        createNewProject: util.getURLParameterByName('create') === 'true',
+        branchToLoad: util.getURLParameterByName('branch')
+      };
     };
-  };
 
+    serializeStateToUrl = function () {
 
-  serializeStateToUrl = function () {
+    };
 
-  };
+    return {
+      parseInitialThingsToDoFromUrl: parseInitialThingsToDoFromUrl,
+      serializeStateToUrl: serializeStateToUrl
+    };
 
-  return {
-    parseInitialThingsToDoFromUrl:parseInitialThingsToDoFromUrl,
-    serializeStateToUrl: serializeStateToUrl
-  };
-
-});
+  });

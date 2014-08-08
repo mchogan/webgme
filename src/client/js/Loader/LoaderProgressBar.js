@@ -4,17 +4,17 @@
  * @author rkereskenyi / https://github.com/rkereskenyi
  */
 
-define([ 'css!/js/Loader/styles/LoaderProgressBar.css' ], function () {
+define(['css!/js/Loader/styles/LoaderProgressBar.css'], function () {
 
   'use strict';
 
   var LoaderProgressBar;
 
-  LoaderProgressBar = function ( params ) {
+  LoaderProgressBar = function (params) {
 
     this._el = params.containerElement;
 
-    if ( this._el.length === 0 ) {
+    if (this._el.length === 0) {
       throw 'LoaderProgressBar\'s container control with id:\'' + params.containerElement + '\' could not be found';
     }
   };
@@ -24,17 +24,19 @@ define([ 'css!/js/Loader/styles/LoaderProgressBar.css' ], function () {
   };
 
   LoaderProgressBar.prototype._removeElements = function () {
-    if ( this._loaderDiv ) {
+    if (this._loaderDiv) {
       this._loaderDiv.remove();
     }
     this._loaderDiv = null;
   };
 
   LoaderProgressBar.prototype._createElements = function () {
-    if ( !this._loaderDiv ) {
-      this._loaderDiv = $( '<div/>', { 'class': 'loader-progressbar' });
+    if (!this._loaderDiv) {
+      this._loaderDiv = $('<div/>', {
+        'class': 'loader-progressbar'
+      });
 
-      this._el.append( this._loaderDiv );
+      this._el.append(this._loaderDiv);
 
       //force reflow
       this._el.width();

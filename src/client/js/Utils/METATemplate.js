@@ -1,8 +1,9 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define([ 'underscore',
-    'js/Utils/METAAspectHelper' ], function ( _underscore,
-  METAAspectHelper ) {
+define(['underscore',
+  'js/Utils/METAAspectHelper'
+], function (_underscore,
+  METAAspectHelper) {
 
   'use strict';
 
@@ -16,9 +17,9 @@ define([ 'underscore',
 
   var _queryMetaTypes = function () {
     var nMetaTypes = METAAspectHelper.getMETAAspectTypes(),
-    m;
+      m;
 
-    if ( !_.isEqual( _metaTypes,nMetaTypes )) {
+    if (!_.isEqual(_metaTypes, nMetaTypes)) {
       //TODO: when displaying an error message make sure it's the very same project
       /*var metaOutOfDateMsg = _metaID + " is not up to date with the latest META aspect. Please update your local copy!";
             if (console.error) {
@@ -27,22 +28,22 @@ define([ 'underscore',
                 console.log(metaOutOfDateMsg);
             }*/
 
-      for ( m in _metaTypes ) {
-        if ( _metaTypes.hasOwnProperty( m )) {
-          delete _metaTypes[ m ];
+      for (m in _metaTypes) {
+        if (_metaTypes.hasOwnProperty(m)) {
+          delete _metaTypes[m];
         }
       }
 
-      for ( m in nMetaTypes ) {
-        if ( nMetaTypes.hasOwnProperty( m )) {
-          _metaTypes[ m ] = nMetaTypes[ m ];
+      for (m in nMetaTypes) {
+        if (nMetaTypes.hasOwnProperty(m)) {
+          _metaTypes[m] = nMetaTypes[m];
         }
       }
     }
   };
 
   //hook up to META ASPECT CHANGES
-  METAAspectHelper.addEventListener( METAAspectHelper.events.META_ASPECT_CHANGED, function () {
+  METAAspectHelper.addEventListener(METAAspectHelper.events.META_ASPECT_CHANGED, function () {
     _queryMetaTypes();
   });
 

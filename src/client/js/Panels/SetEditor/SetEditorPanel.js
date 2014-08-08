@@ -1,38 +1,38 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define([ 'js/PanelBase/PanelBaseWithHeader',
-    'js/PanelManager/IActivePanel',
-    'js/Widgets/SetEditor/SetEditorWidget',
-    './SetEditorController'
-  ], function ( PanelBaseWithHeader,
+define(['js/PanelBase/PanelBaseWithHeader',
+  'js/PanelManager/IActivePanel',
+  'js/Widgets/SetEditor/SetEditorWidget',
+  './SetEditorController'
+], function (PanelBaseWithHeader,
   IActivePanel,
   SetEditorWidget,
-  SetEditorController ) {
+  SetEditorController) {
 
   'use strict';
 
   var SetEditorPanel;
 
-  SetEditorPanel = function ( layoutManager, params ) {
+  SetEditorPanel = function (layoutManager, params) {
     var options = {};
     //set properties from options
-    options[ PanelBaseWithHeader.OPTIONS.LOGGER_INSTANCE_NAME ] = 'SetEditorPanel';
-    options[ PanelBaseWithHeader.OPTIONS.FLOATING_TITLE ] = true;
+    options[PanelBaseWithHeader.OPTIONS.LOGGER_INSTANCE_NAME] = 'SetEditorPanel';
+    options[PanelBaseWithHeader.OPTIONS.FLOATING_TITLE] = true;
 
     //call parent's constructor
-    PanelBaseWithHeader.apply( this, [ options, layoutManager ]);
+    PanelBaseWithHeader.apply(this, [options, layoutManager]);
 
     this._client = params.client;
 
     //initialize UI
     this._initialize();
 
-    this.logger.debug( 'SetEditorPanel ctor finished' );
+    this.logger.debug('SetEditorPanel ctor finished');
   };
 
   //inherit from PanelBaseWithHeader
-  _.extend( SetEditorPanel.prototype, PanelBaseWithHeader.prototype );
-  _.extend( SetEditorPanel.prototype, IActivePanel.prototype );
+  _.extend(SetEditorPanel.prototype, PanelBaseWithHeader.prototype);
+  _.extend(SetEditorPanel.prototype, IActivePanel.prototype);
 
   SetEditorPanel.prototype._initialize = function () {
     var self = this;
@@ -42,44 +42,48 @@ define([ 'js/PanelBase/PanelBaseWithHeader',
             this.$panelHeaderTitle.remove();
         }*/
 
-    this.widget = new SetEditorWidget( this.$el, { 'toolBar': this.toolBar });
+    this.widget = new SetEditorWidget(this.$el, {
+      'toolBar': this.toolBar
+    });
 
-    this.widget.setTitle = function ( title ) {
-      self.setTitle( title );
+    this.widget.setTitle = function (title) {
+      self.setTitle(title);
     };
 
     this.widget.onUIActivity = function () {
-      WebGMEGlobal.PanelManager.setActivePanel( self );
-      WebGMEGlobal.KeyboardManager.setListener( self.widget );
+      WebGMEGlobal.PanelManager.setActivePanel(self);
+      WebGMEGlobal.KeyboardManager.setListener(self.widget);
     };
 
-    this.control = new SetEditorController({ 'client': this._client,
-      'widget': this.widget });
+    this.control = new SetEditorController({
+      'client': this._client,
+      'widget': this.widget
+    });
 
     this.onActivate();
   };
 
   /* OVERRIDE FROM WIDGET-WITH-HEADER */
   /* METHOD CALLED WHEN THE WIDGET'S READ-ONLY PROPERTY CHANGES */
-  SetEditorPanel.prototype.onReadOnlyChanged = function ( isReadOnly ) {
+  SetEditorPanel.prototype.onReadOnlyChanged = function (isReadOnly) {
     //apply parent's onReadOnlyChanged
-    PanelBaseWithHeader.prototype.onReadOnlyChanged.call( this, isReadOnly );
+    PanelBaseWithHeader.prototype.onReadOnlyChanged.call(this, isReadOnly);
 
-    this.widget.setReadOnly( isReadOnly );
-    this.control.setReadOnly( isReadOnly );
+    this.widget.setReadOnly(isReadOnly);
+    this.control.setReadOnly(isReadOnly);
   };
 
-  SetEditorPanel.prototype.onResize = function ( width, height ) {
-    this.logger.debug( 'onResize --> width: ' + width + ', height: ' + height );
-    this.widget.onWidgetContainerResize( width, height );
+  SetEditorPanel.prototype.onResize = function (width, height) {
+    this.logger.debug('onResize --> width: ' + width + ', height: ' + height);
+    this.widget.onWidgetContainerResize(width, height);
   };
 
   SetEditorPanel.prototype.destroy = function () {
     this.control.destroy();
     this.widget.destroy();
 
-    PanelBaseWithHeader.prototype.destroy.call( this );
-    WebGMEGlobal.KeyboardManager.setListener( undefined );
+    PanelBaseWithHeader.prototype.destroy.call(this);
+    WebGMEGlobal.KeyboardManager.setListener(undefined);
     WebGMEGlobal.Toolbar.refresh();
   };
 
@@ -87,7 +91,7 @@ define([ 'js/PanelBase/PanelBaseWithHeader',
   SetEditorPanel.prototype.onActivate = function () {
     this.widget.onActivate();
     this.control.onActivate();
-    WebGMEGlobal.KeyboardManager.setListener( this.widget );
+    WebGMEGlobal.KeyboardManager.setListener(this.widget);
     WebGMEGlobal.Toolbar.refresh();
   };
 
@@ -95,7 +99,7 @@ define([ 'js/PanelBase/PanelBaseWithHeader',
   SetEditorPanel.prototype.onDeactivate = function () {
     this.widget.onDeactivate();
     this.control.onDeactivate();
-    WebGMEGlobal.KeyboardManager.setListener( undefined );
+    WebGMEGlobal.KeyboardManager.setListener(undefined);
     WebGMEGlobal.Toolbar.refresh();
   };
 

@@ -4,32 +4,33 @@
  * @author rkereskenyi / https://github.com/rkereskenyi
  */
 
-define([ 'logManager',
-    'js/Decorators/WidgetDecoratorBase' ], function ( logManager,
-  WidgetDecoratorBase ) {
+define(['logManager',
+  'js/Decorators/WidgetDecoratorBase'
+], function (logManager,
+  WidgetDecoratorBase) {
   'use strict';
 
   var PartBrowserWidgetDecoratorBase,
-  DECORATOR_ID = 'PartBrowserWidgetDecoratorBase';
+    DECORATOR_ID = 'PartBrowserWidgetDecoratorBase';
 
-  PartBrowserWidgetDecoratorBase = function ( params ) {
-    WidgetDecoratorBase.call( this, params );
+  PartBrowserWidgetDecoratorBase = function (params) {
+    WidgetDecoratorBase.call(this, params);
 
     this.skinParts = {};
 
     this._initialize();
 
-    this.logger.debug( 'Created' );
+    this.logger.debug('Created');
   };
 
-  _.extend( PartBrowserWidgetDecoratorBase.prototype, WidgetDecoratorBase.prototype );
+  _.extend(PartBrowserWidgetDecoratorBase.prototype, WidgetDecoratorBase.prototype);
 
   PartBrowserWidgetDecoratorBase.prototype.DECORATORID = DECORATOR_ID;
 
   /*PartBrowserWidgetDecoratorBase.prototype.setControlSpecificAttributes = function () {
     };*/
 
-  PartBrowserWidgetDecoratorBase.prototype.setControl = function ( control ) {
+  PartBrowserWidgetDecoratorBase.prototype.setControl = function (control) {
     this._control = control;
   };
 
@@ -37,7 +38,7 @@ define([ 'logManager',
     return this._control;
   };
 
-  PartBrowserWidgetDecoratorBase.prototype.setMetaInfo = function ( params ) {
+  PartBrowserWidgetDecoratorBase.prototype.setMetaInfo = function (params) {
     this._metaInfo = params;
   };
 
@@ -53,8 +54,8 @@ define([ 'logManager',
   };
 
   //called by the controller when an event arrives about registered subcomponent ID
-  PartBrowserWidgetDecoratorBase.prototype.notifyComponentEvent = function ( componentList ) {
-    this.logger.warning( 'notifyComponentEvent ' + componentList );
+  PartBrowserWidgetDecoratorBase.prototype.notifyComponentEvent = function (componentList) {
+    this.logger.warning('notifyComponentEvent ' + componentList);
   };
 
   //initialization code for the decorator
@@ -62,33 +63,28 @@ define([ 'logManager',
   //this.$el will be used later in the PartBrowserWidget's code, it must exist
   //NOTE - SHOULD NOT BE OVERRIDDEN
   PartBrowserWidgetDecoratorBase.prototype._initialize = function () {
-    this.$el = $( '<div/>' );
+    this.$el = $('<div/>');
   };
 
   //Called before the host designer item is added to the canvas DOM (DocumentFragment more precisely)
   //At this point the decorator should create its DOM representation
   //At this point no dimension information is available since the content exist only in memory, not yet rendered
   //NOTE - SHALL BE OVERRIDDEN WHEN NEEDED
-  PartBrowserWidgetDecoratorBase.prototype.beforeAppend = function () {
-  };
+  PartBrowserWidgetDecoratorBase.prototype.beforeAppend = function () {};
 
-  PartBrowserWidgetDecoratorBase.prototype.afterAppend = function () {
-  };
+  PartBrowserWidgetDecoratorBase.prototype.afterAppend = function () {};
 
   //Called when the decorator of the DesignerItem needs to be destroyed
   //There is no need to touch the DOM, it will be taken care of in the DesignerItem's code
   //Remove any additional business logic, free up resources, territory, etc...
   //NOTE - CAN BE OVERRIDDEN WHEN NEEDED
   PartBrowserWidgetDecoratorBase.prototype.destroy = function () {
-    this.logger.debug( 'PartBrowserWidgetDecoratorBase.destroyed' );
+    this.logger.debug('PartBrowserWidgetDecoratorBase.destroyed');
   };
-
 
   /************* ADDITIONAL METHODS ***************************/
   //called when the designer item should be updated
-  PartBrowserWidgetDecoratorBase.prototype.update = function () {
-  };
-
+  PartBrowserWidgetDecoratorBase.prototype.update = function () {};
 
   return PartBrowserWidgetDecoratorBase;
 });

@@ -5,43 +5,43 @@
  * @author nabana / https://github.com/nabana
  */
 
-
-define([ 'jquery',
-    './DropDownMenu' ], function ( _jquery,
-  DropDownMenu ) {
+define(['jquery',
+  './DropDownMenu'
+], function (_jquery,
+  DropDownMenu) {
 
   'use strict';
 
   var DropDownList,
-  __parent__ = DropDownMenu,
-  __parent_proto__ = DropDownMenu.prototype,
-  DEFAULT_UNDEFINED_TEXT = 'N/A';
+    __parent__ = DropDownMenu,
+    __parent_proto__ = DropDownMenu.prototype,
+    DEFAULT_UNDEFINED_TEXT = 'N/A';
 
-  DropDownList = function ( params ) {
+  DropDownList = function (params) {
     var self = this;
 
     //apply parent constructor
-    __parent__.apply( this, [ params ]);
+    __parent__.apply(this, [params]);
 
     //DropDownList own attributes
     this._selectedValue = undefined;
     this._undefinedValueText = DEFAULT_UNDEFINED_TEXT;
-    this.setTitle( this._undefinedValueText );
+    this.setTitle(this._undefinedValueText);
   };
 
   //inherit DropDownMenu's stuff
-  _.extend( DropDownList.prototype, DropDownMenu.prototype );
+  _.extend(DropDownList.prototype, DropDownMenu.prototype);
 
-  DropDownList.prototype.setUndefinedValueText = function ( text ) {
+  DropDownList.prototype.setUndefinedValueText = function (text) {
     this._undefinedValueText = text;
   };
 
   //define DropDownList's own
-  DropDownList.prototype.onItemClicked = function ( value ) {
-    this._setSelectedValue( value, false );
+  DropDownList.prototype.onItemClicked = function (value) {
+    this._setSelectedValue(value, false);
   };
 
-  DropDownList.prototype.selectedValueChanged = function ( value ) {
+  DropDownList.prototype.selectedValueChanged = function (value) {
     //TODO: override this to get notified about new value selection
   };
 
@@ -67,54 +67,56 @@ define([ 'jquery',
 
   /********************** PRIVATE API *****************************/
 
-  DropDownList.prototype.setSelectedValue = function ( val ) {
-    this._setSelectedValue( val, false );
+  DropDownList.prototype.setSelectedValue = function (val) {
+    this._setSelectedValue(val, false);
   };
 
-  DropDownList.prototype._setSelectedValue = function ( val, noEvent ) {
+  DropDownList.prototype._setSelectedValue = function (val, noEvent) {
     var li,
-    text;
+      text;
 
-    if ( this._selectedValue !== val ) {
-      if ( val === null || val === undefined ) {
+    if (this._selectedValue !== val) {
+      if (val === null || val === undefined) {
         this._selectedValue = undefined;
-        this.setTitle( this._undefinedValueText );
+        this.setTitle(this._undefinedValueText);
         this._applySelectedIcon();
       } else {
-        li = this._ul.find( 'li[data-val="' + val + '"]' );
+        li = this._ul.find('li[data-val="' + val + '"]');
 
         //if that value exist at all in the DropDownList
-        if ( li.length !== 0 ) {
+        if (li.length !== 0) {
           this._selectedValue = val;
 
-          text = li.find( '> a' ).text();
-          this.setTitle( text );
+          text = li.find('> a').text();
+          this.setTitle(text);
 
-          this._applySelectedIcon( li );
+          this._applySelectedIcon(li);
 
-          if ( noEvent !== true ) {
-            this.selectedValueChanged( this._selectedValue );
+          if (noEvent !== true) {
+            this.selectedValueChanged(this._selectedValue);
           }
         }
       }
     }
   };
 
-  DropDownList.prototype._applySelectedIcon = function ( li ) {
+  DropDownList.prototype._applySelectedIcon = function (li) {
     var a,
-    selectedIcon;
+      selectedIcon;
 
     //first remove existing
-    this._ul.find( 'i.icon-ok' ).remove();
+    this._ul.find('i.icon-ok').remove();
 
-    if ( li ) {
-      a = li.find( '> a' );
-      selectedIcon = $( '<i class="glyphicon glyphicon-ok glyphicon glyphicon-ok"></i>' );
+    if (li) {
+      a = li.find('> a');
+      selectedIcon = $('<i class="glyphicon glyphicon-ok glyphicon glyphicon-ok"></i>');
 
-      selectedIcon.css({ 'margin-left': '-16px',
-        'margin-right': '2px' });
+      selectedIcon.css({
+        'margin-left': '-16px',
+        'margin-right': '2px'
+      });
 
-      a.prepend( selectedIcon );
+      a.prepend(selectedIcon);
     }
   };
 

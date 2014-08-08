@@ -1,10 +1,11 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define([ 'js/Constants',
-    'js/NodePropertyNames',
-    'js/RegistryKeys' ], function ( CONSTANTS,
+define(['js/Constants',
+  'js/NodePropertyNames',
+  'js/RegistryKeys'
+], function (CONSTANTS,
   nodePropertyNames,
-  REGISTRY_KEYS ) {
+  REGISTRY_KEYS) {
 
   'use strict';
 
@@ -12,35 +13,35 @@ define([ 'js/Constants',
 
   var displayFormatKey = REGISTRY_KEYS.DISPLAY_FORMAT;
 
-  var _resolve = function ( obj ) {
+  var _resolve = function (obj) {
     var result = '',
-    displayFormat,
-    regAttr = new RegExp(( ATTRIBUTE_MARKER + '\\w+' ).replace( '$', '\\$' ), 'g' ),
-    attrKeyValues = {},
-    m,
-    key,
-    re;
+      displayFormat,
+      regAttr = new RegExp((ATTRIBUTE_MARKER + '\\w+').replace('$', '\\$'), 'g'),
+      attrKeyValues = {},
+      m,
+      key,
+      re;
 
-    if ( obj ) {
-      displayFormat = obj.getRegistry( displayFormatKey );
+    if (obj) {
+      displayFormat = obj.getRegistry(displayFormatKey);
 
       //get all the attribute keys
       do {
-        m = regAttr.exec( displayFormat );
-        if ( m ) {
-          attrKeyValues[ m[ 0 ]] = undefined;
+        m = regAttr.exec(displayFormat);
+        if (m) {
+          attrKeyValues[m[0]] = undefined;
         }
-      } while ( m );
+      } while (m);
 
       result = displayFormat;
 
-      for ( key in attrKeyValues ) {
-        if ( attrKeyValues.hasOwnProperty( key )) {
-          re = new RegExp( key.replace( '$', '\\$' ), 'g' );
-          attrKeyValues[ key ] = obj.getAttribute( key.replace( ATTRIBUTE_MARKER, '' ));
+      for (key in attrKeyValues) {
+        if (attrKeyValues.hasOwnProperty(key)) {
+          re = new RegExp(key.replace('$', '\\$'), 'g');
+          attrKeyValues[key] = obj.getAttribute(key.replace(ATTRIBUTE_MARKER, ''));
 
-          if ( attrKeyValues[ key ] !== undefined && attrKeyValues[ key ] !== null ) {
-            result = result.replace( re, attrKeyValues[ key ]);
+          if (attrKeyValues[key] !== undefined && attrKeyValues[key] !== null) {
+            result = result.replace(re, attrKeyValues[key]);
           }
         }
       }
@@ -49,5 +50,7 @@ define([ 'js/Constants',
     return result;
   };
 
-  return { resolve: _resolve };
+  return {
+    resolve: _resolve
+  };
 });

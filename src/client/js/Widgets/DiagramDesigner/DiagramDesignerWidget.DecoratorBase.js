@@ -1,17 +1,18 @@
 /*globals define, _, requirejs, WebGMEGlobal, Raphael*/
 
-define([ 'js/Decorators/WidgetDecoratorBase',
-    './DiagramDesignerWidget.Constants',
-    './DiagramDesignerWidget.DecoratorBase.ConnectionArea' ], function ( WidgetDecoratorBase,
+define(['js/Decorators/WidgetDecoratorBase',
+  './DiagramDesignerWidget.Constants',
+  './DiagramDesignerWidget.DecoratorBase.ConnectionArea'
+], function (WidgetDecoratorBase,
   DiagramDesignerWidgetConstants,
-  DiagramDesignerWidgetDecoratorBaseConnectionArea ) {
+  DiagramDesignerWidgetDecoratorBaseConnectionArea) {
   'use strict';
 
   var DiagramDesignerWidgetDecoratorBase,
-  DECORATOR_ID = 'DiagramDesignerWidgetDecoratorBase';
+    DECORATOR_ID = 'DiagramDesignerWidgetDecoratorBase';
 
-  DiagramDesignerWidgetDecoratorBase = function ( params ) {
-    WidgetDecoratorBase.call( this, params );
+  DiagramDesignerWidgetDecoratorBase = function (params) {
+    WidgetDecoratorBase.call(this, params);
 
     this.hostDesignerItem = params.host;
 
@@ -21,15 +22,15 @@ define([ 'js/Decorators/WidgetDecoratorBase',
 
     this._initialize();
 
-    this.logger.debug( 'Created' );
+    this.logger.debug('Created');
   };
 
-  _.extend( DiagramDesignerWidgetDecoratorBase.prototype, WidgetDecoratorBase.prototype );
-  _.extend( DiagramDesignerWidgetDecoratorBase.prototype, DiagramDesignerWidgetDecoratorBaseConnectionArea.prototype );
+  _.extend(DiagramDesignerWidgetDecoratorBase.prototype, WidgetDecoratorBase.prototype);
+  _.extend(DiagramDesignerWidgetDecoratorBase.prototype, DiagramDesignerWidgetDecoratorBaseConnectionArea.prototype);
 
   DiagramDesignerWidgetDecoratorBase.prototype.DECORATORID = DECORATOR_ID;
 
-  DiagramDesignerWidgetDecoratorBase.prototype.setControl = function ( control ) {
+  DiagramDesignerWidgetDecoratorBase.prototype.setControl = function (control) {
     this._control = control;
   };
 
@@ -37,7 +38,7 @@ define([ 'js/Decorators/WidgetDecoratorBase',
     return this._control;
   };
 
-  DiagramDesignerWidgetDecoratorBase.prototype.setMetaInfo = function ( params ) {
+  DiagramDesignerWidgetDecoratorBase.prototype.setMetaInfo = function (params) {
     this._metaInfo = params;
   };
 
@@ -46,7 +47,7 @@ define([ 'js/Decorators/WidgetDecoratorBase',
   };
 
   //NOTE - CAN BE OVERRIDDEN TO SPECIFY CUSTOM TEMPLATE FOR THE DECORATOR
-  DiagramDesignerWidgetDecoratorBase.prototype.$DOMBase = $( '' );
+  DiagramDesignerWidgetDecoratorBase.prototype.$DOMBase = $('');
 
   //initialization code for the decorator
   //this.$el will be created as the top-level container for the decorator's DOM
@@ -67,13 +68,13 @@ define([ 'js/Decorators/WidgetDecoratorBase',
   //NODE - CAN BE OVERRIDDEN WHEN NEEDED
   DiagramDesignerWidgetDecoratorBase.prototype.initializeConnectors = function () {
     //find connectors
-    this.$sourceConnectors = this.$el.find( '.' + DiagramDesignerWidgetConstants.CONNECTOR_CLASS );
+    this.$sourceConnectors = this.$el.find('.' + DiagramDesignerWidgetConstants.CONNECTOR_CLASS);
     this.$endConnectors = this.$sourceConnectors;
 
-    if ( this.hostDesignerItem ) {
-      this.hostDesignerItem.registerConnectors( this.$sourceConnectors );
+    if (this.hostDesignerItem) {
+      this.hostDesignerItem.registerConnectors(this.$sourceConnectors);
     } else {
-      this.logger.error( 'Decorator\'s hostDesignerItem is not set' );
+      this.logger.error('Decorator\'s hostDesignerItem is not set');
     }
 
     this.hideSourceConnectors();
@@ -89,9 +90,9 @@ define([ 'js/Decorators/WidgetDecoratorBase',
   //            these IDs were defined by the decorator itself
   //            NOTE: if the value is undefined, the connectors for the host item should be highlighted
   //                  if the value is not undefined, the connector for the corresponding subcomponent should be highlighted
-  DiagramDesignerWidgetDecoratorBase.prototype.showSourceConnectors = function ( params ) {
-    this.logger.debug( 'showSourceConnectors: ' + JSON.stringify( params ));
-    this.$sourceConnectors.appendTo( this.$el );
+  DiagramDesignerWidgetDecoratorBase.prototype.showSourceConnectors = function (params) {
+    this.logger.debug('showSourceConnectors: ' + JSON.stringify(params));
+    this.$sourceConnectors.appendTo(this.$el);
   };
 
   //Hides the 'connectors' - detaches them from the DOM
@@ -108,9 +109,9 @@ define([ 'js/Decorators/WidgetDecoratorBase',
   //            these IDs were defined by the decorator itself
   //            NOTE: if the value is undefined, the connectors for the host item should be highlighted
   //                  if the value is not undefined, the connector for the corresponding subcomponent should be highlighted
-  DiagramDesignerWidgetDecoratorBase.prototype.showEndConnectors = function ( params ) {
-    this.logger.debug( 'showEndConnectors: ' + JSON.stringify( params ));
-    this.$endConnectors.appendTo( this.$el );
+  DiagramDesignerWidgetDecoratorBase.prototype.showEndConnectors = function (params) {
+    this.logger.debug('showEndConnectors: ' + JSON.stringify(params));
+    this.$endConnectors.appendTo(this.$el);
   };
 
   //Hides the 'connectors' - detaches them from the DOM
@@ -124,8 +125,7 @@ define([ 'js/Decorators/WidgetDecoratorBase',
   //NOTE - DO NOT ACCESS ANY LAYOUT OR DIMENSION INFORMATION FOR PERFORMANCE REASONS
   //NOTE - ALL LAYOUT INFORMATION SHOULD BE QUERIED IN onRenderGetLayoutInfo
   //NOTE - SHALL BE OVERRIDDEN WHEN NEEDED
-  DiagramDesignerWidgetDecoratorBase.prototype.on_addTo = function () {
-  };
+  DiagramDesignerWidgetDecoratorBase.prototype.on_addTo = function () {};
 
   //All DOM queries that causes reflow (position / width / height / etc) should be done here
   //Use helper object 'this.renderLayoutInfo' to store info needed
@@ -154,8 +154,8 @@ define([ 'js/Decorators/WidgetDecoratorBase',
   //Please set it correctly
   //NOTE - SHALL BE OVERRIDDEN
   DiagramDesignerWidgetDecoratorBase.prototype.calculateDimension = function () {
-    if ( this.hostDesignerItem ) {
-      this.hostDesignerItem.setSize( this.$el.outerWidth( true ), this.$el.outerHeight( true ));
+    if (this.hostDesignerItem) {
+      this.hostDesignerItem.setSize(this.$el.outerWidth(true), this.$el.outerHeight(true));
     }
   };
 
@@ -168,19 +168,21 @@ define([ 'js/Decorators/WidgetDecoratorBase',
   //connectionMetaInfo object is the metaInfo of the connection component (if any)
   //result should be an array of the area descriptors
   //NOTE - SHALL BE OVERRIDDEN WHEN NEEDED
-  DiagramDesignerWidgetDecoratorBase.prototype.getConnectionAreas = function ( id, isEnd, connectionMetaInfo ) {
+  DiagramDesignerWidgetDecoratorBase.prototype.getConnectionAreas = function (id, isEnd, connectionMetaInfo) {
     var result = [];
 
     //by default return the center point of the item
     //canvas will draw the connection to / from this coordinate
-    result.push({ 'id': '0',
+    result.push({
+      'id': '0',
       'x1': this.hostDesignerItem.getWidth() / 2,
       'y1': this.hostDesignerItem.getHeight() / 2,
       'x2': this.hostDesignerItem.getWidth() / 2,
       'y2': this.hostDesignerItem.getHeight() / 2,
       'angle1': 270,
       'angle2': 270,
-      'len': 10 });
+      'len': 10
+    });
 
     return result;
   };
@@ -190,7 +192,7 @@ define([ 'js/Decorators/WidgetDecoratorBase',
   //Remove any additional business logic, free up resources, territory, etc...
   //NOTE - CAN BE OVERRIDDEN WHEN NEEDED
   DiagramDesignerWidgetDecoratorBase.prototype.destroy = function () {
-    this.logger.debug( 'DiagramDesignerWidgetDecoratorBase.destroyed' );
+    this.logger.debug('DiagramDesignerWidgetDecoratorBase.destroyed');
   };
 
   /******************** EVENT HANDLERS ************************/
@@ -198,28 +200,28 @@ define([ 'js/Decorators/WidgetDecoratorBase',
   //called when the mouse enters the DesignerItem's main container
   //return TRUE if decorator code handled the event
   //when returned FALSE, DesignerItem's event handler will be executed
-  DiagramDesignerWidgetDecoratorBase.prototype.onMouseEnter = function ( event ) {
+  DiagramDesignerWidgetDecoratorBase.prototype.onMouseEnter = function (event) {
     return false;
   };
 
   //called when the mouse leaves the DesignerItem's main container
   //return TRUE if decorator code handled the event
   //when returned FALSE, DesignerItem's event handler will be executed
-  DiagramDesignerWidgetDecoratorBase.prototype.onMouseLeave = function ( event ) {
+  DiagramDesignerWidgetDecoratorBase.prototype.onMouseLeave = function (event) {
     return false;
   };
 
   //called when the mouse leaves the DesignerItem's receives mousedown
   //return TRUE if decorator code handled the event
   //when returned FALSE, DesignerItem's event handler will be executed
-  DiagramDesignerWidgetDecoratorBase.prototype.onMouseDown = function ( event ) {
+  DiagramDesignerWidgetDecoratorBase.prototype.onMouseDown = function (event) {
     return false;
   };
 
   //called when the mouse leaves the DesignerItem's receives mouseup
   //return TRUE if decorator code handled the event
   //when returned FALSE, DesignerItem's event handler will be executed
-  DiagramDesignerWidgetDecoratorBase.prototype.onMouseUp = function ( event ) {
+  DiagramDesignerWidgetDecoratorBase.prototype.onMouseUp = function (event) {
     return false;
   };
 
@@ -240,25 +242,20 @@ define([ 'js/Decorators/WidgetDecoratorBase',
   //called when double click happens on the DesignerItem
   //return TRUE if decorator code handled the event
   //when returned FALSE, DesignerItem's event handler will be executed
-  DiagramDesignerWidgetDecoratorBase.prototype.onDoubleClick = function ( event ) {
+  DiagramDesignerWidgetDecoratorBase.prototype.onDoubleClick = function (event) {
     return false;
   };
 
   /******************** END OF - EVENT HANDLERS ************************/
 
-
-
   /************* ADDITIONAL METHODS ***************************/
   //called when the designer item should be updated
-  DiagramDesignerWidgetDecoratorBase.prototype.update = function () {
-  };
+  DiagramDesignerWidgetDecoratorBase.prototype.update = function () {};
 
   //called when the designer item's subcomponent should be updated
-  DiagramDesignerWidgetDecoratorBase.prototype.updateSubcomponent = function ( subComponentId ) {
-  };
+  DiagramDesignerWidgetDecoratorBase.prototype.updateSubcomponent = function (subComponentId) {};
 
-  DiagramDesignerWidgetDecoratorBase.prototype.readOnlyMode = function ( readOnlyMode ) {
-  };
+  DiagramDesignerWidgetDecoratorBase.prototype.readOnlyMode = function (readOnlyMode) {};
 
   //Called when connection is being drawn from this item's or one of its subcomponents' connector
   //need to return an object that will be passed to other decorators along with showEndConnector() so
@@ -267,14 +264,14 @@ define([ 'js/Decorators/WidgetDecoratorBase',
   //paramters:
   //  - id: if undefined, need to return the metainfo descriptor for the decorated object
   //  -     if has a value, need to return the metainfo of the subcomponent with the given id
-  DiagramDesignerWidgetDecoratorBase.prototype.getConnectorMetaInfo = function ( id ) {
+  DiagramDesignerWidgetDecoratorBase.prototype.getConnectorMetaInfo = function (id) {
     return undefined;
   };
 
   //Search support for DiagramDesignerWidget
   //return true if this item matches the search criteria described in searchDesc
   //otherwise return false
-  DiagramDesignerWidgetDecoratorBase.prototype.doSearch = function ( searchDesc ) {
+  DiagramDesignerWidgetDecoratorBase.prototype.doSearch = function (searchDesc) {
     return false;
   };
 
@@ -286,10 +283,9 @@ define([ 'js/Decorators/WidgetDecoratorBase',
   // 'end-arrow': "block",
   // 'pattern': '.'}
   // for more information see DiagramDesignerWidget.Constants.js
-  DiagramDesignerWidgetDecoratorBase.prototype.getDrawnConnectionVisualStyle = function ( subComponentId ) {
+  DiagramDesignerWidgetDecoratorBase.prototype.getDrawnConnectionVisualStyle = function (subComponentId) {
     return null;
   };
-
 
   //called by the controller and the decorator can specify the territory rule for itself
   //must return an object of id - rule pairs, like
@@ -299,8 +295,8 @@ define([ 'js/Decorators/WidgetDecoratorBase',
   };
 
   //called by the controller when an event arrives about registered component ID
-  DiagramDesignerWidgetDecoratorBase.prototype.notifyComponentEvent = function ( componentList ) {
-    this.logger.warning( 'notifyComponentEvent not overridden in decorator' + JSON.stringify( componentList ));
+  DiagramDesignerWidgetDecoratorBase.prototype.notifyComponentEvent = function (componentList) {
+    this.logger.warning('notifyComponentEvent not overridden in decorator' + JSON.stringify(componentList));
   };
 
   return DiagramDesignerWidgetDecoratorBase;

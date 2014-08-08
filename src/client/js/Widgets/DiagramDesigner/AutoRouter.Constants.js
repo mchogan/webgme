@@ -5,44 +5,44 @@
  * @author brollb / https://github/brollb
  */
 
-define([ './AutoRouter.Point' ], function ( ArPoint ) {
-//define([], function (){
+define(['./AutoRouter.Point'], function (ArPoint) {
+  //define([], function (){
 
   'use strict';
 
   return {
-    'EMPTY_POINT': new ArPoint( -100000, -100000 ),
+    'EMPTY_POINT': new ArPoint(-100000, -100000),
     'ED_MAXCOORD': 100000,
-    'ED_MINCOORD': -2,//This allows connections to be still be draw when box is pressed against the edge
+    'ED_MINCOORD': -2, //This allows connections to be still be draw when box is pressed against the edge
     'ED_SMALLGAP': 15,
     'CONNECTIONCUSTOMIZATIONDATAVERSION': 0,
     'EMPTYCONNECTIONCUSTOMIZATIONDATAMAGIC': -1,
-    'DEBUG':  false,
+    'DEBUG': false,
     'BUFFER': 10,
 
-    'EDLS_S': 15,//ED_SMALLGAP
+    'EDLS_S': 15, //ED_SMALLGAP
     'EDLS_R': 15 + 1, //ED_SMALLGAP+1
-    'EDLS_D': 100000 + 2,//ED_MAXCOORD - ED_MINCOORD,
+    'EDLS_D': 100000 + 2, //ED_MAXCOORD - ED_MINCOORD,
 
     'ARPATH_EndOnDefault': 0x0000,
     'ARPATH_EndOnTop': 0x0010,
     'ARPATH_EndOnRight': 0x0020,
     'ARPATH_EndOnBottom': 0x0040,
     'ARPATH_EndOnLeft': 0x0080,
-    'ARPATH_EndMask': ( 0x0010 | 0x0020 | 0x0040 | 0x0080 ),//(ARPATH_EndOnTop | ARPATH_EndOnRight | ARPATH_EndOnBottom | ARPATH_EndOnLeft),
+    'ARPATH_EndMask': (0x0010 | 0x0020 | 0x0040 | 0x0080), //(ARPATH_EndOnTop | ARPATH_EndOnRight | ARPATH_EndOnBottom | ARPATH_EndOnLeft),
 
     'ARPATH_StartOnDefault': 0x0000,
     'ARPATH_StartOnTop': 0x0100,
     'ARPATH_StartOnRight': 0x0200,
     'ARPATH_StartOnBottom': 0x0400,
     'ARPATH_StartOnLeft': 0x0800,
-    'ARPATH_StartMask': ( 0x0100 | 0x0200 | 0x0400 | 0x0800 ),//(ARPATH_StartOnTop | ARPATH_StartOnRight | ARPATH_StartOnBottom | ARPATH_StartOnLeft),
+    'ARPATH_StartMask': (0x0100 | 0x0200 | 0x0400 | 0x0800), //(ARPATH_StartOnTop | ARPATH_StartOnRight | ARPATH_StartOnBottom | ARPATH_StartOnLeft),
 
-    'ARPATH_HighLighted': 0x0002,		// attributes,
+    'ARPATH_HighLighted': 0x0002, // attributes,
     'ARPATH_Fixed': 0x0001,
     'ARPATH_Default': 0x0000,
 
-    'ARPATHST_Connected': 0x0001,		// states,
+    'ARPATHST_Connected': 0x0001, // states,
     'ARPATHST_Default': 0x0000,
 
     // Port Connection Variables

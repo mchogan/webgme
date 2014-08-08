@@ -1,17 +1,16 @@
 /*globals define, _, requirejs, WebGMEGlobal, Raphael*/
 
-define([ 'eventDispatcher' ], function ( EventDispatcher ) {
+define(['eventDispatcher'], function (EventDispatcher) {
 
   'use strict';
 
   var DiagramDesignerWidgetEventDispatcher;
 
-  DiagramDesignerWidgetEventDispatcher = function () {
-  };
+  DiagramDesignerWidgetEventDispatcher = function () {};
 
   DiagramDesignerWidgetEventDispatcher.prototype._addEventDispatcherExtensions = function () {
     //event functions to relay information between users
-    $.extend( this, new EventDispatcher());
+    $.extend(this, new EventDispatcher());
 
     this.events = {
       'ITEM_POSITION_CHANGED': 'ITEM_POSITION_CHANGED', //{ ID, x, y}
@@ -20,7 +19,7 @@ define([ 'eventDispatcher' ], function ( EventDispatcher ) {
       'ON_COMPONENT_DELETE': 'ON_COMPONENT_DELETE', // ID
       'ON_UNREGISTER_SUBCOMPONENT': 'ON_UNREGISTER_SUBCOMPONENT', // {objectID, subcomponentID},
       'ON_COMPONENT_CREATE': 'ON_COMPONENT_CREATE', // ID
-      'ON_COMPONENT_UPDATE': 'ON_COMPONENT_UPDATE',  // ID
+      'ON_COMPONENT_UPDATE': 'ON_COMPONENT_UPDATE', // ID
       'ON_CLEAR': 'ON_CLEAR', // ID
       'ITEM_SIZE_CHANGED': 'ITEM_SIZE_CHANGED' //{ ID, w, h}
     };

@@ -1,19 +1,19 @@
 /*globals define, _, requirejs, WebGMEGlobal, Raphael*/
 
-define([ 'js/Constants' ], function ( CONSTANTS ) {
+define(['js/Constants'], function (CONSTANTS) {
 
   'use strict';
 
   //return string constants
   return {
     /*
-         * TERRITORY EVENTS
-         */
+     * TERRITORY EVENTS
+     */
     SELF: '__SELF__',
 
     /*
-         * CLASS DEFINITIONS
-         */
+     * CLASS DEFINITIONS
+     */
     DESIGNER_ITEM_CLASS: 'designer-item',
     DESIGNER_CONNECTION_CLASS: 'designer-connection',
     CONNECTION_DRAGGABLE_END_CLASS: 'c-d-end',
@@ -37,8 +37,8 @@ define([ 'js/Constants' ], function ( CONSTANTS ) {
     DATA_SUBCOMPONENT_ID: 'data-sid',
 
     /*
-         * LINE STYLE PARAMETERS KEYS
-         */
+     * LINE STYLE PARAMETERS KEYS
+     */
     LINE_WIDTH: CONSTANTS.LINE_STYLE.WIDTH,
     LINE_COLOR: CONSTANTS.LINE_STYLE.COLOR,
     LINE_PATTERN: CONSTANTS.LINE_STYLE.PATTERN,
@@ -51,14 +51,14 @@ define([ 'js/Constants' ], function ( CONSTANTS ) {
     LINE_ARROWS: CONSTANTS.LINE_STYLE.LINE_ARROWS,
 
     /*
-         * CONNECTION CONSTANTS
-         */
+     * CONNECTION CONSTANTS
+     */
     PATH_SHADOW_ID_PREFIX: 'p_',
     PATH_SHADOW_ARROW_END_ID_PREFIX: 'p_e_',
 
     /*
-         * ROTATINO RESET CONSTANTS
-         */
+     * ROTATINO RESET CONSTANTS
+     */
     ROTATION_RESET: 'reset'
   };
 });

@@ -1,76 +1,77 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define([ 'jquery',
-    'js/Constants',
-    'js/NodePropertyNames',
-    'js/RegistryKeys',
-    'js/Utils/METAAspectHelper',
-    'js/Panels/MetaEditor/MetaEditorConstants',
-    'js/Utils/DisplayFormat' ], function ( _jquery,
+define(['jquery',
+  'js/Constants',
+  'js/NodePropertyNames',
+  'js/RegistryKeys',
+  'js/Utils/METAAspectHelper',
+  'js/Panels/MetaEditor/MetaEditorConstants',
+  'js/Utils/DisplayFormat'
+], function (_jquery,
   CONSTANTS,
   nodePropertyNames,
   REGISTRY_KEYS,
   METAAspectHelper,
   MetaEditorConstants,
-  displayFormat ) {
+  displayFormat) {
 
   'use strict';
 
   var _client,
-  DEFAULT_LINE_STYLE = {};
+    DEFAULT_LINE_STYLE = {};
 
-  DEFAULT_LINE_STYLE[ CONSTANTS.LINE_STYLE.WIDTH ] = 1;
-  DEFAULT_LINE_STYLE[ CONSTANTS.LINE_STYLE.COLOR ] = '#000000';
-  DEFAULT_LINE_STYLE[ CONSTANTS.LINE_STYLE.PATTERN ] = CONSTANTS.LINE_STYLE.PATTERNS.SOLID;
-  DEFAULT_LINE_STYLE[ CONSTANTS.LINE_STYLE.TYPE ] = CONSTANTS.LINE_STYLE.TYPES.NONE;
-  DEFAULT_LINE_STYLE[ CONSTANTS.LINE_STYLE.START_ARROW ] = CONSTANTS.LINE_STYLE.LINE_ARROWS.NONE;
-  DEFAULT_LINE_STYLE[ CONSTANTS.LINE_STYLE.END_ARROW ] = CONSTANTS.LINE_STYLE.LINE_ARROWS.NONE;
-  DEFAULT_LINE_STYLE[ CONSTANTS.LINE_STYLE.CUSTOM_POINTS ] = [];
+  DEFAULT_LINE_STYLE[CONSTANTS.LINE_STYLE.WIDTH] = 1;
+  DEFAULT_LINE_STYLE[CONSTANTS.LINE_STYLE.COLOR] = '#000000';
+  DEFAULT_LINE_STYLE[CONSTANTS.LINE_STYLE.PATTERN] = CONSTANTS.LINE_STYLE.PATTERNS.SOLID;
+  DEFAULT_LINE_STYLE[CONSTANTS.LINE_STYLE.TYPE] = CONSTANTS.LINE_STYLE.TYPES.NONE;
+  DEFAULT_LINE_STYLE[CONSTANTS.LINE_STYLE.START_ARROW] = CONSTANTS.LINE_STYLE.LINE_ARROWS.NONE;
+  DEFAULT_LINE_STYLE[CONSTANTS.LINE_STYLE.END_ARROW] = CONSTANTS.LINE_STYLE.LINE_ARROWS.NONE;
+  DEFAULT_LINE_STYLE[CONSTANTS.LINE_STYLE.CUSTOM_POINTS] = [];
 
-  var _initialize = function ( client ) {
-    if ( !_client ) {
+  var _initialize = function (client) {
+    if (!_client) {
       _client = client;
     }
   };
 
-  var _getConnectionVisualProperties = function ( objID ) {
-    var obj = _client.getNode( objID ),
-    result = {},
-    getValue,
-    val;
+  var _getConnectionVisualProperties = function (objID) {
+    var obj = _client.getNode(objID),
+      result = {},
+      getValue,
+      val;
 
-    getValue = function ( srcObj, regKey, type ) {
+    getValue = function (srcObj, regKey, type) {
       var result,
-      regValue;
+        regValue;
 
-      if ( srcObj ) {
-        regValue = srcObj.getRegistry( regKey );
-        if ( regValue ) {
-          switch ( type ) {
-            case 'int':
-              try {
-                result = parseInt( regValue, 10 );
-              } catch ( e ) {
-                  result = undefined;
-                }
-              break;
-            case 'array':
-              try {
-                if ( !_.isArray( regValue )) {
-                  result = JSON.parse( regValue );
-                } else {
-                  result = regValue.slice( 0 );
-                }
+      if (srcObj) {
+        regValue = srcObj.getRegistry(regKey);
+        if (regValue) {
+          switch (type) {
+          case 'int':
+            try {
+              result = parseInt(regValue, 10);
+            } catch (e) {
+              result = undefined;
+            }
+            break;
+          case 'array':
+            try {
+              if (!_.isArray(regValue)) {
+                result = JSON.parse(regValue);
+              } else {
+                result = regValue.slice(0);
+              }
 
-                if ( !_.isArray( result )) {
-                  result = undefined;
-                }
-              } catch ( e ) {
-                  result = undefined;
-                }
-              break;
-            default:
-              result = regValue;
+              if (!_.isArray(result)) {
+                result = undefined;
+              }
+            } catch (e) {
+              result = undefined;
+            }
+            break;
+          default:
+            result = regValue;
           }
         }
       }
@@ -78,44 +79,44 @@ define([ 'jquery',
       return result;
     };
 
-    if ( obj ) {
-      _.extend( result, DEFAULT_LINE_STYLE );
-      result.name = displayFormat.resolve( obj );
+    if (obj) {
+      _.extend(result, DEFAULT_LINE_STYLE);
+      result.name = displayFormat.resolve(obj);
 
       //line width
-      val = getValue( obj, REGISTRY_KEYS.LINE_WIDTH, 'int' );
-      if ( val ) {
-        result[ CONSTANTS.LINE_STYLE.WIDTH ] = val;
+      val = getValue(obj, REGISTRY_KEYS.LINE_WIDTH, 'int');
+      if (val) {
+        result[CONSTANTS.LINE_STYLE.WIDTH] = val;
       }
 
       //color
-      val = getValue( obj, REGISTRY_KEYS.COLOR );
-      if ( val && val !== '' ) {
-        result[ CONSTANTS.LINE_STYLE.COLOR ] = val;
+      val = getValue(obj, REGISTRY_KEYS.COLOR);
+      if (val && val !== '') {
+        result[CONSTANTS.LINE_STYLE.COLOR] = val;
       }
 
       //pattern
-      val = getValue( obj, REGISTRY_KEYS.LINE_STYLE );
-      if ( val !== undefined && val !== null ) {
-        result[ CONSTANTS.LINE_STYLE.PATTERN ] = val;
+      val = getValue(obj, REGISTRY_KEYS.LINE_STYLE);
+      if (val !== undefined && val !== null) {
+        result[CONSTANTS.LINE_STYLE.PATTERN] = val;
       }
 
       //line type
-      val = getValue( obj, REGISTRY_KEYS.LINE_TYPE );
-      if ( val !== undefined && val !== null ) {
-        result[ CONSTANTS.LINE_STYLE.TYPE ] = val;
+      val = getValue(obj, REGISTRY_KEYS.LINE_TYPE);
+      if (val !== undefined && val !== null) {
+        result[CONSTANTS.LINE_STYLE.TYPE] = val;
       }
 
       //start arrow
-      val = getValue( obj, REGISTRY_KEYS.LINE_START_ARROW );
-      if ( val ) {
-        result[ CONSTANTS.LINE_STYLE.START_ARROW ] = val;
+      val = getValue(obj, REGISTRY_KEYS.LINE_START_ARROW);
+      if (val) {
+        result[CONSTANTS.LINE_STYLE.START_ARROW] = val;
       }
 
       //end arrow
-      val = getValue( obj, REGISTRY_KEYS.LINE_END_ARROW );
-      if ( val ) {
-        result[ CONSTANTS.LINE_STYLE.END_ARROW ] = val;
+      val = getValue(obj, REGISTRY_KEYS.LINE_END_ARROW);
+      if (val) {
+        result[CONSTANTS.LINE_STYLE.END_ARROW] = val;
       }
     }
 

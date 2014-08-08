@@ -1,12 +1,12 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define([ 'logManager' ], function ( logManager ) {
+define(['logManager'], function (logManager) {
 
   'use strict';
 
   var RepositoryLogControl;
 
-  RepositoryLogControl = function ( myClient, myView ) {
+  RepositoryLogControl = function (myClient, myView) {
     var self = this;
 
     this._client = myClient;
@@ -15,20 +15,20 @@ define([ 'logManager' ], function ( logManager ) {
     this._lastCommitID = null;
 
     //override view event handlers
-    this._view.onLoadCommit = function ( params ) {
-      self._client.selectCommitAsync( params.id, function ( err ) {
-        if ( err ) {
-          self._logger.error( err );
+    this._view.onLoadCommit = function (params) {
+      self._client.selectCommitAsync(params.id, function (err) {
+        if (err) {
+          self._logger.error(err);
         }
 
         self._refreshActualCommit();
       });
     };
 
-    this._view.onDeleteBranchClick = function ( branch ) {
-      self._client.deleteBranchAsync( branch, function ( err ) {
-        if ( err ) {
-          self._logger.error( err );
+    this._view.onDeleteBranchClick = function (branch) {
+      self._client.deleteBranchAsync(branch, function (err) {
+        if (err) {
+          self._logger.error(err);
         }
 
         self._refreshBranches();
@@ -36,66 +36,68 @@ define([ 'logManager' ], function ( logManager ) {
       });
     };
 
-    this._view.onCreateBranchFromCommit = function ( params ) {
+    this._view.onCreateBranchFromCommit = function (params) {
       self._client.createBranchAsync(
         params.name,
         params.commitId,
-      function ( err ) {
-        if ( err ) {
-          self._logger.error( err );
-        }
-        self._refreshBranches();
-      });
+        function (err) {
+          if (err) {
+            self._logger.error(err);
+          }
+          self._refreshBranches();
+        });
     };
 
-    this._view.onLoadMoreCommits = function ( num ) {
-      self._loadMoreCommits( num );
+    this._view.onLoadMoreCommits = function (num) {
+      self._loadMoreCommits(num);
     };
 
-    this._logger = logManager.create( 'RepositoryLogControl' );
-    this._logger.debug( 'Created' );
+    this._logger = logManager.create('RepositoryLogControl');
+    this._logger.debug('Created');
   };
 
-  RepositoryLogControl.prototype._loadMoreCommits = function ( num ) {
+  RepositoryLogControl.prototype._loadMoreCommits = function (num) {
     var commits = null,
-    com,
-    commitsLoaded,
-    self = this;
+      com,
+      commitsLoaded,
+      self = this;
 
-    commitsLoaded = function ( err, data ) {
+    commitsLoaded = function (err, data) {
       var i,
-      cLen;
+        cLen;
 
-      self._logger.debug( 'commitsLoaded, err: \'' + err + '\', data: ' + data === true ? data.length : 'null' );
+      self._logger.debug('commitsLoaded, err: \'' + err + '\', data: ' + data === true ? data.length : 'null');
 
-      if ( err ) {
-        if ( _.isEmpty( err )) {
-          self._logger.error( 'the mysterious error returned by "getCommitsAsync"' );
+      if (err) {
+        if (_.isEmpty(err)) {
+          self._logger.error('the mysterious error returned by "getCommitsAsync"');
         } else {
-          self._logger.error( err );
+          self._logger.error(err);
         }
       } else {
         commits = data.concat([]);
 
         cLen = commits.length;
-        if ( cLen > 0 ) {
-          for ( i = 0; i < cLen; i += 1 ) {
-            com = commits[ i ];
+        if (cLen > 0) {
+          for (i = 0; i < cLen; i += 1) {
+            com = commits[i];
 
-            if ( self._lastCommitID !== com._id ) {
+            if (self._lastCommitID !== com._id) {
 
-              var commitObject = { 'id': com._id,
+              var commitObject = {
+                'id': com._id,
                 'message': com.message,
                 'parents': com.parents,
                 'timestamp': com.time,
-                'user': com.updater.join( ',' )};
+                'user': com.updater.join(',')
+              };
 
-              self._view.addCommit( commitObject );
+              self._view.addCommit(commitObject);
             }
           }
 
           //store last CommitID we received
-          self._lastCommitID = commits[ i - 1 ]._id;
+          self._lastCommitID = commits[i - 1]._id;
 
           //render added commits
           self._view.render();
@@ -107,7 +109,7 @@ define([ 'logManager' ], function ( logManager ) {
 
         self._view.hideProgressbar();
 
-        if ( cLen < num ) {
+        if (cLen < num) {
           self._view.noMoreCommitsToDisplay();
         }
       }
@@ -115,11 +117,11 @@ define([ 'logManager' ], function ( logManager ) {
 
     this._view.showProgressbar();
 
-    this._client.getCommitsAsync( this._lastCommitID,num,commitsLoaded );
+    this._client.getCommitsAsync(this._lastCommitID, num, commitsLoaded);
   };
 
   RepositoryLogControl.prototype._refreshActualCommit = function () {
-    this._view.setActualCommitId( this._client.getActualCommit());
+    this._view.setActualCommitId(this._client.getActualCommit());
   };
 
   RepositoryLogControl.prototype._refreshBranches = function () {
@@ -127,22 +129,24 @@ define([ 'logManager' ], function ( logManager ) {
 
     this._view.clearBranches();
 
-    this._client.getBranchesAsync(function ( err, data ) {
+    this._client.getBranchesAsync(function (err, data) {
       var i;
 
-      self._logger.debug( 'branchesLoaded, err: \'' + err + '\', data: ' + data ? data.length : 'null' );
+      self._logger.debug('branchesLoaded, err: \'' + err + '\', data: ' + data ? data.length : 'null');
 
-      if ( err ) {
-        self._logger.error( err );
+      if (err) {
+        self._logger.error(err);
       }
-      if ( data && data.length ) {
+      if (data && data.length) {
         //set view's branch info
         i = data.length;
 
-        while ( i-- ) {
-          self._view.addBranch({ 'name': data[ i ].name,
-            'commitId':  data[ i ].commitId,
-            'sync':  data[ i ].sync });
+        while (i--) {
+          self._view.addBranch({
+            'name': data[i].name,
+            'commitId': data[i].commitId,
+            'sync': data[i].sync
+          });
         }
       }
     });

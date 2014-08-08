@@ -1,14 +1,15 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define([ 'logManager',
-    'js/Constants',
-    'js/NodePropertyNames',
-    'js/RegistryKeys',
-    'js/Widgets/DiagramDesigner/DiagramDesignerWidget.Constants',
-    './ModelEditorControl.DiagramDesignerWidgetEventHandlers',
-    'js/Utils/GMEConcepts',
-    'js/Utils/GMEVisualConcepts',
-    'js/Utils/PreferencesHelper' ], function ( logManager,
+define(['logManager',
+  'js/Constants',
+  'js/NodePropertyNames',
+  'js/RegistryKeys',
+  'js/Widgets/DiagramDesigner/DiagramDesignerWidget.Constants',
+  './ModelEditorControl.DiagramDesignerWidgetEventHandlers',
+  'js/Utils/GMEConcepts',
+  'js/Utils/GMEVisualConcepts',
+  'js/Utils/PreferencesHelper'
+], function (logManager,
   CONSTANTS,
   nodePropertyNames,
   REGISTRY_KEYS,
@@ -16,23 +17,23 @@ define([ 'logManager',
   ModelEditorControlDiagramDesignerWidgetEventHandlers,
   GMEConcepts,
   GMEVisualConcepts,
-  PreferencesHelper ) {
+  PreferencesHelper) {
 
   'use strict';
 
   var ModelEditorControl,
-  GME_ID = 'GME_ID',
-  BACKGROUND_TEXT_COLOR = '#DEDEDE',
-  BACKGROUND_TEXT_SIZE = 30,
-  DEFAULT_DECORATOR = 'ModelDecorator',
-  WIDGET_NAME = 'DiagramDesigner',
-  SRC_POINTER_NAME = CONSTANTS.POINTER_SOURCE,
-  DST_POINTER_NAME = CONSTANTS.POINTER_TARGET;
+    GME_ID = 'GME_ID',
+    BACKGROUND_TEXT_COLOR = '#DEDEDE',
+    BACKGROUND_TEXT_SIZE = 30,
+    DEFAULT_DECORATOR = 'ModelDecorator',
+    WIDGET_NAME = 'DiagramDesigner',
+    SRC_POINTER_NAME = CONSTANTS.POINTER_SOURCE,
+    DST_POINTER_NAME = CONSTANTS.POINTER_TARGET;
 
-  ModelEditorControl = function ( options ) {
+  ModelEditorControl = function (options) {
     var self = this;
 
-    this.logger = options.logger || logManager.create( options.loggerName || 'ModelEditorControl' );
+    this.logger = options.logger || logManager.create(options.loggerName || 'ModelEditorControl');
 
     this._client = options.client;
 
@@ -41,14 +42,14 @@ define([ 'logManager',
     //initialize core collections and variables
     this.designerCanvas = options.widget;
 
-    if ( this._client === undefined ) {
-      this.logger.error( 'ModelEditorControl\'s client is not specified...' );
-      throw ( 'ModelEditorControl can not be created' );
+    if (this._client === undefined) {
+      this.logger.error('ModelEditorControl\'s client is not specified...');
+      throw ('ModelEditorControl can not be created');
     }
 
-    if ( this.designerCanvas === undefined ) {
-      this.logger.error( 'ModelEditorControl\'s DesignerCanvas is not specified...' );
-      throw ( 'ModelEditorControl can not be created' );
+    if (this.designerCanvas === undefined) {
+      this.logger.error('ModelEditorControl\'s DesignerCanvas is not specified...');
+      throw ('ModelEditorControl can not be created');
     }
 
     this._selfPatterns = {};
@@ -61,22 +62,26 @@ define([ 'logManager',
     this.___SLOW_CONN = false;
 
     //local variable holding info about the currently opened node
-    this.currentNodeInfo = { 'id': null, 'children': [], 'parentId': null };
+    this.currentNodeInfo = {
+      'id': null,
+      'children': [],
+      'parentId': null
+    };
 
     /****************** END OF - ADD BUTTONS AND THEIR EVENT HANDLERS TO DESIGNER CANVAS ******************/
 
     //attach all the event handlers for event's coming from DesignerCanvas
     this.attachDiagramDesignerWidgetEventHandlers();
 
-    this.logger.debug( 'ModelEditorControl ctor finished' );
+    this.logger.debug('ModelEditorControl ctor finished');
   };
 
-  ModelEditorControl.prototype.selectedObjectChanged = function ( nodeId ) {
+  ModelEditorControl.prototype.selectedObjectChanged = function (nodeId) {
     var desc,
-    nodeName,
-    self = this;
+      nodeName,
+      self = this;
 
-    this.logger.debug( 'activeObject \'' + nodeId + '\'' );
+    this.logger.debug('activeObject \'' + nodeId + '\'');
 
     //delete everything from model editor
     this.designerCanvas.clear();
@@ -92,8 +97,8 @@ define([ 'logManager',
     this._Subcomponent2GMEID = {};
 
     //remove current territory patterns
-    if ( this._territoryId ) {
-      this._client.removeUI( this._territoryId );
+    if (this._territoryId) {
+      this._client.removeUI(this._territoryId);
     }
 
     this.currentNodeInfo.id = nodeId;
@@ -103,116 +108,130 @@ define([ 'logManager',
     this._selectedAspect = WebGMEGlobal.State.getActiveAspect();
 
     //since PROJECT_ROOT_ID is an empty string, it is considered false..
-    if ( nodeId || nodeId === CONSTANTS.PROJECT_ROOT_ID ) {
-      desc = this._getObjectDescriptor( nodeId );
-      if ( desc ) {
+    if (nodeId || nodeId === CONSTANTS.PROJECT_ROOT_ID) {
+      desc = this._getObjectDescriptor(nodeId);
+      if (desc) {
         this.currentNodeInfo.parentId = desc.parentId;
       }
 
       this._refreshBtnModelHierarchyUp();
 
-      if ( this._selectedAspect !== CONSTANTS.ASPECT_ALL ) {
+      if (this._selectedAspect !== CONSTANTS.ASPECT_ALL) {
         //make sure that the selectedAspect exist in the node, otherwise fallback to All
-        var aspectNames = this._client.getMetaAspectNames( nodeId ) || [];
-        if ( aspectNames.indexOf( this._selectedAspect ) === -1 ) {
-          this.logger.warning( 'The currently selected aspect "' + this._selectedAspect + '" does not exist in the object "' + desc.name + ' (' + nodeId + ')", falling back to "All"' );
+        var aspectNames = this._client.getMetaAspectNames(nodeId) || [];
+        if (aspectNames.indexOf(this._selectedAspect) === -1) {
+          this.logger.warning('The currently selected aspect "' + this._selectedAspect +
+            '" does not exist in the object "' + desc.name + ' (' + nodeId + ')", falling back to "All"');
           this._selectedAspect = CONSTANTS.ASPECT_ALL;
-          WebGMEGlobal.State.registerActiveAspect( CONSTANTS.ASPECT_ALL );
+          WebGMEGlobal.State.registerActiveAspect(CONSTANTS.ASPECT_ALL);
         }
       }
 
       //put new node's info into territory rules
       this._selfPatterns = {};
 
-      if ( this._selectedAspect === CONSTANTS.ASPECT_ALL ) {
-        this._selfPatterns[ nodeId ] = { 'children': 2 };
+      if (this._selectedAspect === CONSTANTS.ASPECT_ALL) {
+        this._selfPatterns[nodeId] = {
+          'children': 2
+        };
       } else {
-        this._selfPatterns[ nodeId ] = this._client.getAspectTerritoryPattern( nodeId, this._selectedAspect );
-        this._selfPatterns[ nodeId ].children = 2;
+        this._selfPatterns[nodeId] = this._client.getAspectTerritoryPattern(nodeId, this._selectedAspect);
+        this._selfPatterns[nodeId].children = 2;
       }
 
       this._firstLoad = true;
 
-      nodeName = ( desc && desc.name || ' ' );
+      nodeName = (desc && desc.name || ' ');
 
-      this.designerCanvas.setTitle( nodeName );
-      this.designerCanvas.setBackgroundText( nodeName, { 'font-size': BACKGROUND_TEXT_SIZE,
-        'color': BACKGROUND_TEXT_COLOR });
+      this.designerCanvas.setTitle(nodeName);
+      this.designerCanvas.setBackgroundText(nodeName, {
+        'font-size': BACKGROUND_TEXT_SIZE,
+        'color': BACKGROUND_TEXT_COLOR
+      });
 
       this.designerCanvas.showProgressbar();
 
-      this._territoryId = this._client.addUI( this, function ( events ) {
-        self._eventCallback( events );
+      this._territoryId = this._client.addUI(this, function (events) {
+        self._eventCallback(events);
       });
       //update the territory
-      this._client.updateTerritory( this._territoryId, this._selfPatterns );
+      this._client.updateTerritory(this._territoryId, this._selfPatterns);
     } else {
-      this.designerCanvas.setBackgroundText( 'No object to display', { 'color': BACKGROUND_TEXT_COLOR,
-        'font-size': BACKGROUND_TEXT_SIZE });
+      this.designerCanvas.setBackgroundText('No object to display', {
+        'color': BACKGROUND_TEXT_COLOR,
+        'font-size': BACKGROUND_TEXT_SIZE
+      });
     }
   };
 
-  ModelEditorControl.prototype._getObjectDescriptor = function ( nodeId ) {
-    var nodeObj = this._client.getNode( nodeId ),
-    objDescriptor,
-    pos,
-    defaultPos = 0,
-    customPoints,
-    memberListContainerObj;
+  ModelEditorControl.prototype._getObjectDescriptor = function (nodeId) {
+    var nodeObj = this._client.getNode(nodeId),
+      objDescriptor,
+      pos,
+      defaultPos = 0,
+      customPoints,
+      memberListContainerObj;
 
-    if ( nodeObj ) {
+    if (nodeObj) {
       objDescriptor = {};
 
       objDescriptor.id = nodeObj.getId();
-      objDescriptor.name = nodeObj.getAttribute( nodePropertyNames.Attributes.name );
+      objDescriptor.name = nodeObj.getAttribute(nodePropertyNames.Attributes.name);
       objDescriptor.parentId = nodeObj.getParentId();
 
-      if ( nodeId !== this.currentNodeInfo.id ) {
+      if (nodeId !== this.currentNodeInfo.id) {
         //fill the descriptor based on its type
-        if ( GMEConcepts.isConnection( nodeId )) {
+        if (GMEConcepts.isConnection(nodeId)) {
           objDescriptor.kind = 'CONNECTION';
-          objDescriptor.source = nodeObj.getPointer( SRC_POINTER_NAME ).to;
-          objDescriptor.target = nodeObj.getPointer( DST_POINTER_NAME ).to;
+          objDescriptor.source = nodeObj.getPointer(SRC_POINTER_NAME).to;
+          objDescriptor.target = nodeObj.getPointer(DST_POINTER_NAME).to;
 
           //get all the other visual properties of the connection
-          _.extend( objDescriptor, GMEVisualConcepts.getConnectionVisualProperties( nodeId ));
+          _.extend(objDescriptor, GMEVisualConcepts.getConnectionVisualProperties(nodeId));
 
           //get custom points from the node object
-          customPoints = nodeObj.getRegistry( REGISTRY_KEYS.LINE_CUSTOM_POINTS );
-          if ( customPoints && _.isArray( customPoints )) {
-            objDescriptor[ CONSTANTS.LINE_STYLE.CUSTOM_POINTS ] = $.extend( true, [], customPoints ); //JSON.parse(JSON.stringify(customPoints));
+          customPoints = nodeObj.getRegistry(REGISTRY_KEYS.LINE_CUSTOM_POINTS);
+          if (customPoints && _.isArray(customPoints)) {
+            objDescriptor[CONSTANTS.LINE_STYLE.CUSTOM_POINTS] = $.extend(true, [], customPoints); //JSON.parse(JSON.stringify(customPoints));
           }
         } else {
           objDescriptor.kind = 'MODEL';
 
           //aspect specific coordinate
-          if ( this._selectedAspect === CONSTANTS.ASPECT_ALL ) {
-            pos = nodeObj.getRegistry( REGISTRY_KEYS.POSITION );
+          if (this._selectedAspect === CONSTANTS.ASPECT_ALL) {
+            pos = nodeObj.getRegistry(REGISTRY_KEYS.POSITION);
           } else {
-            memberListContainerObj = this._client.getNode( this.currentNodeInfo.id );
-            pos = memberListContainerObj.getMemberRegistry( this._selectedAspect, nodeId, REGISTRY_KEYS.POSITION ) || nodeObj.getRegistry( REGISTRY_KEYS.POSITION );
+            memberListContainerObj = this._client.getNode(this.currentNodeInfo.id);
+            pos = memberListContainerObj.getMemberRegistry(this._selectedAspect, nodeId, REGISTRY_KEYS.POSITION) ||
+              nodeObj.getRegistry(REGISTRY_KEYS.POSITION);
           }
 
-          if ( pos ) {
-            objDescriptor.position = { 'x': pos.x, 'y': pos.y };
+          if (pos) {
+            objDescriptor.position = {
+              'x': pos.x,
+              'y': pos.y
+            };
           } else {
-            objDescriptor.position = { 'x': defaultPos, 'y': defaultPos };
+            objDescriptor.position = {
+              'x': defaultPos,
+              'y': defaultPos
+            };
           }
 
-          if ( objDescriptor.position.hasOwnProperty( 'x' )) {
-            objDescriptor.position.x = this._getDefaultValueForNumber( objDescriptor.position.x, defaultPos );
+          if (objDescriptor.position.hasOwnProperty('x')) {
+            objDescriptor.position.x = this._getDefaultValueForNumber(objDescriptor.position.x, defaultPos);
           } else {
             objDescriptor.position.x = defaultPos;
           }
 
-          if ( objDescriptor.position.hasOwnProperty( 'y' )) {
-            objDescriptor.position.y = this._getDefaultValueForNumber( objDescriptor.position.y, defaultPos );
+          if (objDescriptor.position.hasOwnProperty('y')) {
+            objDescriptor.position.y = this._getDefaultValueForNumber(objDescriptor.position.y, defaultPos);
           } else {
             objDescriptor.position.y = defaultPos;
           }
 
-          objDescriptor.decorator = nodeObj.getRegistry( REGISTRY_KEYS.DECORATOR ) || '';
-          objDescriptor.rotation = parseInt( nodeObj.getRegistry( REGISTRY_KEYS.ROTATION ), 10 ) || 0;
+          objDescriptor.decorator = nodeObj.getRegistry(REGISTRY_KEYS.DECORATOR) || '';
+          objDescriptor.rotation = parseInt(nodeObj.getRegistry(REGISTRY_KEYS.ROTATION), 10) || 0;
         }
       }
     }
@@ -220,9 +239,9 @@ define([ 'logManager',
     return objDescriptor;
   };
 
-  ModelEditorControl.prototype._getDefaultValueForNumber = function ( cValue, defaultValue ) {
-    if ( _.isNumber( cValue )) {
-      if ( _.isNaN( cValue )) {
+  ModelEditorControl.prototype._getDefaultValueForNumber = function (cValue, defaultValue) {
+    if (_.isNumber(cValue)) {
+      if (_.isNaN(cValue)) {
         return defaultValue;
       }
     } else {
@@ -234,58 +253,60 @@ define([ 'logManager',
   };
 
   // PUBLIC METHODS
-  ModelEditorControl.prototype._eventCallback = function ( events ) {
+  ModelEditorControl.prototype._eventCallback = function (events) {
     var i = events ? events.length : 0;
 
-    this.logger.debug( '_eventCallback \'' + i + '\' items' );
+    this.logger.debug('_eventCallback \'' + i + '\' items');
 
-    if ( i > 0 ) {
-      this.eventQueue.push( events );
+    if (i > 0) {
+      this.eventQueue.push(events);
       this.processNextInQueue();
     }
 
-    this.logger.debug( '_eventCallback \'' + events.length + '\' items - DONE' );
+    this.logger.debug('_eventCallback \'' + events.length + '\' items - DONE');
   };
 
   ModelEditorControl.prototype.processNextInQueue = function () {
     var nextBatchInQueue,
-    len = this.eventQueue.length,
-    decoratorsToDownload = [ DEFAULT_DECORATOR ],
-    itemDecorator,
-    self = this;
+      len = this.eventQueue.length,
+      decoratorsToDownload = [DEFAULT_DECORATOR],
+      itemDecorator,
+      self = this;
 
-    if ( len > 0 ) {
+    if (len > 0) {
       nextBatchInQueue = this.eventQueue.pop();
 
       len = nextBatchInQueue.length;
 
-      while ( len-- ) {
-        if (( nextBatchInQueue[ len ].etype === CONSTANTS.TERRITORY_EVENT_LOAD ) || ( nextBatchInQueue[ len ].etype === CONSTANTS.TERRITORY_EVENT_UPDATE )) {
-          nextBatchInQueue[ len ].desc = nextBatchInQueue[ len ].debugEvent ? _.extend({}, this._getObjectDescriptorDEBUG( nextBatchInQueue[ len ].eid )) : this._getObjectDescriptor( nextBatchInQueue[ len ].eid );
+      while (len--) {
+        if ((nextBatchInQueue[len].etype === CONSTANTS.TERRITORY_EVENT_LOAD) || (nextBatchInQueue[len].etype ===
+          CONSTANTS.TERRITORY_EVENT_UPDATE)) {
+          nextBatchInQueue[len].desc = nextBatchInQueue[len].debugEvent ? _.extend({}, this._getObjectDescriptorDEBUG(
+            nextBatchInQueue[len].eid)) : this._getObjectDescriptor(nextBatchInQueue[len].eid);
 
-          itemDecorator = nextBatchInQueue[ len ].desc.decorator;
+          itemDecorator = nextBatchInQueue[len].desc.decorator;
 
-          if ( itemDecorator && itemDecorator !== '' ) {
-            if ( decoratorsToDownload.indexOf( itemDecorator ) === -1 ) {
-              decoratorsToDownload.pushUnique( itemDecorator );
+          if (itemDecorator && itemDecorator !== '') {
+            if (decoratorsToDownload.indexOf(itemDecorator) === -1) {
+              decoratorsToDownload.pushUnique(itemDecorator);
             }
           }
         }
       }
 
-      this._client.decoratorManager.download( decoratorsToDownload, WIDGET_NAME, function () {
-        self._dispatchEvents( nextBatchInQueue );
+      this._client.decoratorManager.download(decoratorsToDownload, WIDGET_NAME, function () {
+        self._dispatchEvents(nextBatchInQueue);
       });
     }
   };
 
-  ModelEditorControl.prototype._dispatchEvents = function ( events ) {
+  ModelEditorControl.prototype._dispatchEvents = function (events) {
     var i = events.length,
-    e,
-    territoryChanged = false,
-    self = this;
+      e,
+      territoryChanged = false,
+      self = this;
 
-    this.logger.debug( '_dispatchEvents \'' + i + '\' items' );
+    this.logger.debug('_dispatchEvents \'' + i + '\' items');
 
     /********** ORDER EVENTS BASED ON DEPENDENCY ************/
     /** 1: items first, no dependency **/
@@ -293,12 +314,14 @@ define([ 'logManager',
     var orderedItemEvents = [];
     var orderedConnectionEvents = [];
 
-    if ( this._delayedConnections && this._delayedConnections.length > 0 ) {
+    if (this._delayedConnections && this._delayedConnections.length > 0) {
       /*this.logger.warning('_delayedConnections: ' + this._delayedConnections.length );*/
-      for ( i = 0; i < this._delayedConnections.length; i += 1 ) {
-        orderedConnectionEvents.push({ 'etype': CONSTANTS.TERRITORY_EVENT_LOAD,
-          'eid': this._delayedConnections[ i ],
-          'desc': this._getObjectDescriptor( this._delayedConnections[ i ])});
+      for (i = 0; i < this._delayedConnections.length; i += 1) {
+        orderedConnectionEvents.push({
+          'etype': CONSTANTS.TERRITORY_EVENT_LOAD,
+          'eid': this._delayedConnections[i],
+          'desc': this._getObjectDescriptor(this._delayedConnections[i])
+        });
       }
     }
 
@@ -306,15 +329,15 @@ define([ 'logManager',
 
     var unloadEvents = [];
     i = events.length;
-    while ( i-- ) {
-      e = events[ i ];
+    while (i--) {
+      e = events[i];
 
-      if ( e.etype === CONSTANTS.TERRITORY_EVENT_UNLOAD ) {
-        unloadEvents.push( e );
-      } else if ( e.desc.kind === 'MODEL' ) {
-        orderedItemEvents.push( e );
-      } else if ( e.desc.kind === 'CONNECTION' ) {
-        if ( e.desc.parentId === this.currentNodeInfo.id ) {
+      if (e.etype === CONSTANTS.TERRITORY_EVENT_UNLOAD) {
+        unloadEvents.push(e);
+      } else if (e.desc.kind === 'MODEL') {
+        orderedItemEvents.push(e);
+      } else if (e.desc.kind === 'CONNECTION') {
+        if (e.desc.parentId === this.currentNodeInfo.id) {
           //check to see if SRC and DST is another connection
           //if so, put this guy AFTER them
           var srcGMEID = e.desc.source;
@@ -322,20 +345,20 @@ define([ 'logManager',
           var srcConnIdx = -1;
           var dstConnIdx = -1;
           var j = orderedConnectionEvents.length;
-          while ( j-- ) {
-            var ce = orderedConnectionEvents[ j ];
-            if ( ce.id === srcGMEID ) {
+          while (j--) {
+            var ce = orderedConnectionEvents[j];
+            if (ce.id === srcGMEID) {
               srcConnIdx = j;
-            } else if ( ce.id === dstGMEID ) {
+            } else if (ce.id === dstGMEID) {
               dstConnIdx = j;
             }
 
-            if ( srcConnIdx !== -1 && dstConnIdx !== -1 ) {
+            if (srcConnIdx !== -1 && dstConnIdx !== -1) {
               break;
             }
           }
 
-          var insertIdxAfter = Math.max( srcConnIdx, dstConnIdx );
+          var insertIdxAfter = Math.max(srcConnIdx, dstConnIdx);
 
           //check to see if this guy is a DEPENDENT of any already processed CONNECTION
           //insert BEFORE THEM
@@ -343,40 +366,40 @@ define([ 'logManager',
           var depSrcConnIdx = MAX_VAL;
           var depDstConnIdx = MAX_VAL;
           j = orderedConnectionEvents.length;
-          while ( j-- ) {
-            ce = orderedConnectionEvents[ j ];
-            if ( e.desc.id === ce.desc.source ) {
+          while (j--) {
+            ce = orderedConnectionEvents[j];
+            if (e.desc.id === ce.desc.source) {
               depSrcConnIdx = j;
-            } else if ( e.desc.id === ce.desc.target ) {
+            } else if (e.desc.id === ce.desc.target) {
               depDstConnIdx = j;
             }
 
-            if ( depSrcConnIdx !== MAX_VAL && depDstConnIdx !== MAX_VAL ) {
+            if (depSrcConnIdx !== MAX_VAL && depDstConnIdx !== MAX_VAL) {
               break;
             }
           }
 
-          var insertIdxBefore = Math.min( depSrcConnIdx, depDstConnIdx );
-          if ( insertIdxAfter === -1 && insertIdxBefore === MAX_VAL ) {
-            orderedConnectionEvents.push( e );
+          var insertIdxBefore = Math.min(depSrcConnIdx, depDstConnIdx);
+          if (insertIdxAfter === -1 && insertIdxBefore === MAX_VAL) {
+            orderedConnectionEvents.push(e);
           } else {
-            if ( insertIdxAfter !== -1 &&
-              insertIdxBefore === MAX_VAL ) {
-              orderedConnectionEvents.splice( insertIdxAfter + 1,0,e );
-            } else if ( insertIdxAfter === -1 &&
-              insertIdxBefore !== MAX_VAL ) {
-              orderedConnectionEvents.splice( insertIdxBefore,0,e );
-            } else if ( insertIdxAfter !== -1 &&
-              insertIdxBefore !== MAX_VAL ) {
-              orderedConnectionEvents.splice( insertIdxBefore,0,e );
+            if (insertIdxAfter !== -1 &&
+              insertIdxBefore === MAX_VAL) {
+              orderedConnectionEvents.splice(insertIdxAfter + 1, 0, e);
+            } else if (insertIdxAfter === -1 &&
+              insertIdxBefore !== MAX_VAL) {
+              orderedConnectionEvents.splice(insertIdxBefore, 0, e);
+            } else if (insertIdxAfter !== -1 &&
+              insertIdxBefore !== MAX_VAL) {
+              orderedConnectionEvents.splice(insertIdxBefore, 0, e);
             }
           }
         } else {
-          orderedItemEvents.push( e );
+          orderedItemEvents.push(e);
         }
 
-      } else if ( this.currentNodeInfo.id === e.eid ) {
-        orderedItemEvents.push( e );
+      } else if (this.currentNodeInfo.id === e.eid) {
+        orderedItemEvents.push(e);
       }
 
     }
@@ -399,7 +422,7 @@ define([ 'logManager',
     /** END OF --- LOG ORDERED CONNECTION LIST ********************/
 
     //events = unloadEvents.concat(orderedItemEvents, orderedConnectionEvents);
-    events = unloadEvents.concat( orderedItemEvents );
+    events = unloadEvents.concat(orderedItemEvents);
     i = events.length;
 
     this._notifyPackage = {};
@@ -407,18 +430,18 @@ define([ 'logManager',
     this.designerCanvas.beginUpdate();
 
     //items
-    for ( i = 0; i < events.length; i += 1 ) {
-      e = events[ i ];
-      switch ( e.etype ) {
-        case CONSTANTS.TERRITORY_EVENT_LOAD:
-          territoryChanged = this._onLoad( e.eid, e.desc ) || territoryChanged;
-          break;
-        case CONSTANTS.TERRITORY_EVENT_UPDATE:
-          this._onUpdate( e.eid, e.desc );
-          break;
-        case CONSTANTS.TERRITORY_EVENT_UNLOAD:
-          territoryChanged = this._onUnload( e.eid ) || territoryChanged;
-          break;
+    for (i = 0; i < events.length; i += 1) {
+      e = events[i];
+      switch (e.etype) {
+      case CONSTANTS.TERRITORY_EVENT_LOAD:
+        territoryChanged = this._onLoad(e.eid, e.desc) || territoryChanged;
+        break;
+      case CONSTANTS.TERRITORY_EVENT_UPDATE:
+        this._onUpdate(e.eid, e.desc);
+        break;
+      case CONSTANTS.TERRITORY_EVENT_UNLOAD:
+        territoryChanged = this._onUnload(e.eid) || territoryChanged;
+        break;
       }
     }
 
@@ -429,18 +452,18 @@ define([ 'logManager',
     i = events.length;
 
     //items
-    for ( i = 0; i < events.length; i += 1 ) {
-      e = events[ i ];
-      switch ( e.etype ) {
-        case CONSTANTS.TERRITORY_EVENT_LOAD:
-          this._onLoad( e.eid, e.desc );
-          break;
-        case CONSTANTS.TERRITORY_EVENT_UPDATE:
-          this._onUpdate( e.eid, e.desc );
-          break;
-        case CONSTANTS.TERRITORY_EVENT_UNLOAD:
-          this._onUnload( e.eid );
-          break;
+    for (i = 0; i < events.length; i += 1) {
+      e = events[i];
+      switch (e.etype) {
+      case CONSTANTS.TERRITORY_EVENT_LOAD:
+        this._onLoad(e.eid, e.desc);
+        break;
+      case CONSTANTS.TERRITORY_EVENT_UPDATE:
+        this._onUpdate(e.eid, e.desc);
+        break;
+      case CONSTANTS.TERRITORY_EVENT_UNLOAD:
+        this._onUnload(e.eid);
+        break;
       }
     }
 
@@ -449,83 +472,83 @@ define([ 'logManager',
     this.designerCanvas.hideProgressbar();
 
     //update the territory
-    if ( territoryChanged ) {
+    if (territoryChanged) {
       //TODO: review this async here
-      if ( this.___SLOW_CONN === true ) {
+      if (this.___SLOW_CONN === true) {
         setTimeout(function () {
-          self.logger.debug( 'Updating territory with ruleset from decorators: ' + JSON.stringify( self._selfPatterns ));
-          self._client.updateTerritory( self._territoryId, self._selfPatterns );
-        }, 2000 );
+          self.logger.debug('Updating territory with ruleset from decorators: ' + JSON.stringify(self._selfPatterns));
+          self._client.updateTerritory(self._territoryId, self._selfPatterns);
+        }, 2000);
       } else {
-        this.logger.debug( 'Updating territory with ruleset from decorators: ' + JSON.stringify( this._selfPatterns ));
-        this._client.updateTerritory( this._territoryId, this._selfPatterns );
+        this.logger.debug('Updating territory with ruleset from decorators: ' + JSON.stringify(this._selfPatterns));
+        this._client.updateTerritory(this._territoryId, this._selfPatterns);
       }
     }
 
     //check if firstload
-    if ( this._firstLoad === true ) {
+    if (this._firstLoad === true) {
       this._firstLoad = false;
 
       //check if there is active selection set in client
       var activeSelection = WebGMEGlobal.State.getActiveSelection();
 
-      if ( activeSelection && activeSelection.length > 0 ) {
+      if (activeSelection && activeSelection.length > 0) {
         i = activeSelection.length;
         var gmeID;
         var ddSelection = [];
-        while ( i-- ) {
+        while (i--) {
           //try to find each object present in the active selection mapped to DiagramDesigner element
-          gmeID = activeSelection[ i ];
+          gmeID = activeSelection[i];
 
-          if ( this._GmeID2ComponentID[ gmeID ]) {
-            ddSelection = ddSelection.concat( this._GmeID2ComponentID[ gmeID ]);
+          if (this._GmeID2ComponentID[gmeID]) {
+            ddSelection = ddSelection.concat(this._GmeID2ComponentID[gmeID]);
           }
         }
 
-        this.designerCanvas.select( ddSelection );
+        this.designerCanvas.select(ddSelection);
       }
     }
 
-    this.logger.debug( '_dispatchEvents \'' + events.length + '\' items - DONE' );
+    this.logger.debug('_dispatchEvents \'' + events.length + '\' items - DONE');
 
     //continue processing event queue
     this.processNextInQueue();
   };
 
-  ModelEditorControl.prototype._getItemDecorator = function ( decorator ) {
+  ModelEditorControl.prototype._getItemDecorator = function (decorator) {
     var result;
 
-    result = this._client.decoratorManager.getDecoratorForWidget( decorator, WIDGET_NAME );
+    result = this._client.decoratorManager.getDecoratorForWidget(decorator, WIDGET_NAME);
 
-    if ( !result ) {
-      result = this._client.decoratorManager.getDecoratorForWidget( DEFAULT_DECORATOR, WIDGET_NAME );
+    if (!result) {
+      result = this._client.decoratorManager.getDecoratorForWidget(DEFAULT_DECORATOR, WIDGET_NAME);
     }
 
     return result;
   };
 
   // PUBLIC METHODS
-  ModelEditorControl.prototype._onLoad = function ( gmeID, objD ) {
+  ModelEditorControl.prototype._onLoad = function (gmeID, objD) {
     var uiComponent,
-    decClass,
-    objDesc,
-    sources = [],
-    destinations = [],
-    getDecoratorTerritoryQueries,
-    territoryChanged = false,
-    self = this;
+      decClass,
+      objDesc,
+      sources = [],
+      destinations = [],
+      getDecoratorTerritoryQueries,
+      territoryChanged = false,
+      self = this;
 
-    getDecoratorTerritoryQueries = function ( decorator ) {
+    getDecoratorTerritoryQueries = function (decorator) {
       var query,
-      entry;
+        entry;
 
-      if ( decorator ) {
+      if (decorator) {
         query = decorator.getTerritoryQuery();
 
-        if ( query ) {
-          for ( entry in query ) {
-            if ( query.hasOwnProperty( entry )) {
-              self._selfPatterns[ entry ] = query[ entry ];
+        if (query) {
+          for (entry in query) {
+            if (query.hasOwnProperty(entry)) {
+              self._selfPatterns[entry] = query[entry];
               territoryChanged = true;
             }
           }
@@ -533,74 +556,73 @@ define([ 'logManager',
       }
     };
 
-
     //component loaded
     //we are interested in the load of sub_components of the opened component
-    if ( this.currentNodeInfo.id !== gmeID ) {
-      if ( objD ) {
-        if ( objD.parentId == this.currentNodeInfo.id ) {
-          objDesc = _.extend({}, objD );
-          this._GmeID2ComponentID[ gmeID ] = [];
+    if (this.currentNodeInfo.id !== gmeID) {
+      if (objD) {
+        if (objD.parentId == this.currentNodeInfo.id) {
+          objDesc = _.extend({}, objD);
+          this._GmeID2ComponentID[gmeID] = [];
 
-          if ( objDesc.kind === 'MODEL' ) {
+          if (objDesc.kind === 'MODEL') {
 
-            this._GMEModels.push( gmeID );
+            this._GMEModels.push(gmeID);
 
-            decClass = this._getItemDecorator( objDesc.decorator );
+            decClass = this._getItemDecorator(objDesc.decorator);
 
             objDesc.decoratorClass = decClass;
             objDesc.control = this;
             objDesc.metaInfo = {};
-            objDesc.metaInfo[ CONSTANTS.GME_ID ] = gmeID;
+            objDesc.metaInfo[CONSTANTS.GME_ID] = gmeID;
             objDesc.preferencesHelper = PreferencesHelper.getPreferences();
             objDesc.aspect = this._selectedAspect;
 
-            uiComponent = this.designerCanvas.createDesignerItem( objDesc );
+            uiComponent = this.designerCanvas.createDesignerItem(objDesc);
 
-            this._GmeID2ComponentID[ gmeID ].push( uiComponent.id );
-            this._ComponentID2GmeID[ uiComponent.id ] = gmeID;
+            this._GmeID2ComponentID[gmeID].push(uiComponent.id);
+            this._ComponentID2GmeID[uiComponent.id] = gmeID;
 
-            getDecoratorTerritoryQueries( uiComponent._decoratorInstance );
+            getDecoratorTerritoryQueries(uiComponent._decoratorInstance);
 
           }
 
-          if ( objDesc.kind === 'CONNECTION' ) {
+          if (objDesc.kind === 'CONNECTION') {
 
-            this._GMEConnections.push( gmeID );
+            this._GMEConnections.push(gmeID);
 
-            var srcDst = this._getAllSourceDestinationPairsForConnection( objDesc.source, objDesc.target );
+            var srcDst = this._getAllSourceDestinationPairsForConnection(objDesc.source, objDesc.target);
             sources = srcDst.sources;
             destinations = srcDst.destinations;
 
             var k = sources.length;
             var l = destinations.length;
 
-            if ( k > 0 && l > 0 ) {
-              while ( k-- ) {
-                while ( l-- ) {
-                  objDesc.srcObjId = sources[ k ].objId;
-                  objDesc.srcSubCompId = sources[ k ].subCompId;
-                  objDesc.dstObjId = destinations[ l ].objId;
-                  objDesc.dstSubCompId = destinations[ l ].subCompId;
+            if (k > 0 && l > 0) {
+              while (k--) {
+                while (l--) {
+                  objDesc.srcObjId = sources[k].objId;
+                  objDesc.srcSubCompId = sources[k].subCompId;
+                  objDesc.dstObjId = destinations[l].objId;
+                  objDesc.dstSubCompId = destinations[l].subCompId;
                   objDesc.reconnectable = true;
                   objDesc.editable = true;
 
                   delete objDesc.source;
                   delete objDesc.target;
 
-                  _.extend( objDesc, this.getConnectionDescriptor( gmeID ));
-                  uiComponent = this.designerCanvas.createConnection( objDesc );
+                  _.extend(objDesc, this.getConnectionDescriptor(gmeID));
+                  uiComponent = this.designerCanvas.createConnection(objDesc);
 
-                  this.logger.debug( 'Connection: ' + uiComponent.id + ' for GME object: ' + objDesc.id );
+                  this.logger.debug('Connection: ' + uiComponent.id + ' for GME object: ' + objDesc.id);
 
-                  this._GmeID2ComponentID[ gmeID ].push( uiComponent.id );
-                  this._ComponentID2GmeID[ uiComponent.id ] = gmeID;
+                  this._GmeID2ComponentID[gmeID].push(uiComponent.id);
+                  this._ComponentID2GmeID[uiComponent.id] = gmeID;
                 }
               }
             } else {
               //the connection is here, but no valid endpoint on canvas
               //save the connection
-              this._delayedConnections.push( gmeID );
+              this._delayedConnections.push(gmeID);
             }
           }
         } else {
@@ -609,12 +631,12 @@ define([ 'logManager',
           /*if(this._GMEModels.indexOf(objD.parentId) !== -1){
                         this._onUpdate(objD.parentId,this._getObjectDescriptor(objD.parentId));
                     }*/
-          this._checkComponentDependency( gmeID, CONSTANTS.TERRITORY_EVENT_LOAD );
+          this._checkComponentDependency(gmeID, CONSTANTS.TERRITORY_EVENT_LOAD);
         }
       }
     } else {
       //currently opened node
-      this._updateSheetName( objD.name );
+      this._updateSheetName(objD.name);
       this._updateAspects();
     }
 
@@ -622,45 +644,45 @@ define([ 'logManager',
 
   };
 
-  ModelEditorControl.prototype._onUpdate = function ( gmeID, objDesc ) {
+  ModelEditorControl.prototype._onUpdate = function (gmeID, objDesc) {
     var componentID,
-    len,
-    decClass,
-    objId,
-    sCompId;
+      len,
+      decClass,
+      objId,
+      sCompId;
 
     //self or child updated
     //check if the updated object is the opened node
-    if ( gmeID === this.currentNodeInfo.id ) {
+    if (gmeID === this.currentNodeInfo.id) {
       //the updated object is the parent whose children are displayed here
       //the interest about the parent is:
       // - name change
-      this._updateSheetName( objDesc.name );
+      this._updateSheetName(objDesc.name);
       this._updateAspects();
     } else {
-      if ( objDesc ) {
-        if ( objDesc.parentId === this.currentNodeInfo.id ) {
-          if ( objDesc.kind === 'MODEL' ) {
-            if ( this._GmeID2ComponentID[ gmeID ]) {
-              len = this._GmeID2ComponentID[ gmeID ].length;
-              while ( len-- ) {
-                componentID = this._GmeID2ComponentID[ gmeID ][ len ];
+      if (objDesc) {
+        if (objDesc.parentId === this.currentNodeInfo.id) {
+          if (objDesc.kind === 'MODEL') {
+            if (this._GmeID2ComponentID[gmeID]) {
+              len = this._GmeID2ComponentID[gmeID].length;
+              while (len--) {
+                componentID = this._GmeID2ComponentID[gmeID][len];
 
-                decClass = this._getItemDecorator( objDesc.decorator );
+                decClass = this._getItemDecorator(objDesc.decorator);
 
                 objDesc.decoratorClass = decClass;
                 objDesc.preferencesHelper = PreferencesHelper.getPreferences();
                 objDesc.aspect = this._selectedAspect;
 
-                this.designerCanvas.updateDesignerItem( componentID, objDesc );
+                this.designerCanvas.updateDesignerItem(componentID, objDesc);
               }
             }
           }
 
           //there is a connection associated with this GMEID
-          if ( this._GMEConnections.indexOf( gmeID ) !== -1 ) {
-            len = this._GmeID2ComponentID[ gmeID ].length;
-            var srcDst = this._getAllSourceDestinationPairsForConnection( objDesc.source, objDesc.target );
+          if (this._GMEConnections.indexOf(gmeID) !== -1) {
+            len = this._GmeID2ComponentID[gmeID].length;
+            var srcDst = this._getAllSourceDestinationPairsForConnection(objDesc.source, objDesc.target);
             var sources = srcDst.sources;
             var destinations = srcDst.destinations;
 
@@ -668,81 +690,84 @@ define([ 'logManager',
             var l = destinations.length;
             len -= 1;
 
-            while ( k-- ) {
-              while ( l-- ) {
-                objDesc.srcObjId = sources[ k ].objId;
-                objDesc.srcSubCompId = sources[ k ].subCompId;
-                objDesc.dstObjId = destinations[ l ].objId;
-                objDesc.dstSubCompId = destinations[ l ].subCompId;
+            while (k--) {
+              while (l--) {
+                objDesc.srcObjId = sources[k].objId;
+                objDesc.srcSubCompId = sources[k].subCompId;
+                objDesc.dstObjId = destinations[l].objId;
+                objDesc.dstSubCompId = destinations[l].subCompId;
                 objDesc.reconnectable = true;
                 objDesc.editable = true;
 
                 delete objDesc.source;
                 delete objDesc.target;
 
-                if ( len >= 0 ) {
-                  componentID =  this._GmeID2ComponentID[ gmeID ][ len ];
+                if (len >= 0) {
+                  componentID = this._GmeID2ComponentID[gmeID][len];
 
-                  _.extend( objDesc, this.getConnectionDescriptor( gmeID ));
-                  this.designerCanvas.updateConnection( componentID, objDesc );
+                  _.extend(objDesc, this.getConnectionDescriptor(gmeID));
+                  this.designerCanvas.updateConnection(componentID, objDesc);
 
                   len -= 1;
                 } else {
-                  this.logger.warning( 'Updating connections...Existing connections are less than the needed src-dst combo...' );
+                  this.logger.warning(
+                    'Updating connections...Existing connections are less than the needed src-dst combo...');
                   //let's create a connection
-                  _.extend( objDesc, this.getConnectionDescriptor( gmeID ));
-                  var uiComponent = this.designerCanvas.createConnection( objDesc );
-                  this.logger.debug( 'Connection: ' + uiComponent.id + ' for GME object: ' + objDesc.id );
-                  this._GmeID2ComponentID[ gmeID ].push( uiComponent.id );
-                  this._ComponentID2GmeID[ uiComponent.id ] = gmeID;
+                  _.extend(objDesc, this.getConnectionDescriptor(gmeID));
+                  var uiComponent = this.designerCanvas.createConnection(objDesc);
+                  this.logger.debug('Connection: ' + uiComponent.id + ' for GME object: ' + objDesc.id);
+                  this._GmeID2ComponentID[gmeID].push(uiComponent.id);
+                  this._ComponentID2GmeID[uiComponent.id] = gmeID;
                 }
               }
             }
 
-            if ( len >= 0 ) {
+            if (len >= 0) {
               //some leftover connections on the widget
               //delete them
               len += 1;
-              while ( len-- ) {
-                componentID =  this._GmeID2ComponentID[ gmeID ][ len ];
-                this.designerCanvas.deleteComponent( componentID );
-                this._GmeID2ComponentID[ gmeID ].splice( len, 1 );
-                delete this._ComponentID2GmeID[ componentID ];
+              while (len--) {
+                componentID = this._GmeID2ComponentID[gmeID][len];
+                this.designerCanvas.deleteComponent(componentID);
+                this._GmeID2ComponentID[gmeID].splice(len, 1);
+                delete this._ComponentID2GmeID[componentID];
               }
             }
           }
         } else {
           //update about a subcomponent - will be handled in the decorator
-          this._checkComponentDependency( gmeID, CONSTANTS.TERRITORY_EVENT_UPDATE );
+          this._checkComponentDependency(gmeID, CONSTANTS.TERRITORY_EVENT_UPDATE);
         }
       }
     }
   };
 
-  ModelEditorControl.prototype._updateSheetName = function ( name ) {
-    this.designerCanvas.setTitle( name );
-    this.designerCanvas.setBackgroundText( name, { 'font-size': BACKGROUND_TEXT_SIZE,
-      'color': BACKGROUND_TEXT_COLOR });
+  ModelEditorControl.prototype._updateSheetName = function (name) {
+    this.designerCanvas.setTitle(name);
+    this.designerCanvas.setBackgroundText(name, {
+      'font-size': BACKGROUND_TEXT_SIZE,
+      'color': BACKGROUND_TEXT_COLOR
+    });
   };
 
-  ModelEditorControl.prototype._onUnload = function ( gmeID ) {
+  ModelEditorControl.prototype._onUnload = function (gmeID) {
     var componentID,
-    len,
-    getDecoratorTerritoryQueries,
-    self = this,
-    territoryChanged = false;
+      len,
+      getDecoratorTerritoryQueries,
+      self = this,
+      territoryChanged = false;
 
-    getDecoratorTerritoryQueries = function ( decorator ) {
+    getDecoratorTerritoryQueries = function (decorator) {
       var query,
-      entry;
+        entry;
 
-      if ( decorator ) {
+      if (decorator) {
         query = decorator.getTerritoryQuery();
 
-        if ( query ) {
-          for ( entry in query ) {
-            if ( query.hasOwnProperty( entry )) {
-              delete self._selfPatterns[ entry ];
+        if (query) {
+          for (entry in query) {
+            if (query.hasOwnProperty(entry)) {
+              delete self._selfPatterns[entry];
               territoryChanged = true;
             }
           }
@@ -750,30 +775,32 @@ define([ 'logManager',
       }
     };
 
-    if ( gmeID === this.currentNodeInfo.id ) {
+    if (gmeID === this.currentNodeInfo.id) {
       //the opened model has been removed from territoy --> most likely deleted...
-      this.logger.debug( 'The previously opened model does not exist... --- GMEID: "' + this.currentNodeInfo.id + '"' );
-      this.designerCanvas.setBackgroundText( 'The previously opened model does not exist...', { 'font-size': BACKGROUND_TEXT_SIZE,
-        'color': BACKGROUND_TEXT_COLOR });
+      this.logger.debug('The previously opened model does not exist... --- GMEID: "' + this.currentNodeInfo.id + '"');
+      this.designerCanvas.setBackgroundText('The previously opened model does not exist...', {
+        'font-size': BACKGROUND_TEXT_SIZE,
+        'color': BACKGROUND_TEXT_COLOR
+      });
     } else {
-      if ( this._GmeID2ComponentID.hasOwnProperty( gmeID )) {
-        len = this._GmeID2ComponentID[ gmeID ].length;
-        while ( len-- ) {
-          componentID = this._GmeID2ComponentID[ gmeID ][ len ];
+      if (this._GmeID2ComponentID.hasOwnProperty(gmeID)) {
+        len = this._GmeID2ComponentID[gmeID].length;
+        while (len--) {
+          componentID = this._GmeID2ComponentID[gmeID][len];
 
-          if ( this.designerCanvas.itemIds.indexOf( componentID ) !== -1 ) {
-            getDecoratorTerritoryQueries( this.designerCanvas.items[ componentID ]._decoratorInstance );
+          if (this.designerCanvas.itemIds.indexOf(componentID) !== -1) {
+            getDecoratorTerritoryQueries(this.designerCanvas.items[componentID]._decoratorInstance);
           }
 
-          this.designerCanvas.deleteComponent( componentID );
+          this.designerCanvas.deleteComponent(componentID);
 
-          delete this._ComponentID2GmeID[ componentID ];
+          delete this._ComponentID2GmeID[componentID];
         }
 
-        delete this._GmeID2ComponentID[ gmeID ];
+        delete this._GmeID2ComponentID[gmeID];
       } else {
         //probably a subcomponent has been deleted - will be handled in the decorator
-        this._checkComponentDependency( gmeID, CONSTANTS.TERRITORY_EVENT_UNLOAD );
+        this._checkComponentDependency(gmeID, CONSTANTS.TERRITORY_EVENT_UNLOAD);
       }
     }
 
@@ -784,32 +811,31 @@ define([ 'logManager',
   ModelEditorControl.prototype.destroy = function () {
     this._detachClientEventListeners();
     this._removeToolbarItems();
-    this._client.removeUI( this._territoryId );
+    this._client.removeUI(this._territoryId);
   };
 
   ModelEditorControl.prototype._onModelHierarchyUp = function () {
     var myId = this.currentNodeInfo.id;
-    if ( this.currentNodeInfo.parentId ||
-    this.currentNodeInfo.parentId === CONSTANTS.PROJECT_ROOT_ID ) {
-      WebGMEGlobal.State.registerActiveObject( this.currentNodeInfo.parentId );
-      WebGMEGlobal.State.registerActiveSelection([ myId ]);
+    if (this.currentNodeInfo.parentId ||
+      this.currentNodeInfo.parentId === CONSTANTS.PROJECT_ROOT_ID) {
+      WebGMEGlobal.State.registerActiveObject(this.currentNodeInfo.parentId);
+      WebGMEGlobal.State.registerActiveSelection([myId]);
     }
   };
 
   ModelEditorControl.prototype._removeConnectionSegmentPoints = function () {
     var idList = this.designerCanvas.selectionManager.getSelectedElements(),
-    len = idList.length,
-    nodeObj;
-
+      len = idList.length,
+      nodeObj;
 
     this._client.startTransaction();
 
-    while ( len-- ) {
-      if ( this.designerCanvas.connectionIds.indexOf( idList[ len ]) !== -1 ) {
-        nodeObj = this._client.getNode( this._ComponentID2GmeID[ idList[ len ]]);
+    while (len--) {
+      if (this.designerCanvas.connectionIds.indexOf(idList[len]) !== -1) {
+        nodeObj = this._client.getNode(this._ComponentID2GmeID[idList[len]]);
 
-        if ( nodeObj ) {
-          this._client.delRegistry( nodeObj.getId(), REGISTRY_KEYS.LINE_CUSTOM_POINTS );
+        if (nodeObj) {
+          this._client.delRegistry(nodeObj.getId(), REGISTRY_KEYS.LINE_CUSTOM_POINTS);
         }
       }
     }
@@ -817,103 +843,117 @@ define([ 'logManager',
     this._client.completeTransaction();
   };
 
-
-  ModelEditorControl.prototype._getAllSourceDestinationPairsForConnection = function ( GMESrcId, GMEDstId ) {
+  ModelEditorControl.prototype._getAllSourceDestinationPairsForConnection = function (GMESrcId, GMEDstId) {
     var sources = [],
-    destinations = [],
-    i;
+      destinations = [],
+      i;
 
-    if ( this._GmeID2ComponentID.hasOwnProperty( GMESrcId )) {
+    if (this._GmeID2ComponentID.hasOwnProperty(GMESrcId)) {
       //src is a DesignerItem
-      i = this._GmeID2ComponentID[ GMESrcId ].length;
-      while ( i-- ) {
-        sources.push({ 'objId': this._GmeID2ComponentID[ GMESrcId ][ i ],
-          'subCompId': undefined });
+      i = this._GmeID2ComponentID[GMESrcId].length;
+      while (i--) {
+        sources.push({
+          'objId': this._GmeID2ComponentID[GMESrcId][i],
+          'subCompId': undefined
+        });
       }
     } else {
       //src is not a DesignerItem
       //must be a sub_components somewhere, find the corresponding designerItem
-      if ( this._GMEID2Subcomponent && this._GMEID2Subcomponent.hasOwnProperty( GMESrcId )) {
-        for ( i in this._GMEID2Subcomponent[ GMESrcId ]) {
-          if ( this._GMEID2Subcomponent[ GMESrcId ].hasOwnProperty( i )) {
-            sources.push({ 'objId': i,
-              'subCompId': this._GMEID2Subcomponent[ GMESrcId ][ i ]});
+      if (this._GMEID2Subcomponent && this._GMEID2Subcomponent.hasOwnProperty(GMESrcId)) {
+        for (i in this._GMEID2Subcomponent[GMESrcId]) {
+          if (this._GMEID2Subcomponent[GMESrcId].hasOwnProperty(i)) {
+            sources.push({
+              'objId': i,
+              'subCompId': this._GMEID2Subcomponent[GMESrcId][i]
+            });
           }
         }
       }
     }
 
-    if ( this._GmeID2ComponentID.hasOwnProperty( GMEDstId )) {
-      i = this._GmeID2ComponentID[ GMEDstId ].length;
-      while ( i-- ) {
-        destinations.push({ 'objId': this._GmeID2ComponentID[ GMEDstId ][ i ],
-          'subCompId': undefined });
+    if (this._GmeID2ComponentID.hasOwnProperty(GMEDstId)) {
+      i = this._GmeID2ComponentID[GMEDstId].length;
+      while (i--) {
+        destinations.push({
+          'objId': this._GmeID2ComponentID[GMEDstId][i],
+          'subCompId': undefined
+        });
       }
     } else {
       //dst is not a DesignerItem
       //must be a sub_components somewhere, find the corresponding designerItem
-      if ( this._GMEID2Subcomponent && this._GMEID2Subcomponent.hasOwnProperty( GMEDstId )) {
-        for ( i in this._GMEID2Subcomponent[ GMEDstId ]) {
-          if ( this._GMEID2Subcomponent[ GMEDstId ].hasOwnProperty( i )) {
-            destinations.push({ 'objId': i,
-              'subCompId': this._GMEID2Subcomponent[ GMEDstId ][ i ]});
+      if (this._GMEID2Subcomponent && this._GMEID2Subcomponent.hasOwnProperty(GMEDstId)) {
+        for (i in this._GMEID2Subcomponent[GMEDstId]) {
+          if (this._GMEID2Subcomponent[GMEDstId].hasOwnProperty(i)) {
+            destinations.push({
+              'objId': i,
+              'subCompId': this._GMEID2Subcomponent[GMEDstId][i]
+            });
           }
         }
       }
     }
 
-    return { 'sources': sources,
-      'destinations': destinations };
+    return {
+      'sources': sources,
+      'destinations': destinations
+    };
   };
 
-  ModelEditorControl.prototype.registerComponentIDForPartID = function ( componentID, partId ) {
-    this._componentIDPartIDMap[ componentID ] = this._componentIDPartIDMap[ componentID ] || [];
-    if ( this._componentIDPartIDMap[ componentID ].indexOf( partId ) === -1 ) {
-      this._componentIDPartIDMap[ componentID ].push( partId );
+  ModelEditorControl.prototype.registerComponentIDForPartID = function (componentID, partId) {
+    this._componentIDPartIDMap[componentID] = this._componentIDPartIDMap[componentID] || [];
+    if (this._componentIDPartIDMap[componentID].indexOf(partId) === -1) {
+      this._componentIDPartIDMap[componentID].push(partId);
     }
   };
 
-  ModelEditorControl.prototype.unregisterComponentIDFromPartID = function ( componentID, partId ) {
+  ModelEditorControl.prototype.unregisterComponentIDFromPartID = function (componentID, partId) {
     var idx;
 
-    if ( this._componentIDPartIDMap && this._componentIDPartIDMap[ componentID ]) {
-      idx = this._componentIDPartIDMap[ componentID ].indexOf( partId );
-      if ( idx !== -1 ) {
-        this._componentIDPartIDMap[ componentID ].splice( idx, 1 );
+    if (this._componentIDPartIDMap && this._componentIDPartIDMap[componentID]) {
+      idx = this._componentIDPartIDMap[componentID].indexOf(partId);
+      if (idx !== -1) {
+        this._componentIDPartIDMap[componentID].splice(idx, 1);
 
-        if ( this._componentIDPartIDMap[ componentID ].length === 0 ) {
-          delete this._componentIDPartIDMap[ componentID ];
+        if (this._componentIDPartIDMap[componentID].length === 0) {
+          delete this._componentIDPartIDMap[componentID];
         }
       }
     }
   };
 
-  ModelEditorControl.prototype._checkComponentDependency = function ( gmeID, eventType ) {
+  ModelEditorControl.prototype._checkComponentDependency = function (gmeID, eventType) {
     var len;
-    if ( this._componentIDPartIDMap && this._componentIDPartIDMap[ gmeID ]) {
-      len = this._componentIDPartIDMap[ gmeID ].length;
-      while ( len-- ) {
-        this._notifyPackage[ this._componentIDPartIDMap[ gmeID ][ len ]] = this._notifyPackage[ this._componentIDPartIDMap[ gmeID ][ len ]] || [];
-        this._notifyPackage[ this._componentIDPartIDMap[ gmeID ][ len ]].push({ 'id': gmeID, 'event': eventType });
+    if (this._componentIDPartIDMap && this._componentIDPartIDMap[gmeID]) {
+      len = this._componentIDPartIDMap[gmeID].length;
+      while (len--) {
+        this._notifyPackage[this._componentIDPartIDMap[gmeID][len]] = this._notifyPackage[this._componentIDPartIDMap[
+          gmeID][len]] || [];
+        this._notifyPackage[this._componentIDPartIDMap[gmeID][len]].push({
+          'id': gmeID,
+          'event': eventType
+        });
       }
     }
   };
 
   ModelEditorControl.prototype._handleDecoratorNotification = function () {
     var gmeID,
-    i,
-    itemID;
+      i,
+      itemID;
 
-    for ( gmeID in this._notifyPackage ) {
-      if ( this._notifyPackage.hasOwnProperty( gmeID )) {
-        this.logger.debug( 'NotifyPartDecorator: ' + gmeID + ', componentIDs: ' + JSON.stringify( this._notifyPackage[ gmeID ]));
+    for (gmeID in this._notifyPackage) {
+      if (this._notifyPackage.hasOwnProperty(gmeID)) {
+        this.logger.debug('NotifyPartDecorator: ' + gmeID + ', componentIDs: ' + JSON.stringify(this._notifyPackage[
+          gmeID]));
 
-        if ( this._GmeID2ComponentID.hasOwnProperty( gmeID )) {
+        if (this._GmeID2ComponentID.hasOwnProperty(gmeID)) {
           //src is a DesignerItem
-          i = this._GmeID2ComponentID[ gmeID ].length;
-          while ( i-- ) {
-            itemID = this._GmeID2ComponentID[ gmeID ][ i ];
-            this.designerCanvas.notifyItemComponentEvents( itemID, this._notifyPackage[ gmeID ]);
+          i = this._GmeID2ComponentID[gmeID].length;
+          while (i--) {
+            itemID = this._GmeID2ComponentID[gmeID][i];
+            this.designerCanvas.notifyItemComponentEvents(itemID, this._notifyPackage[gmeID]);
           }
         }
       }
@@ -922,19 +962,19 @@ define([ 'logManager',
 
   ModelEditorControl.prototype._constraintCheck = function () {
     //Cconstraint Checking goes here...
-    if ( this.currentNodeInfo.id ) {
-      WebGMEGlobal.ConstraintManager.validate( this.currentNodeInfo.id );
+    if (this.currentNodeInfo.id) {
+      WebGMEGlobal.ConstraintManager.validate(this.currentNodeInfo.id);
     }
   };
 
-  ModelEditorControl.prototype._stateActiveObjectChanged = function ( model, activeObjectId ) {
-    this.selectedObjectChanged( activeObjectId );
+  ModelEditorControl.prototype._stateActiveObjectChanged = function (model, activeObjectId) {
+    this.selectedObjectChanged(activeObjectId);
   };
 
-  ModelEditorControl.prototype._stateActiveSelectionChanged = function ( model, activeSelection ) {
-    if ( this._settingActiveSelection !== true ) {
-      if ( activeSelection ) {
-        this.activeSelectionChanged( activeSelection );
+  ModelEditorControl.prototype._stateActiveSelectionChanged = function (model, activeSelection) {
+    if (this._settingActiveSelection !== true) {
+      if (activeSelection) {
+        this.activeSelectionChanged(activeSelection);
       } else {
         this.activeSelectionChanged([]);
       }
@@ -943,13 +983,13 @@ define([ 'logManager',
 
   ModelEditorControl.prototype._attachClientEventListeners = function () {
     this._detachClientEventListeners();
-    WebGMEGlobal.State.on( 'change:' + CONSTANTS.STATE_ACTIVE_OBJECT, this._stateActiveObjectChanged, this );
-    WebGMEGlobal.State.on( 'change:' + CONSTANTS.STATE_ACTIVE_SELECTION, this._stateActiveSelectionChanged, this );
+    WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_OBJECT, this._stateActiveObjectChanged, this);
+    WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_SELECTION, this._stateActiveSelectionChanged, this);
   };
 
   ModelEditorControl.prototype._detachClientEventListeners = function () {
-    WebGMEGlobal.State.off( 'change:' + CONSTANTS.STATE_ACTIVE_OBJECT, this._stateActiveObjectChanged );
-    WebGMEGlobal.State.off( 'change:' + CONSTANTS.STATE_ACTIVE_SELECTION, this._stateActiveSelectionChanged );
+    WebGMEGlobal.State.off('change:' + CONSTANTS.STATE_ACTIVE_OBJECT, this._stateActiveObjectChanged);
+    WebGMEGlobal.State.off('change:' + CONSTANTS.STATE_ACTIVE_SELECTION, this._stateActiveSelectionChanged);
   };
 
   ModelEditorControl.prototype.onActivate = function () {
@@ -963,11 +1003,11 @@ define([ 'logManager',
   };
 
   ModelEditorControl.prototype._displayToolbarItems = function () {
-    if ( this._toolbarInitialized !== true ) {
+    if (this._toolbarInitialized !== true) {
       this._initializeToolbar();
     } else {
-      for ( var i = 0; i < this._toolbarItems.length; i++ ) {
-        this._toolbarItems[ i ].show();
+      for (var i = 0; i < this._toolbarItems.length; i++) {
+        this._toolbarItems[i].show();
       }
     }
 
@@ -975,60 +1015,61 @@ define([ 'logManager',
   };
 
   ModelEditorControl.prototype._hideToolbarItems = function () {
-    if ( this._toolbarInitialized === true ) {
-      for ( var i = 0; i < this._toolbarItems.length; i++ ) {
-        this._toolbarItems[ i ].hide();
+    if (this._toolbarInitialized === true) {
+      for (var i = 0; i < this._toolbarItems.length; i++) {
+        this._toolbarItems[i].hide();
       }
     }
   };
 
   ModelEditorControl.prototype._removeToolbarItems = function () {
-    if ( this._toolbarInitialized === true ) {
-      for ( var i = 0; i < this._toolbarItems.length; i++ ) {
-        this._toolbarItems[ i ].destroy();
+    if (this._toolbarInitialized === true) {
+      for (var i = 0; i < this._toolbarItems.length; i++) {
+        this._toolbarItems[i].destroy();
       }
     }
   };
 
   ModelEditorControl.prototype._initializeToolbar = function () {
     var toolBar = WebGMEGlobal.Toolbar,
-    self = this;
+      self = this;
 
     this._toolbarItems = [];
 
     /****************** ADD BUTTONS AND THEIR EVENT HANDLERS TO DESIGNER CANVAS ******************/
 
     /************** GOTO PARENT IN HIERARCHY BUTTON ****************/
-    this.$btnModelHierarchyUp = toolBar.addButton({ 'title': 'Go to parent',
+    this.$btnModelHierarchyUp = toolBar.addButton({
+      'title': 'Go to parent',
       'icon': 'glyphicon glyphicon-circle-arrow-up',
       'clickFn': function ( /*data*/ ) {
         self._onModelHierarchyUp();
       }
     });
-    this._toolbarItems.push( this.$btnModelHierarchyUp );
+    this._toolbarItems.push(this.$btnModelHierarchyUp);
 
     this.$btnModelHierarchyUp.hide();
 
-
     /************************ CONTSTRAINT VALIDATION ******************/
-    this.$btnConstraintValidate = toolBar.addButton({ 'title': 'Constraint check...',
+    this.$btnConstraintValidate = toolBar.addButton({
+      'title': 'Constraint check...',
       'icon': 'glyphicon glyphicon-fire',
       'clickFn': function ( /*data*/ ) {
         self._constraintCheck();
       }
     });
-    this._toolbarItems.push( this.$btnConstraintValidate );
+    this._toolbarItems.push(this.$btnConstraintValidate);
 
     /************** REMOVE CONNECTION SEGMENTPOINTS BUTTON ****************/
-    this.$btnConnectionRemoveSegmentPoints = toolBar.addButton(
-    { 'title': 'Remove segment points',
+    this.$btnConnectionRemoveSegmentPoints = toolBar.addButton({
+      'title': 'Remove segment points',
       'icon': 'glyphicon glyphicon-remove-circle',
       'clickFn': function ( /*data*/ ) {
         self._removeConnectionSegmentPoints();
       }
     });
-    this._toolbarItems.push( this.$btnConnectionRemoveSegmentPoints );
-    this.$btnConnectionRemoveSegmentPoints.enabled( false );
+    this._toolbarItems.push(this.$btnConnectionRemoveSegmentPoints);
+    this.$btnConnectionRemoveSegmentPoints.enabled(false);
 
     this._toolbarInitialized = true;
   };
@@ -1038,58 +1079,58 @@ define([ 'logManager',
   };
 
   ModelEditorControl.prototype._refreshBtnModelHierarchyUp = function () {
-    if ( this.currentNodeInfo.parentId ||
-    this.currentNodeInfo.parentId === CONSTANTS.PROJECT_ROOT_ID ) {
+    if (this.currentNodeInfo.parentId ||
+      this.currentNodeInfo.parentId === CONSTANTS.PROJECT_ROOT_ID) {
       this.$btnModelHierarchyUp.show();
     } else {
       this.$btnModelHierarchyUp.hide();
     }
   };
 
-  ModelEditorControl.prototype.activeSelectionChanged = function ( activeSelection ) {
+  ModelEditorControl.prototype.activeSelectionChanged = function (activeSelection) {
     var selectedIDs = [],
-    len = activeSelection.length;
+      len = activeSelection.length;
 
-    while ( len-- ) {
-      if ( this._GmeID2ComponentID.hasOwnProperty( activeSelection[ len ])) {
-        selectedIDs = selectedIDs.concat( this._GmeID2ComponentID[ activeSelection[ len ]]);
+    while (len--) {
+      if (this._GmeID2ComponentID.hasOwnProperty(activeSelection[len])) {
+        selectedIDs = selectedIDs.concat(this._GmeID2ComponentID[activeSelection[len]]);
       }
     }
 
-    this.designerCanvas.select( selectedIDs );
+    this.designerCanvas.select(selectedIDs);
   };
 
   ModelEditorControl.prototype._updateAspects = function () {
     var objId = this.currentNodeInfo.id,
-    aspects,
-    tabID,
-    i,
-    selectedTabID;
+      aspects,
+      tabID,
+      i,
+      selectedTabID;
 
     this._aspects = {};
     this.designerCanvas.clearTabs();
 
-    if ( objId || objId === CONSTANTS.PROJECT_ROOT_ID ) {
-      aspects = this._client.getMetaAspectNames( objId ) || [];
+    if (objId || objId === CONSTANTS.PROJECT_ROOT_ID) {
+      aspects = this._client.getMetaAspectNames(objId) || [];
 
-      aspects.sort(function ( a,b ) {
+      aspects.sort(function (a, b) {
         var an = a.toLowerCase(),
-        bn = b.toLowerCase();
+          bn = b.toLowerCase();
 
-        return ( an < bn ) ? -1 : 1;
+        return (an < bn) ? -1 : 1;
       });
 
-      aspects.splice( 0,0,CONSTANTS.ASPECT_ALL );
+      aspects.splice(0, 0, CONSTANTS.ASPECT_ALL);
 
       this.designerCanvas.addMultipleTabsBegin();
 
-      for ( i = 0; i < aspects.length; i += 1 ) {
-        tabID = this.designerCanvas.addTab( aspects[ i ]);
+      for (i = 0; i < aspects.length; i += 1) {
+        tabID = this.designerCanvas.addTab(aspects[i]);
 
-        this._aspects[ tabID ] = aspects[ i ];
+        this._aspects[tabID] = aspects[i];
 
-        if ( this._selectedAspect &&
-        this._selectedAspect === aspects[ i ]) {
+        if (this._selectedAspect &&
+          this._selectedAspect === aspects[i]) {
           selectedTabID = tabID;
         }
       }
@@ -1097,54 +1138,53 @@ define([ 'logManager',
       this.designerCanvas.addMultipleTabsEnd();
     }
 
-    if ( !selectedTabID ) {
-      for ( selectedTabID in this._aspects ) {
-        if ( this._aspects.hasOwnProperty( selectedTabID )) {
+    if (!selectedTabID) {
+      for (selectedTabID in this._aspects) {
+        if (this._aspects.hasOwnProperty(selectedTabID)) {
           break;
         }
       }
     }
 
-    this.designerCanvas.selectTab( selectedTabID );
+    this.designerCanvas.selectTab(selectedTabID);
 
     //check if the node's aspect rules has changed or not, and if so, initialize with that
-    if ( this._selectedAspect !== CONSTANTS.ASPECT_ALL ) {
+    if (this._selectedAspect !== CONSTANTS.ASPECT_ALL) {
       var nodeId = this.currentNodeInfo.id;
-      var newAspectRules = this._client.getAspectTerritoryPattern( nodeId, this._selectedAspect );
+      var newAspectRules = this._client.getAspectTerritoryPattern(nodeId, this._selectedAspect);
       var aspectRulesChanged = false;
 
-      if ( this._selfPatterns[ nodeId ].items && newAspectRules.items ) {
-        aspectRulesChanged = ( _.difference( this._selfPatterns[ nodeId ].items, newAspectRules.items )).length > 0;
-        if ( aspectRulesChanged === false ) {
-          aspectRulesChanged = ( _.difference( newAspectRules.items, this._selfPatterns[ nodeId ].items )).length > 0;
+      if (this._selfPatterns[nodeId].items && newAspectRules.items) {
+        aspectRulesChanged = (_.difference(this._selfPatterns[nodeId].items, newAspectRules.items)).length > 0;
+        if (aspectRulesChanged === false) {
+          aspectRulesChanged = (_.difference(newAspectRules.items, this._selfPatterns[nodeId].items)).length > 0;
         }
       } else {
-        if ( !this._selfPatterns[ nodeId ].items && !newAspectRules.items ) {
+        if (!this._selfPatterns[nodeId].items && !newAspectRules.items) {
           //none of them has items, no change
         } else {
           aspectRulesChanged = true;
         }
       }
 
-      if ( aspectRulesChanged ) {
-        this.selectedObjectChanged( nodeId );
+      if (aspectRulesChanged) {
+        this.selectedObjectChanged(nodeId);
       }
     }
   };
 
   ModelEditorControl.prototype._initializeSelectedAspect = function () {
-    WebGMEGlobal.State.registerActiveAspect( this._selectedAspect );
+    WebGMEGlobal.State.registerActiveAspect(this._selectedAspect);
 
-    this.selectedObjectChanged( this.currentNodeInfo.id );
+    this.selectedObjectChanged(this.currentNodeInfo.id);
   };
 
-  ModelEditorControl.prototype.getConnectionDescriptor = function ( gmeID ) {
+  ModelEditorControl.prototype.getConnectionDescriptor = function (gmeID) {
     return {};
   };
 
-
   //attach ModelEditorControl - DesignerCanvas event handler functions
-  _.extend( ModelEditorControl.prototype, ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype );
+  _.extend(ModelEditorControl.prototype, ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype);
 
   return ModelEditorControl;
 });

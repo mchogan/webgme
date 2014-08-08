@@ -5,13 +5,14 @@
  * @author brollb / https://github/brollb/
  */
 
-define([ 'logManager',
-    'util/assert',
-    './AutoRouter.Constants',
-    './AutoRouter.Utils',
-    './AutoRouter.Point',
-    './AutoRouter.Rect',
-    './AutoRouter.Port' ], function ( logManager, assert, CONSTANTS, UTILS, ArPoint, ArRect, AutoRouterPort ) {
+define(['logManager',
+  'util/assert',
+  './AutoRouter.Constants',
+  './AutoRouter.Utils',
+  './AutoRouter.Point',
+  './AutoRouter.Rect',
+  './AutoRouter.Port'
+], function (logManager, assert, CONSTANTS, UTILS, ArPoint, ArRect, AutoRouterPort) {
 
   'use strict';
 
@@ -21,7 +22,7 @@ define([ 'logManager',
     this.atomic = false;
     this.selfPoints = [];
     this.ports = [];
-    this.childBoxes = [];//dependent boxes
+    this.childBoxes = []; //dependent boxes
     this.mother = null;
     this.id = null;
 
@@ -30,17 +31,17 @@ define([ 'logManager',
 
   AutoRouterBox.prototype.calculateSelfPoints = function () {
     this.selfPoints = [];
-    this.selfPoints.push( new ArPoint( this.rect.getTopLeft()));
+    this.selfPoints.push(new ArPoint(this.rect.getTopLeft()));
 
-    this.selfPoints.push( new ArPoint( this.rect.right, this.rect.ceil ));
-    this.selfPoints.push( new ArPoint( this.rect.right, this.rect.floor ));
-    this.selfPoints.push( new ArPoint( this.rect.left, this.rect.floor ));
+    this.selfPoints.push(new ArPoint(this.rect.right, this.rect.ceil));
+    this.selfPoints.push(new ArPoint(this.rect.right, this.rect.floor));
+    this.selfPoints.push(new ArPoint(this.rect.left, this.rect.floor));
   };
 
   AutoRouterBox.prototype.deleteAllPorts = function () {
-    for ( var i = 0; i < this.ports.length; i++ ) {
-      this.ports[ i ].setOwner( null );
-      this.ports[ i ] = null;
+    for (var i = 0; i < this.ports.length; i++) {
+      this.ports[i].setOwner(null);
+      this.ports[i] = null;
     }
 
     this.ports = [];
@@ -48,7 +49,7 @@ define([ 'logManager',
     this.atomic = false;
   };
 
-  AutoRouterBox.prototype.setID = function ( _id ) {
+  AutoRouterBox.prototype.setID = function (_id) {
     this.id = _id;
   };
 
@@ -64,13 +65,13 @@ define([ 'logManager',
     return this.owner !== null;
   };
 
-  AutoRouterBox.prototype.setOwner = function ( graph ) {
+  AutoRouterBox.prototype.setOwner = function (graph) {
     this.owner = graph;
   };
 
   AutoRouterBox.prototype.createPort = function () {
     var port = new AutoRouterPort();
-    assert( port !== null, 'ARBox.createPort: port !== null FAILED' );
+    assert(port !== null, 'ARBox.createPort: port !== null FAILED');
 
     return port;
   };
@@ -87,35 +88,35 @@ define([ 'logManager',
     return this.atomic;
   };
 
-  AutoRouterBox.prototype.addPort = function ( port ) {
-    assert( port !== null, 'ARBox.addPort: port !== null FAILED' );
+  AutoRouterBox.prototype.addPort = function (port) {
+    assert(port !== null, 'ARBox.addPort: port !== null FAILED');
 
-    if ( port === null ) {
+    if (port === null) {
       return;
     }
 
-    port.setOwner( this );
-    this.ports.push( port );
+    port.setOwner(this);
+    this.ports.push(port);
 
-    if ( this.owner ) { //Not pointing to the ARGraph
-      this.owner._addEdges( port );
+    if (this.owner) { //Not pointing to the ARGraph
+      this.owner._addEdges(port);
     }
   };
 
-  AutoRouterBox.prototype.deletePort = function ( port ) {
-    assert( port !== null, 'ARBox.deletePort: port !== null FAILED' );
-    if ( port === null ) {
+  AutoRouterBox.prototype.deletePort = function (port) {
+    assert(port !== null, 'ARBox.deletePort: port !== null FAILED');
+    if (port === null) {
       return;
     }
 
-    var index = this.ports.indexOf( port ),
-    delPort,
-    graph = this.owner;
+    var index = this.ports.indexOf(port),
+      delPort,
+      graph = this.owner;
 
-    assert( index !== -1, 'ARBox.deletePort: index !== -1 FAILED' );
+    assert(index !== -1, 'ARBox.deletePort: index !== -1 FAILED');
 
-    graph.deleteEdges( port );
-    delPort = this.ports.splice( index, 1 )[ 0 ];
+    graph.deleteEdges(port);
+    delPort = this.ports.splice(index, 1)[0];
     delPort.destroy();
     delPort = null;
 
@@ -136,34 +137,38 @@ define([ 'logManager',
     return this.rect.isRectEmpty();
   };
 
-  AutoRouterBox.prototype.setRect = function ( r ) {
-    assert( r instanceof ArRect, 'Invalthis.id arg in ARBox.setRect. Requires ArRect' );
+  AutoRouterBox.prototype.setRect = function (r) {
+    assert(r instanceof ArRect, 'Invalthis.id arg in ARBox.setRect. Requires ArRect');
 
-    assert( r.getWidth() >= 3 && r.getHeight() >= 3, 'ARBox.setRect: r.getWidth() >= 3 && r.getHeight() >= 3 FAILED!' );
-    assert( r.getTopLeft().x >= CONSTANTS.ED_MINCOORD && r.getTopLeft().y >= CONSTANTS.ED_MINCOORD, 'ARBox.setRect: r.getTopLeft().x >= CONSTANTS.ED_MINCOORD && r.getTopLeft().y >= CONSTANTS.ED_MAXCOORD FAILED!' );
-    assert( r.getBottomRight().x <= CONSTANTS.ED_MAXCOORD && r.getBottomRight().y <= CONSTANTS.ED_MAXCOORD, 'ARBox.setRect:  r.getBottomRight().x <= CONSTANTS.ED_MAXCOORD && r.getBottomRight().y <= CONSTANTS.ED_MAXCOORD FAILED!' );
-    assert( this.ports.length === 0 || this.atomic, 'ARBox.setRect: this.ports.length === 0 || this.atomic FAILED!' );
+    assert(r.getWidth() >= 3 && r.getHeight() >= 3, 'ARBox.setRect: r.getWidth() >= 3 && r.getHeight() >= 3 FAILED!');
+    assert(r.getTopLeft().x >= CONSTANTS.ED_MINCOORD && r.getTopLeft().y >= CONSTANTS.ED_MINCOORD,
+      'ARBox.setRect: r.getTopLeft().x >= CONSTANTS.ED_MINCOORD && r.getTopLeft().y >= CONSTANTS.ED_MAXCOORD FAILED!'
+    );
+    assert(r.getBottomRight().x <= CONSTANTS.ED_MAXCOORD && r.getBottomRight().y <= CONSTANTS.ED_MAXCOORD,
+      'ARBox.setRect:  r.getBottomRight().x <= CONSTANTS.ED_MAXCOORD && r.getBottomRight().y <= CONSTANTS.ED_MAXCOORD FAILED!'
+    );
+    assert(this.ports.length === 0 || this.atomic, 'ARBox.setRect: this.ports.length === 0 || this.atomic FAILED!');
 
-    this.rect.assign( r );
+    this.rect.assign(r);
 
     this.calculateSelfPoints();
 
-    if ( this.atomic ) {
-      assert( this.ports.length === 1, 'ARBox.setRect: this.ports.length === 1 FAILED!' );
-      this.ports[ 0 ].setRect( r );
+    if (this.atomic) {
+      assert(this.ports.length === 1, 'ARBox.setRect: this.ports.length === 1 FAILED!');
+      this.ports[0].setRect(r);
     }
   };
 
-  AutoRouterBox.prototype.setRectByPoint = function ( point ) {
-    this.shiftBy( point );
+  AutoRouterBox.prototype.setRectByPoint = function (point) {
+    this.shiftBy(point);
   };
 
-  AutoRouterBox.prototype.shiftBy = function ( offset ) {
-    this.rect.add( offset );
+  AutoRouterBox.prototype.shiftBy = function (offset) {
+    this.rect.add(offset);
 
     var i = this.ports.length;
-    while ( i-- ) {
-      this.ports[ i ].shiftBy( offset );
+    while (i--) {
+      this.ports[i].shiftBy(offset);
     }
 
     /*
@@ -177,14 +182,14 @@ define([ 'logManager',
   };
 
   AutoRouterBox.prototype.resetPortAvailability = function () {
-    for ( var i = 0; i < this.ports.length; i++ ) {
-      this.ports[ i ].resetAvailableArea();
+    for (var i = 0; i < this.ports.length; i++) {
+      this.ports[i].resetAvailableArea();
     }
   };
 
-  AutoRouterBox.prototype.adjustPortAvailability = function ( r ) {
-    for ( var i = 0; i < this.ports.length; i++ ) {
-      this.ports[ i ].adjustAvailableArea( r );
+  AutoRouterBox.prototype.adjustPortAvailability = function (r) {
+    for (var i = 0; i < this.ports.length; i++) {
+      this.ports[i].adjustAvailableArea(r);
     }
   };
 
@@ -192,26 +197,26 @@ define([ 'logManager',
     return this.mother;
   };
 
-  AutoRouterBox.prototype.setParent = function ( box ) {
+  AutoRouterBox.prototype.setParent = function (box) {
     this.mother = box;
   };
 
-  AutoRouterBox.prototype.addChild = function ( box ) {
-    assert( this.childBoxes.indexOf( box ) === -1, 'ARBox.addChild: box already is child of ' + this.getID());
-    this.childBoxes.push( box );
-    box.setParent( this );
+  AutoRouterBox.prototype.addChild = function (box) {
+    assert(this.childBoxes.indexOf(box) === -1, 'ARBox.addChild: box already is child of ' + this.getID());
+    this.childBoxes.push(box);
+    box.setParent(this);
   };
 
-  AutoRouterBox.prototype.removeChild = function ( box ) {
-    var i = this.childBoxes.indexOf( box );
-    assert( i !== -1, 'ARBox.removeChild: box isn\'t child of ' + this.getID());
-    this.childBoxes.splice( i,1 )[ 0 ].setParent( null );
+  AutoRouterBox.prototype.removeChild = function (box) {
+    var i = this.childBoxes.indexOf(box);
+    assert(i !== -1, 'ARBox.removeChild: box isn\'t child of ' + this.getID());
+    this.childBoxes.splice(i, 1)[0].setParent(null);
   };
 
   AutoRouterBox.prototype.clearChildren = function () {
     var i = this.childBoxes.length;
-    while ( i-- ) {
-      this.removeChild( this.childBoxes[ i ]);
+    while (i--) {
+      this.removeChild(this.childBoxes[i]);
     }
   };
 
@@ -223,16 +228,16 @@ define([ 'logManager',
     return this.selfPoints;
   };
 
-  AutoRouterBox.prototype.isBoxAt = function ( point, nearness ) {
-    return UTILS.UTILS.isPointIn( point, this.rect, nearness );
+  AutoRouterBox.prototype.isBoxAt = function (point, nearness) {
+    return UTILS.UTILS.isPointIn(point, this.rect, nearness);
   };
 
-  AutoRouterBox.prototype.isBoxClip = function ( r ) {
-    return UTILS.isRectClip ( this.rect, r );
+  AutoRouterBox.prototype.isBoxClip = function (r) {
+    return UTILS.isRectClip(this.rect, r);
   };
 
-  AutoRouterBox.prototype.isBoxIn = function ( r ) {
-    return UTILS.isRectIn( this.rect, r );
+  AutoRouterBox.prototype.isBoxIn = function (r) {
+    return UTILS.isRectIn(this.rect, r);
   };
 
   AutoRouterBox.prototype.destroy = function () {
@@ -240,18 +245,17 @@ define([ 'logManager',
 
     //notify this.mother of destruction
     //if there is a this.mother, of course
-    if ( this.mother ) {
-      this.mother.removeChild( this );
+    if (this.mother) {
+      this.mother.removeChild(this);
     }
 
-    this.setOwner( null );
+    this.setOwner(null);
     this.deleteAllPorts();
 
-    while ( i-- ) {
-      this.childBoxes[ i ].destroy();
+    while (i--) {
+      this.childBoxes[i].destroy();
     }
   };
-
 
   return AutoRouterBox;
 
