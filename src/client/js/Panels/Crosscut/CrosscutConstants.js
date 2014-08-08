@@ -5,9 +5,9 @@
  */
 
 define([], function () {
-    "use strict";
-    //return string constants
-    return {
-        CROSSCUT_NAME_PREFIX : 'Crosscut_'
-    };
+  'use strict';
+  //return string constants
+  return {
+    CROSSCUT_NAME_PREFIX: 'Crosscut_'
+  };
 });

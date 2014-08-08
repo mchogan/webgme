@@ -5,21 +5,21 @@
  * @author brollb / https://github/brollb
  */
 
-define(['logManager',
-           'util/assert',
-           './AutoRouter.Constants',
-           './AutoRouter.Utils',
-           './AutoRouter.Point'], function ( logManager, assert, CONSTANTS, UTILS, ArPoint ) {
+define([ 'logManager',
+    'util/assert',
+    './AutoRouter.Constants',
+    './AutoRouter.Utils',
+    './AutoRouter.Point' ], function ( logManager, assert, CONSTANTS, UTILS, ArPoint ) {
 
-    "use strict"; 
+  'use strict';
 
-    var AutoRouterEdge = function (){
-        /*
+  var AutoRouterEdge = function () {
+    /*
            In this section every comment refer to the horizontal case, that is, each	edge is
            horizontal.
          */
 
-        /*
+    /*
            Every CAutoRouterEdge belongs to an edge of a CAutoRouterPath, CAutoRouterBox or CAutoRouterPort. This edge is
            Represented by a CAutoRouterPoint with its next point. The variable 'point' will refer
            to this CAutoRouterPoint.
@@ -78,416 +78,416 @@ define(['logManager',
 
          */
 
-        this.owner = null;
-        this.startpoint_prev = null;
-        this.startpoint = null;
-        this.endpoint = null;
-        this.endpoint_next = null;
+    this.owner = null;
+    this.startpoint_prev = null;
+    this.startpoint = null;
+    this.endpoint = null;
+    this.endpoint_next = null;
 
-        this.position_y = 0;
-        this.position_x1 = 0;
-        this.position_x2 = 0;
-        this.bracket_closing = 0;
-        this.bracket_opening = 0;
+    this.position_y = 0;
+    this.position_x1 = 0;
+    this.position_x2 = 0;
+    this.bracket_closing = 0;
+    this.bracket_opening = 0;
 
-        this.order_prev = null;
-        this.order_next = null;
+    this.order_prev = null;
+    this.order_next = null;
 
-        this.section_x1 = null;
-        this.section_x2 = null;
-        this.section_next = null;
-        this.section_down = null;
+    this.section_x1 = null;
+    this.section_x2 = null;
+    this.section_next = null;
+    this.section_down = null;
 
-        this.edge_fixed = false;
-        this.edge_customFixed = false;
-        this.edge_canpassed = false;
-        this.edge_direction = null;
+    this.edge_fixed = false;
+    this.edge_customFixed = false;
+    this.edge_canpassed = false;
+    this.edge_direction = null;
 
-        this.block_prev = null;
-        this.block_next = null;
-        this.block_trace = null;
+    this.block_prev = null;
+    this.block_next = null;
+    this.block_trace = null;
 
-        this.closest_prev = null;
-        this.closest_next = null;
+    this.closest_prev = null;
+    this.closest_next = null;
 
-    };
+  };
 
 
-    AutoRouterEdge.prototype.assign = function(otherEdge){
+  AutoRouterEdge.prototype.assign = function ( otherEdge ) {
 
-        if(otherEdge !== null){
-            this.setOwner(otherEdge.getOwner());
-            this.setStartPoint(otherEdge.getStartPointPtr(), false );
-            this.setEndPoint(otherEdge.getEndPointPtr(), otherEdge.getEndPointPtr() !== null); //Only calculateDirection if this.endpoint is not null
-
-            this.setStartPointPrev(otherEdge.getStartPointPrev() );
-            this.setEndPointNext(otherEdge.getEndPointNext() );
+    if ( otherEdge !== null ) {
+      this.setOwner( otherEdge.getOwner());
+      this.setStartPoint( otherEdge.getStartPointPtr(), false );
+      this.setEndPoint( otherEdge.getEndPointPtr(), otherEdge.getEndPointPtr() !== null ); //Only calculateDirection if this.endpoint is not null
+
+      this.setStartPointPrev( otherEdge.getStartPointPrev());
+      this.setEndPointNext( otherEdge.getEndPointNext());
 
-            this.setPositionY(otherEdge.getPositionY());
-            this.setPositionX1(otherEdge.getPositionX1() );
-            this.setPositionX2(otherEdge.getPositionX2() );
-            this.setBracketClosing(otherEdge.getBracketClosing(), false );
-            this.setBracketOpening(otherEdge.getBracketOpening() );
+      this.setPositionY( otherEdge.getPositionY());
+      this.setPositionX1( otherEdge.getPositionX1());
+      this.setPositionX2( otherEdge.getPositionX2());
+      this.setBracketClosing( otherEdge.getBracketClosing(), false );
+      this.setBracketOpening( otherEdge.getBracketOpening());
 
-            this.setOrderNext(otherEdge.getOrderNext() );
-            this.setOrderPrev(otherEdge.getOrderPrev() );
-
-            this.setSectionX1(otherEdge.getSectionX1() );
-            this.setSectionX2(otherEdge.getSectionX2() );
-            this.setSectionNext(otherEdge.getSectionNext(true) );
-            this.setSectionDown(otherEdge.getSectionDown(true) );
+      this.setOrderNext( otherEdge.getOrderNext());
+      this.setOrderPrev( otherEdge.getOrderPrev());
+
+      this.setSectionX1( otherEdge.getSectionX1());
+      this.setSectionX2( otherEdge.getSectionX2());
+      this.setSectionNext( otherEdge.getSectionNext( true ));
+      this.setSectionDown( otherEdge.getSectionDown( true ));
 
-            this.setEdgeFixed(otherEdge.getEdgeFixed() );
-            this.setEdgeCustomFixed(otherEdge.getEdgeCustomFixed() );
-            this.setEdgeCanpassed(otherEdge.getEdgeCanpassed() );
-            this.setDirection(otherEdge.getDirection() );
+      this.setEdgeFixed( otherEdge.getEdgeFixed());
+      this.setEdgeCustomFixed( otherEdge.getEdgeCustomFixed());
+      this.setEdgeCanpassed( otherEdge.getEdgeCanpassed());
+      this.setDirection( otherEdge.getDirection());
 
-            this.setBlockPrev(otherEdge.getBlockPrev() );
-            this.setBlockNext(otherEdge.getBlockNext() );
-            this.setBlockTrace(otherEdge.getBlockTrace() );
+      this.setBlockPrev( otherEdge.getBlockPrev());
+      this.setBlockNext( otherEdge.getBlockNext());
+      this.setBlockTrace( otherEdge.getBlockTrace());
 
-            this.setClosestPrev(otherEdge.getClosestPrev() );
-            this.setClosestNext(otherEdge.getClosestNext() );
+      this.setClosestPrev( otherEdge.getClosestPrev());
+      this.setClosestNext( otherEdge.getClosestNext());
 
-            return this;
-        }
-
-        return null;
-    };
+      return this;
+    }
+
+    return null;
+  };
 
-    AutoRouterEdge.prototype.equals = function(otherEdge){
-        return this === otherEdge; //This checks if they reference the same object
-    };
-
-    AutoRouterEdge.prototype.getOwner = function (){
-        return this.owner;
-    };
-
-    AutoRouterEdge.prototype.setOwner = function (newOwner){
-        this.owner = newOwner;
-    };
-
-    AutoRouterEdge.prototype.getStartPointPrev = function (){
-        return this.startpoint_prev !== null ? this.startpoint_prev[0] || this.startpoint_prev : null;
-    };
-
-    AutoRouterEdge.prototype.isStartPointPrevNull = function () {
-        return this.startpoint_prev === null;
-    };
-
-    AutoRouterEdge.prototype.setStartPointPrev = function (point){
-        this.startpoint_prev = point || null;
-    };
-
-    AutoRouterEdge.prototype.getStartPointPtr = function(){
-        return this.startpoint;
-    };
-
-    AutoRouterEdge.prototype.getEndPointPtr = function(){
-        return this.endpoint;
-    };
-
-    AutoRouterEdge.prototype.getStartPoint = function (){
-        return this.startpoint !== null ?
-            (this.startpoint instanceof Array ? new ArPoint(this.startpoint[0]) : new ArPoint(this.startpoint)) : CONSTANTS.EMPTY_POINT;//returning copy of this.startpoint
-    };
-
-    AutoRouterEdge.prototype.isSameStartPoint = function(point){
-        return this.startpoint[0] === point;
-    };
-
-    AutoRouterEdge.prototype.isStartPointNull = function (){
-        return this.startpoint === null;
-    };
-
-    AutoRouterEdge.prototype.setStartPoint = function (point, b){
-        if(point instanceof Array){
-            this.startpoint = point;
-
-        }else if ( !this.startpoint ){
-            this.startpoint = [ point ];
-
-        }else{
-            this.startpoint[0] = point;
-        }
-
-        if(b !== false){
-            this.recalculateDirection();
-        }
-    };
-
-    AutoRouterEdge.prototype.setStartPointX = function(_x){
-        this.startpoint[0].x = _x;
-    };
-
-    AutoRouterEdge.prototype.setStartPointY = function(_y){
-        this.startpoint[0].y = _y;
-    };
-
-    AutoRouterEdge.prototype.getEndPoint = function(){
-        return this.endpoint !== null ? (this.endpoint instanceof Array ? new ArPoint(this.endpoint[0]) : new ArPoint(this.endpoint)): CONSTANTS.EMPTY_POINT;
-    };
-
-    AutoRouterEdge.prototype.isEndPointNull = function(){
-        return this.endpoint === null;
-    };
-
-    AutoRouterEdge.prototype.setEndPoint = function(point, b){
-        if(point instanceof Array){
-            this.endpoint = point;
-
-        }else if ( !this.endpoint ){
-            this.endpoint = [ point ];
-
-        }else{
-            this.endpoint[0] = point;
-        }
-
-        if(b !== false){
-            this.recalculateDirection();
-        }
-    };
-
-    AutoRouterEdge.prototype.setStartAndEndPoint = function(startPoint, endPoint){
-        this.setStartPoint(startPoint, false); //wait until setting the this.endpoint to recalculateDirection
-        this.setEndPoint(endPoint);
-    };
-
-    AutoRouterEdge.prototype.setEndPointX = function (_x){
-        if(!this.endpoint || this.endpoint instanceof Array){
-            this.endpoint[0].x = _x;
-        } else {
-            this.endpoint.x = _x;
-        }
-    };
-
-    AutoRouterEdge.prototype.setEndPointY = function (_y){
-        if(!this.endpoint || this.endpoint instanceof Array){
-            this.endpoint[0].y = _y;
-        } else {
-            this.endpoint.y = _y;
-        }
-    };
-
-    AutoRouterEdge.prototype.getEndPointNext = function(){
-        return this.endpoint_next !== null ? ((this.endpoint_next instanceof Array) ? new ArPoint(this.endpoint_next[0]) : new ArPoint(this.endpoint_next)) : CONSTANTS.EMPTY_POINT;
-    };
-
-    AutoRouterEdge.prototype.isEndPointNextNull = function(){
-        return this.endpoint_next === null;
-    };
-
-    AutoRouterEdge.prototype.setEndPointNext = function(point){
-        this.endpoint_next = point;
-    };
-
-    AutoRouterEdge.prototype.getPositionY = function(){
-        return this.position_y;
-    };
-
-    AutoRouterEdge.prototype.setPositionY = function(_y ){
-        this.position_y = _y;
-    };
-
-    AutoRouterEdge.prototype.addToPositionY = function(dy){
-        this.position_y += dy;
-    };
-
-    AutoRouterEdge.prototype.getPositionX1 = function(){
-        return this.position_x1;
-    };
-
-    AutoRouterEdge.prototype.setPositionX1 = function(_x1){
-        this.position_x1 = _x1;
-    };
-
-    AutoRouterEdge.prototype.getPositionX2 = function(){
-        return this.position_x2;
-    };
-
-    AutoRouterEdge.prototype.setPositionX2 = function(_x2){
-        this.position_x2 = _x2;
-    };
-
-    AutoRouterEdge.prototype.getBracketClosing = function() {
-        return this.bracket_closing;
-    };
-
-    AutoRouterEdge.prototype.setBracketClosing = function(bool, debug){
-        this.bracket_closing = bool;
-    };
-
-    AutoRouterEdge.prototype.getBracketOpening = function() {
-        return this.bracket_opening;
-    };
-
-    AutoRouterEdge.prototype.setBracketOpening = function(bool){
-        this.bracket_opening = bool;
-    };
-
-    AutoRouterEdge.prototype.getOrderNext = function(){
-        return this.order_next;
-    };
-
-    AutoRouterEdge.prototype.setOrderNext = function(orderNext){
-        this.order_next = orderNext;
-    };
-
-    AutoRouterEdge.prototype.getOrderPrev = function(){
-        return this.order_prev;
-    };
-
-    AutoRouterEdge.prototype.setOrderPrev = function(orderPrev){
-        this.order_prev = orderPrev;
-    };
-
-    AutoRouterEdge.prototype.getSectionX1 = function(){
-        return this.section_x1;
-    };
-
-    AutoRouterEdge.prototype.setSectionX1 = function(x1){
-        this.section_x1 = x1;
-    };
-
-    AutoRouterEdge.prototype.getSectionX2 = function(){
-        return this.section_x2;
-    };
-
-    AutoRouterEdge.prototype.setSectionX2 = function(x2){
-        this.section_x2 = x2;
-    };
-
-    AutoRouterEdge.prototype.getSectionNext = function(arg){
-
-        return this.section_next !== undefined ? this.section_next[0] : null;
-    };
-
-    AutoRouterEdge.prototype.getSectionNextPtr = function(){
-        if(!this.section_next || !this.section_next[0]){
-            this.section_next = [ new AutoRouterEdge() ];
-        }
-        return this.section_next;
-    };
-
-    AutoRouterEdge.prototype.setSectionNext = function(nextSection){
-        /*
+  AutoRouterEdge.prototype.equals = function ( otherEdge ) {
+    return this === otherEdge; //This checks if they reference the same object
+  };
+
+  AutoRouterEdge.prototype.getOwner = function () {
+    return this.owner;
+  };
+
+  AutoRouterEdge.prototype.setOwner = function ( newOwner ) {
+    this.owner = newOwner;
+  };
+
+  AutoRouterEdge.prototype.getStartPointPrev = function () {
+    return this.startpoint_prev !== null ? this.startpoint_prev[ 0 ] || this.startpoint_prev : null;
+  };
+
+  AutoRouterEdge.prototype.isStartPointPrevNull = function () {
+    return this.startpoint_prev === null;
+  };
+
+  AutoRouterEdge.prototype.setStartPointPrev = function ( point ) {
+    this.startpoint_prev = point || null;
+  };
+
+  AutoRouterEdge.prototype.getStartPointPtr = function () {
+    return this.startpoint;
+  };
+
+  AutoRouterEdge.prototype.getEndPointPtr = function () {
+    return this.endpoint;
+  };
+
+  AutoRouterEdge.prototype.getStartPoint = function () {
+    return this.startpoint !== null ?
+      ( this.startpoint instanceof Array ? new ArPoint( this.startpoint[ 0 ]) : new ArPoint( this.startpoint )) : CONSTANTS.EMPTY_POINT;//returning copy of this.startpoint
+  };
+
+  AutoRouterEdge.prototype.isSameStartPoint = function ( point ) {
+    return this.startpoint[ 0 ] === point;
+  };
+
+  AutoRouterEdge.prototype.isStartPointNull = function () {
+    return this.startpoint === null;
+  };
+
+  AutoRouterEdge.prototype.setStartPoint = function ( point, b ) {
+    if ( point instanceof Array ) {
+      this.startpoint = point;
+
+    }else if ( !this.startpoint ) {
+      this.startpoint = [ point ];
+
+    }else{
+      this.startpoint[ 0 ] = point;
+    }
+
+    if ( b !== false ) {
+      this.recalculateDirection();
+    }
+  };
+
+  AutoRouterEdge.prototype.setStartPointX = function ( _x ) {
+    this.startpoint[ 0 ].x = _x;
+  };
+
+  AutoRouterEdge.prototype.setStartPointY = function ( _y ) {
+    this.startpoint[ 0 ].y = _y;
+  };
+
+  AutoRouterEdge.prototype.getEndPoint = function () {
+    return this.endpoint !== null ? ( this.endpoint instanceof Array ? new ArPoint( this.endpoint[ 0 ]) : new ArPoint( this.endpoint )) : CONSTANTS.EMPTY_POINT;
+  };
+
+  AutoRouterEdge.prototype.isEndPointNull = function () {
+    return this.endpoint === null;
+  };
+
+  AutoRouterEdge.prototype.setEndPoint = function ( point, b ) {
+    if ( point instanceof Array ) {
+      this.endpoint = point;
+
+    }else if ( !this.endpoint ) {
+      this.endpoint = [ point ];
+
+    }else{
+      this.endpoint[ 0 ] = point;
+    }
+
+    if ( b !== false ) {
+      this.recalculateDirection();
+    }
+  };
+
+  AutoRouterEdge.prototype.setStartAndEndPoint = function ( startPoint, endPoint ) {
+    this.setStartPoint( startPoint, false ); //wait until setting the this.endpoint to recalculateDirection
+    this.setEndPoint( endPoint );
+  };
+
+  AutoRouterEdge.prototype.setEndPointX = function ( _x ) {
+    if ( !this.endpoint || this.endpoint instanceof Array ) {
+      this.endpoint[ 0 ].x = _x;
+    } else {
+      this.endpoint.x = _x;
+    }
+  };
+
+  AutoRouterEdge.prototype.setEndPointY = function ( _y ) {
+    if ( !this.endpoint || this.endpoint instanceof Array ) {
+      this.endpoint[ 0 ].y = _y;
+    } else {
+      this.endpoint.y = _y;
+    }
+  };
+
+  AutoRouterEdge.prototype.getEndPointNext = function () {
+    return this.endpoint_next !== null ? (( this.endpoint_next instanceof Array ) ? new ArPoint( this.endpoint_next[ 0 ]) : new ArPoint( this.endpoint_next )) : CONSTANTS.EMPTY_POINT;
+  };
+
+  AutoRouterEdge.prototype.isEndPointNextNull = function () {
+    return this.endpoint_next === null;
+  };
+
+  AutoRouterEdge.prototype.setEndPointNext = function ( point ) {
+    this.endpoint_next = point;
+  };
+
+  AutoRouterEdge.prototype.getPositionY = function () {
+    return this.position_y;
+  };
+
+  AutoRouterEdge.prototype.setPositionY = function ( _y ) {
+    this.position_y = _y;
+  };
+
+  AutoRouterEdge.prototype.addToPositionY = function ( dy ) {
+    this.position_y += dy;
+  };
+
+  AutoRouterEdge.prototype.getPositionX1 = function () {
+    return this.position_x1;
+  };
+
+  AutoRouterEdge.prototype.setPositionX1 = function ( _x1 ) {
+    this.position_x1 = _x1;
+  };
+
+  AutoRouterEdge.prototype.getPositionX2 = function () {
+    return this.position_x2;
+  };
+
+  AutoRouterEdge.prototype.setPositionX2 = function ( _x2 ) {
+    this.position_x2 = _x2;
+  };
+
+  AutoRouterEdge.prototype.getBracketClosing = function () {
+    return this.bracket_closing;
+  };
+
+  AutoRouterEdge.prototype.setBracketClosing = function ( bool, debug ) {
+    this.bracket_closing = bool;
+  };
+
+  AutoRouterEdge.prototype.getBracketOpening = function () {
+    return this.bracket_opening;
+  };
+
+  AutoRouterEdge.prototype.setBracketOpening = function ( bool ) {
+    this.bracket_opening = bool;
+  };
+
+  AutoRouterEdge.prototype.getOrderNext = function () {
+    return this.order_next;
+  };
+
+  AutoRouterEdge.prototype.setOrderNext = function ( orderNext ) {
+    this.order_next = orderNext;
+  };
+
+  AutoRouterEdge.prototype.getOrderPrev = function () {
+    return this.order_prev;
+  };
+
+  AutoRouterEdge.prototype.setOrderPrev = function ( orderPrev ) {
+    this.order_prev = orderPrev;
+  };
+
+  AutoRouterEdge.prototype.getSectionX1 = function () {
+    return this.section_x1;
+  };
+
+  AutoRouterEdge.prototype.setSectionX1 = function ( x1 ) {
+    this.section_x1 = x1;
+  };
+
+  AutoRouterEdge.prototype.getSectionX2 = function () {
+    return this.section_x2;
+  };
+
+  AutoRouterEdge.prototype.setSectionX2 = function ( x2 ) {
+    this.section_x2 = x2;
+  };
+
+  AutoRouterEdge.prototype.getSectionNext = function ( arg ) {
+
+    return this.section_next !== undefined ? this.section_next[ 0 ] : null;
+  };
+
+  AutoRouterEdge.prototype.getSectionNextPtr = function () {
+    if ( !this.section_next || !this.section_next[ 0 ]) {
+      this.section_next = [ new AutoRouterEdge()];
+    }
+    return this.section_next;
+  };
+
+  AutoRouterEdge.prototype.setSectionNext = function ( nextSection ) {
+    /*
            if(nextSection instanceof Array){
            this.section_next = nextSection;  //Don't want to actually change the pointer
            }else {
            this.section_next = [nextSection];
            }
          */
-        nextSection = nextSection instanceof Array ? nextSection[0] : nextSection;
-        if(this.section_next instanceof Array){
-            this.section_next[0] = nextSection;
-        } else {
-            this.section_next = [nextSection];
-        }
-    };
+    nextSection = nextSection instanceof Array ? nextSection[ 0 ] : nextSection;
+    if ( this.section_next instanceof Array ) {
+      this.section_next[ 0 ] = nextSection;
+    } else {
+      this.section_next = [ nextSection ];
+    }
+  };
 
-    AutoRouterEdge.prototype.getSectionDown = function(){ //Returns pointer - if not null
+  AutoRouterEdge.prototype.getSectionDown = function () { //Returns pointer - if not null
 
-        return this.section_down !== undefined ? this.section_down[0] : null;
+    return this.section_down !== undefined ? this.section_down[ 0 ] : null;
 
-    };
+  };
 
-    AutoRouterEdge.prototype.getSectionDownPtr = function(){
-        if(!this.section_down || !this.section_down[0]){
-            this.section_down = [ new AutoRouterEdge() ];
-        }
-        return this.section_down;
-    };
+  AutoRouterEdge.prototype.getSectionDownPtr = function () {
+    if ( !this.section_down || !this.section_down[ 0 ]) {
+      this.section_down = [ new AutoRouterEdge()];
+    }
+    return this.section_down;
+  };
 
-    AutoRouterEdge.prototype.setSectionDown = function(downSection){
-        downSection = downSection instanceof Array ? downSection[0] : downSection;
-        if(this.section_down instanceof Array){
-            this.section_down[0] = downSection;
-        } else {
-            this.section_down = [downSection];
-        }
-    };
+  AutoRouterEdge.prototype.setSectionDown = function ( downSection ) {
+    downSection = downSection instanceof Array ? downSection[ 0 ] : downSection;
+    if ( this.section_down instanceof Array ) {
+      this.section_down[ 0 ] = downSection;
+    } else {
+      this.section_down = [ downSection ];
+    }
+  };
 
-    AutoRouterEdge.prototype.getEdgeFixed = function(){
-        return this.edge_fixed;
-    };
+  AutoRouterEdge.prototype.getEdgeFixed = function () {
+    return this.edge_fixed;
+  };
 
-    AutoRouterEdge.prototype.setEdgeFixed = function(ef){ //boolean
-        this.edge_fixed = ef;
-    };
+  AutoRouterEdge.prototype.setEdgeFixed = function ( ef ) { //boolean
+    this.edge_fixed = ef;
+  };
 
-    AutoRouterEdge.prototype.getEdgeCustomFixed = function(){
-        return this.edge_customFixed;
-    };
+  AutoRouterEdge.prototype.getEdgeCustomFixed = function () {
+    return this.edge_customFixed;
+  };
 
-    AutoRouterEdge.prototype.setEdgeCustomFixed = function(ecf){
-        this.edge_customFixed = ecf;
-    };
+  AutoRouterEdge.prototype.setEdgeCustomFixed = function ( ecf ) {
+    this.edge_customFixed = ecf;
+  };
 
-    AutoRouterEdge.prototype.getEdgeCanpassed =  function(){
-        return this.edge_canpassed;
-    };
+  AutoRouterEdge.prototype.getEdgeCanpassed =  function () {
+    return this.edge_canpassed;
+  };
 
-    AutoRouterEdge.prototype.setEdgeCanpassed =  function(ecp){
-        this.edge_canpassed = ecp;
-    };
+  AutoRouterEdge.prototype.setEdgeCanpassed =  function ( ecp ) {
+    this.edge_canpassed = ecp;
+  };
 
-    AutoRouterEdge.prototype.getDirection = function(){
-        return this.edge_direction;
-    };
+  AutoRouterEdge.prototype.getDirection = function () {
+    return this.edge_direction;
+  };
 
-    AutoRouterEdge.prototype.setDirection = function(dir){
-        this.edge_direction = dir;
-    };
+  AutoRouterEdge.prototype.setDirection = function ( dir ) {
+    this.edge_direction = dir;
+  };
 
-    AutoRouterEdge.prototype.recalculateDirection = function(){
-        assert(this.startpoint !== null && this.endpoint !== null, "AREdge.recalculateDirection: this.startpoint !== null && this.endpoint !== null FAILED!");
-        if(this.endpoint instanceof Array) {
-            this.edge_direction = UTILS.getDir(this.endpoint[0].minus((this.startpoint instanceof Array ? this.startpoint[0] : this.startpoint)));
-        } else { 
-            this.edge_direction = UTILS.getDir(this.endpoint.minus((this.startpoint instanceof Array ? this.startpoint[0] : this.startpoint)));
-        }
-    };
+  AutoRouterEdge.prototype.recalculateDirection = function () {
+    assert( this.startpoint !== null && this.endpoint !== null, 'AREdge.recalculateDirection: this.startpoint !== null && this.endpoint !== null FAILED!' );
+    if ( this.endpoint instanceof Array ) {
+      this.edge_direction = UTILS.getDir( this.endpoint[ 0 ].minus(( this.startpoint instanceof Array ? this.startpoint[ 0 ] : this.startpoint )));
+    } else {
+      this.edge_direction = UTILS.getDir( this.endpoint.minus(( this.startpoint instanceof Array ? this.startpoint[ 0 ] : this.startpoint )));
+    }
+  };
 
-    AutoRouterEdge.prototype.getBlockPrev = function(){
-        return this.block_prev;
-    };
+  AutoRouterEdge.prototype.getBlockPrev = function () {
+    return this.block_prev;
+  };
 
-    AutoRouterEdge.prototype.setBlockPrev = function(prevBlock){
-        this.block_prev = prevBlock;
-    };
+  AutoRouterEdge.prototype.setBlockPrev = function ( prevBlock ) {
+    this.block_prev = prevBlock;
+  };
 
-    AutoRouterEdge.prototype.getBlockNext = function(){
-        return this.block_next;
-    };
+  AutoRouterEdge.prototype.getBlockNext = function () {
+    return this.block_next;
+  };
 
-    AutoRouterEdge.prototype.setBlockNext = function(nextBlock){
-        this.block_next = nextBlock;
-    };
+  AutoRouterEdge.prototype.setBlockNext = function ( nextBlock ) {
+    this.block_next = nextBlock;
+  };
 
-    AutoRouterEdge.prototype.getBlockTrace = function(){
-        return this.block_trace;
-    };
+  AutoRouterEdge.prototype.getBlockTrace = function () {
+    return this.block_trace;
+  };
 
-    AutoRouterEdge.prototype.setBlockTrace = function(traceBlock){
-        this.block_trace = traceBlock;
-    };
+  AutoRouterEdge.prototype.setBlockTrace = function ( traceBlock ) {
+    this.block_trace = traceBlock;
+  };
 
-    AutoRouterEdge.prototype.getClosestPrev = function(){
-        return this.closest_prev;
-    };
+  AutoRouterEdge.prototype.getClosestPrev = function () {
+    return this.closest_prev;
+  };
 
-    AutoRouterEdge.prototype.setClosestPrev = function(cp){
-        this.closest_prev = cp;
-    };
+  AutoRouterEdge.prototype.setClosestPrev = function ( cp ) {
+    this.closest_prev = cp;
+  };
 
-    AutoRouterEdge.prototype.getClosestNext = function(){
-        return this.closest_next;
-    };
+  AutoRouterEdge.prototype.getClosestNext = function () {
+    return this.closest_next;
+  };
 
-    AutoRouterEdge.prototype.setClosestNext = function(cp){
-        this.closest_next = cp;
-    };
+  AutoRouterEdge.prototype.setClosestNext = function ( cp ) {
+    this.closest_next = cp;
+  };
 
-    return AutoRouterEdge;
+  return AutoRouterEdge;
 
 });

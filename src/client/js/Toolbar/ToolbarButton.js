@@ -1,25 +1,25 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define(['./ButtonBase',
-        './ToolbarItemBase'], function (buttonBase,
-                                        ToolbarItemBase) {
-    "use strict";
+define([ './ButtonBase',
+    './ToolbarItemBase' ], function ( buttonBase,
+  ToolbarItemBase ) {
+  'use strict';
 
-    var ToolbarButton;
+  var ToolbarButton;
 
-    ToolbarButton = function (params) {
-        this.el = $('<div class="toolbar-button"></div>');
+  ToolbarButton = function ( params ) {
+    this.el = $( '<div class="toolbar-button"></div>' );
 
-        this._btn = buttonBase.createButton(params);
+    this._btn = buttonBase.createButton( params );
 
-        this.el.append(this._btn);
-    };
+    this.el.append( this._btn );
+  };
 
-    _.extend(ToolbarButton.prototype, ToolbarItemBase.prototype);
+  _.extend( ToolbarButton.prototype, ToolbarItemBase.prototype );
 
-    ToolbarButton.prototype.enabled = function (enabled) {
-        this._btn.enabled(enabled);
-    };
+  ToolbarButton.prototype.enabled = function ( enabled ) {
+    this._btn.enabled( enabled );
+  };
 
-    return ToolbarButton;
+  return ToolbarButton;
 });

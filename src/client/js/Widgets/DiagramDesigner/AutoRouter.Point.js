@@ -5,112 +5,112 @@
  * @author brollb / https://github/brollb
  */
 
-define(['logManager',
-        './AutoRouter.Size'], function (logManager,
-                                            ArSize) {
+define([ 'logManager',
+    './AutoRouter.Size' ], function ( logManager,
+  ArSize ) {
 
-    "use strict";
+  'use strict';
 
-    var ArPoint = function (x, y){
-        //Multiple Constructors
-        if(x === undefined){ //No arguments were passed to constructor
-            x = 0;
-            y = 0;
-        }else if(y === undefined){ //One argument passed to constructor
-            y = x.y;
-            x = x.x;
-        }
+  var ArPoint = function ( x, y ) {
+    //Multiple Constructors
+    if ( x === undefined ) { //No arguments were passed to constructor
+      x = 0;
+      y = 0;
+    }else if ( y === undefined ) { //One argument passed to constructor
+      y = x.y;
+      x = x.x;
+    }
 
-        this.x = Math.round(x);
-        this.y = Math.round(y);
-    };
+    this.x = Math.round( x );
+    this.y = Math.round( y );
+  };
 
-    ArPoint.prototype.equals = function (otherPoint){
-        if( this.x === otherPoint.x && this.y === otherPoint.y){
-            return true;
-        }
+  ArPoint.prototype.equals = function ( otherPoint ) {
+    if ( this.x === otherPoint.x && this.y === otherPoint.y ) {
+      return true;
+    }
 
-        return false;
-    };
+    return false;
+  };
 
-    ArPoint.prototype.offset = function (x, y){
-        if(y !== undefined){ //two arguments are sent to function
-            x = new ArSize(x, y);
-        }
+  ArPoint.prototype.offset = function ( x, y ) {
+    if ( y !== undefined ) { //two arguments are sent to function
+      x = new ArSize( x, y );
+    }
 
-        this.add(x);
-    };
+    this.add( x );
+  };
 
-    ArPoint.prototype.add = function (otherObject){ //equivalent to +=
-        if(otherObject instanceof ArSize){
-            this.x += otherObject.cx;
-            this.y += otherObject.cy;
-        }else if(otherObject instanceof ArPoint){
-            this.x += otherObject.x;
-            this.y += otherObject.y;
-        }
+  ArPoint.prototype.add = function ( otherObject ) { //equivalent to +=
+    if ( otherObject instanceof ArSize ) {
+      this.x += otherObject.cx;
+      this.y += otherObject.cy;
+    }else if ( otherObject instanceof ArPoint ) {
+      this.x += otherObject.x;
+      this.y += otherObject.y;
+    }
 
-        this.x = Math.round(this.x);
-        this.y = Math.round(this.y);
-    };
+    this.x = Math.round( this.x );
+    this.y = Math.round( this.y );
+  };
 
-    ArPoint.prototype.subtract = function (otherObject){ //equivalent to +=
-        if(otherObject instanceof ArSize){
-            this.x -= otherObject.cx;
-            this.y -= otherObject.cy;
-        }else if(otherObject instanceof ArPoint){
-            this.x -= otherObject.x;
-            this.y -= otherObject.y;
-        }
-    };
+  ArPoint.prototype.subtract = function ( otherObject ) { //equivalent to +=
+    if ( otherObject instanceof ArSize ) {
+      this.x -= otherObject.cx;
+      this.y -= otherObject.cy;
+    }else if ( otherObject instanceof ArPoint ) {
+      this.x -= otherObject.x;
+      this.y -= otherObject.y;
+    }
+  };
 
-    ArPoint.prototype.plus = function (otherObject){ //equivalent to +
-        var objectCopy = null;
+  ArPoint.prototype.plus = function ( otherObject ) { //equivalent to +
+    var objectCopy = null;
 
-        if(otherObject instanceof ArSize){
-            objectCopy = new ArPoint(this);
-            objectCopy.add(otherObject);
+    if ( otherObject instanceof ArSize ) {
+      objectCopy = new ArPoint( this );
+      objectCopy.add( otherObject );
 
-        }else if(otherObject instanceof ArPoint){
-            objectCopy = new ArPoint(otherObject);
-            objectCopy.x += this.x;
-            objectCopy.y += this.y;
+    }else if ( otherObject instanceof ArPoint ) {
+      objectCopy = new ArPoint( otherObject );
+      objectCopy.x += this.x;
+      objectCopy.y += this.y;
 
-        }//else if(otherObject instanceof ArRect){
-            //objectCopy = new ArRect(otherObject);
-            //objectCopy.add(this);
-        //}
+    }//else if(otherObject instanceof ArRect){
+    //objectCopy = new ArRect(otherObject);
+    //objectCopy.add(this);
+    //}
 
-        return objectCopy || undefined;
-    };
+    return objectCopy || undefined;
+  };
 
-    ArPoint.prototype.minus = function (otherObject){
-        var objectCopy;
+  ArPoint.prototype.minus = function ( otherObject ) {
+    var objectCopy;
 
-        if(otherObject instanceof ArSize){
-            objectCopy = new ArPoint(otherObject);
-            objectCopy.subtract(this);
+    if ( otherObject instanceof ArSize ) {
+      objectCopy = new ArPoint( otherObject );
+      objectCopy.subtract( this );
 
-        }else if(otherObject instanceof ArPoint){
-            objectCopy = new ArSize();
-            objectCopy.cx = this.x - otherObject.x;
-            objectCopy.cy = this.y - otherObject.y;
+    }else if ( otherObject instanceof ArPoint ) {
+      objectCopy = new ArSize();
+      objectCopy.cx = this.x - otherObject.x;
+      objectCopy.cy = this.y - otherObject.y;
 
-        }//else if(otherObject instanceof ArRect){
-          //  objectCopy = new ArRect(otherObject);
-           // objectCopy.subtract(this);
+    }//else if(otherObject instanceof ArRect){
+    //  objectCopy = new ArRect(otherObject);
+    // objectCopy.subtract(this);
 
-        //}
+    //}
 
-        return objectCopy;
-    };
+    return objectCopy;
+  };
 
-    ArPoint.prototype.assign = function (otherPoint){
-        this.x = otherPoint.x;
-        this.y = otherPoint.y;
+  ArPoint.prototype.assign = function ( otherPoint ) {
+    this.x = otherPoint.x;
+    this.y = otherPoint.y;
 
-        return this;
-    };
+    return this;
+  };
 
-    return ArPoint;
+  return ArPoint;
 });

@@ -1,152 +1,152 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define(['logManager'], function (logManager) {
+define([ 'logManager' ], function ( logManager ) {
 
-    "use strict";
+  'use strict';
 
-    var RepositoryLogControl;
+  var RepositoryLogControl;
 
-    RepositoryLogControl = function (myClient, myView) {
-        var self = this;
+  RepositoryLogControl = function ( myClient, myView ) {
+    var self = this;
 
-        this._client = myClient;
-        this._view = myView;
+    this._client = myClient;
+    this._view = myView;
 
-        this._lastCommitID = null;
+    this._lastCommitID = null;
 
-        //override view event handlers
-        this._view.onLoadCommit = function (params) {
-            self._client.selectCommitAsync(params.id, function (err) {
-                if (err) {
-                    self._logger.error(err);
-                }
+    //override view event handlers
+    this._view.onLoadCommit = function ( params ) {
+      self._client.selectCommitAsync( params.id, function ( err ) {
+        if ( err ) {
+          self._logger.error( err );
+        }
 
-                self._refreshActualCommit();
-            });
-        };
-
-        this._view.onDeleteBranchClick = function (branch) {
-            self._client.deleteBranchAsync(branch, function (err) {
-                if (err) {
-                    self._logger.error(err);
-                }
-
-                self._refreshBranches();
-                self._refreshActualCommit();
-            });
-        };
-
-        this._view.onCreateBranchFromCommit = function (params) {
-            self._client.createBranchAsync(
-                params.name,
-                params.commitId,
-                function (err) {
-                    if (err) {
-                        self._logger.error(err);
-                    }
-                    self._refreshBranches();
-                });
-        };
-
-        this._view.onLoadMoreCommits = function (num) {
-            self._loadMoreCommits(num);
-        };
-
-        this._logger = logManager.create("RepositoryLogControl");
-        this._logger.debug("Created");
+        self._refreshActualCommit();
+      });
     };
 
-    RepositoryLogControl.prototype._loadMoreCommits = function (num) {
-        var commits = null,
-            com,
-            commitsLoaded,
-            self = this;
+    this._view.onDeleteBranchClick = function ( branch ) {
+      self._client.deleteBranchAsync( branch, function ( err ) {
+        if ( err ) {
+          self._logger.error( err );
+        }
 
-        commitsLoaded = function (err, data) {
-            var i,
-                cLen;
+        self._refreshBranches();
+        self._refreshActualCommit();
+      });
+    };
 
-            self._logger.debug("commitsLoaded, err: '" + err + "', data: " + data === true ? data.length : "null");
+    this._view.onCreateBranchFromCommit = function ( params ) {
+      self._client.createBranchAsync(
+        params.name,
+        params.commitId,
+      function ( err ) {
+        if ( err ) {
+          self._logger.error( err );
+        }
+        self._refreshBranches();
+      });
+    };
 
-            if (err) {
-                if (_.isEmpty(err)) {
-                    self._logger.error('the mysterious error returned by "getCommitsAsync"');
-                } else {
-                    self._logger.error(err);
-                }
-            } else {
-                commits = data.concat([]);
+    this._view.onLoadMoreCommits = function ( num ) {
+      self._loadMoreCommits( num );
+    };
 
-                cLen = commits.length;
-                if (cLen > 0) {
-                    for (i = 0; i < cLen; i += 1) {
-                        com = commits[i];
+    this._logger = logManager.create( 'RepositoryLogControl' );
+    this._logger.debug( 'Created' );
+  };
 
-                        if (self._lastCommitID !== com._id) {
+  RepositoryLogControl.prototype._loadMoreCommits = function ( num ) {
+    var commits = null,
+    com,
+    commitsLoaded,
+    self = this;
 
-                            var commitObject = {"id": com._id,
-                                "message": com.message,
-                                "parents": com.parents,
-                                "timestamp": com.time,
-                                "user": com.updater.join(',')};
+    commitsLoaded = function ( err, data ) {
+      var i,
+      cLen;
 
-                            self._view.addCommit(commitObject);
-                        }
-                    }
+      self._logger.debug( 'commitsLoaded, err: \'' + err + '\', data: ' + data === true ? data.length : 'null' );
 
-                    //store last CommitID we received
-                    self._lastCommitID = commits[i - 1]._id;
+      if ( err ) {
+        if ( _.isEmpty( err )) {
+          self._logger.error( 'the mysterious error returned by "getCommitsAsync"' );
+        } else {
+          self._logger.error( err );
+        }
+      } else {
+        commits = data.concat([]);
 
-                    //render added commits
-                    self._view.render();
+        cLen = commits.length;
+        if ( cLen > 0 ) {
+          for ( i = 0; i < cLen; i += 1 ) {
+            com = commits[ i ];
 
-                    self._refreshActualCommit();
+            if ( self._lastCommitID !== com._id ) {
 
-                    self._refreshBranches();
-                }
+              var commitObject = { 'id': com._id,
+                'message': com.message,
+                'parents': com.parents,
+                'timestamp': com.time,
+                'user': com.updater.join( ',' )};
 
-                self._view.hideProgressbar();
-
-                if (cLen < num) {
-                    self._view.noMoreCommitsToDisplay();
-                }
+              self._view.addCommit( commitObject );
             }
-        };
+          }
 
-        this._view.showProgressbar();
+          //store last CommitID we received
+          self._lastCommitID = commits[ i - 1 ]._id;
 
-        this._client.getCommitsAsync(this._lastCommitID,num,commitsLoaded);
+          //render added commits
+          self._view.render();
+
+          self._refreshActualCommit();
+
+          self._refreshBranches();
+        }
+
+        self._view.hideProgressbar();
+
+        if ( cLen < num ) {
+          self._view.noMoreCommitsToDisplay();
+        }
+      }
     };
 
-    RepositoryLogControl.prototype._refreshActualCommit = function () {
-        this._view.setActualCommitId(this._client.getActualCommit());
-    };
+    this._view.showProgressbar();
 
-    RepositoryLogControl.prototype._refreshBranches = function () {
-        var self = this;
+    this._client.getCommitsAsync( this._lastCommitID,num,commitsLoaded );
+  };
 
-        this._view.clearBranches();
+  RepositoryLogControl.prototype._refreshActualCommit = function () {
+    this._view.setActualCommitId( this._client.getActualCommit());
+  };
 
-        this._client.getBranchesAsync(function (err, data) {
-            var i;
+  RepositoryLogControl.prototype._refreshBranches = function () {
+    var self = this;
 
-            self._logger.debug("branchesLoaded, err: '" + err + "', data: " + data ? data.length : "null");
+    this._view.clearBranches();
 
-            if (err) {
-                self._logger.error(err);
-            }
-            if (data && data.length) {
-                //set view's branch info
-                i = data.length;
+    this._client.getBranchesAsync(function ( err, data ) {
+      var i;
 
-                while (i--) {
-                    self._view.addBranch({"name": data[i].name,
-                        "commitId":  data[i].commitId,
-                        "sync":  data[i].sync});
-                }
-            }
-        });
-    };
+      self._logger.debug( 'branchesLoaded, err: \'' + err + '\', data: ' + data ? data.length : 'null' );
 
-    return RepositoryLogControl;
+      if ( err ) {
+        self._logger.error( err );
+      }
+      if ( data && data.length ) {
+        //set view's branch info
+        i = data.length;
+
+        while ( i-- ) {
+          self._view.addBranch({ 'name': data[ i ].name,
+            'commitId':  data[ i ].commitId,
+            'sync':  data[ i ].sync });
+        }
+      }
+    });
+  };
+
+  return RepositoryLogControl;
 });

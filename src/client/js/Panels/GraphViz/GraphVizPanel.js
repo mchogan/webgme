@@ -1,91 +1,91 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define(['js/PanelBase/PanelBaseWithHeader',
+define([ 'js/PanelBase/PanelBaseWithHeader',
     'js/PanelManager/IActivePanel',
     'js/Widgets/GraphViz/GraphVizWidget',
-    './GraphVizPanelControl'], function (PanelBaseWithHeader,
-                                         IActivePanel,
-                                            GraphVizWidget,
-                                            GraphVizPanelControl) {
-    "use strict";
+    './GraphVizPanelControl' ], function ( PanelBaseWithHeader,
+  IActivePanel,
+  GraphVizWidget,
+  GraphVizPanelControl ) {
+  'use strict';
 
-    var GraphVizPanel;
+  var GraphVizPanel;
 
-    GraphVizPanel = function (layoutManager, params) {
-        var options = {};
-        //set properties from options
-        options[PanelBaseWithHeader.OPTIONS.LOGGER_INSTANCE_NAME] = "GraphVizPanel";
-        options[PanelBaseWithHeader.OPTIONS.FLOATING_TITLE] = true;
+  GraphVizPanel = function ( layoutManager, params ) {
+    var options = {};
+    //set properties from options
+    options[ PanelBaseWithHeader.OPTIONS.LOGGER_INSTANCE_NAME ] = 'GraphVizPanel';
+    options[ PanelBaseWithHeader.OPTIONS.FLOATING_TITLE ] = true;
 
-        //call parent's constructor
-        PanelBaseWithHeader.apply(this, [options, layoutManager]);
+    //call parent's constructor
+    PanelBaseWithHeader.apply( this, [ options, layoutManager ]);
 
-        this._client = params.client;
+    this._client = params.client;
 
-        //initialize UI
-        this._initialize();
+    //initialize UI
+    this._initialize();
 
-        this.logger.debug("GraphVizPanel ctor finished");
+    this.logger.debug( 'GraphVizPanel ctor finished' );
+  };
+
+  //inherit from PanelBaseWithHeader
+  _.extend( GraphVizPanel.prototype, PanelBaseWithHeader.prototype );
+  _.extend( GraphVizPanel.prototype, IActivePanel.prototype );
+
+  GraphVizPanel.prototype._initialize = function () {
+    var self = this;
+
+    //set Widget title
+    this.setTitle( '' );
+
+    this.widget = new GraphVizWidget( this.$el );
+
+    this.widget.setTitle = function ( title ) {
+      self.setTitle( title );
     };
 
-    //inherit from PanelBaseWithHeader
-    _.extend(GraphVizPanel.prototype, PanelBaseWithHeader.prototype);
-    _.extend(GraphVizPanel.prototype, IActivePanel.prototype);
+    this.control = new GraphVizPanelControl({ 'client': this._client,
+      'widget': this.widget });
 
-    GraphVizPanel.prototype._initialize = function () {
-        var self = this;
+    this.onActivate();
+  };
 
-        //set Widget title
-        this.setTitle("");
+  /* OVERRIDE FROM WIDGET-WITH-HEADER */
+  /* METHOD CALLED WHEN THE WIDGET'S READ-ONLY PROPERTY CHANGES */
+  GraphVizPanel.prototype.onReadOnlyChanged = function ( isReadOnly ) {
+    //apply parent's onReadOnlyChanged
+    PanelBaseWithHeader.prototype.onReadOnlyChanged.call( this, isReadOnly );
 
-        this.widget = new GraphVizWidget(this.$el);
+    //this._graphVizWidget.setReadOnly(isReadOnly);
+  };
 
-        this.widget.setTitle = function (title) {
-            self.setTitle(title);
-        };
+  GraphVizPanel.prototype.onResize = function ( width, height ) {
+    this.logger.debug( 'onResize --> width: ' + width + ', height: ' + height );
+    this.widget.onWidgetContainerResize( width, height );
+  };
 
-        this.control = new GraphVizPanelControl({"client": this._client,
-            "widget": this.widget});
+  GraphVizPanel.prototype.destroy = function () {
+    this.control.destroy();
+    this.widget.destroy();
 
-        this.onActivate();
-    };
+    PanelBaseWithHeader.prototype.destroy.call( this );
+    WebGMEGlobal.KeyboardManager.setListener( undefined );
+    WebGMEGlobal.Toolbar.refresh();
+  };
 
-    /* OVERRIDE FROM WIDGET-WITH-HEADER */
-    /* METHOD CALLED WHEN THE WIDGET'S READ-ONLY PROPERTY CHANGES */
-    GraphVizPanel.prototype.onReadOnlyChanged = function (isReadOnly) {
-        //apply parent's onReadOnlyChanged
-        PanelBaseWithHeader.prototype.onReadOnlyChanged.call(this, isReadOnly);
+  GraphVizPanel.prototype.onActivate = function () {
+    this.widget.onActivate();
+    this.control.onActivate();
+    WebGMEGlobal.KeyboardManager.setListener( this.widget );
+    WebGMEGlobal.Toolbar.refresh();
+  };
 
-        //this._graphVizWidget.setReadOnly(isReadOnly);
-    };
+  GraphVizPanel.prototype.onDeactivate = function () {
+    this.widget.onDeactivate();
+    this.control.onDeactivate();
+    WebGMEGlobal.KeyboardManager.setListener( undefined );
+    WebGMEGlobal.Toolbar.refresh();
+  };
 
-    GraphVizPanel.prototype.onResize = function (width, height) {
-        this.logger.debug('onResize --> width: ' + width + ', height: ' + height);
-        this.widget.onWidgetContainerResize(width, height);
-    };
-
-    GraphVizPanel.prototype.destroy = function () {
-        this.control.destroy();
-        this.widget.destroy();
-
-        PanelBaseWithHeader.prototype.destroy.call(this);
-        WebGMEGlobal.KeyboardManager.setListener(undefined);
-        WebGMEGlobal.Toolbar.refresh();
-    };
-
-    GraphVizPanel.prototype.onActivate = function () {
-        this.widget.onActivate();
-        this.control.onActivate();
-        WebGMEGlobal.KeyboardManager.setListener(this.widget);
-        WebGMEGlobal.Toolbar.refresh();
-    };
-
-    GraphVizPanel.prototype.onDeactivate = function () {
-        this.widget.onDeactivate();
-        this.control.onDeactivate();
-        WebGMEGlobal.KeyboardManager.setListener(undefined);
-        WebGMEGlobal.Toolbar.refresh();
-    };
-
-    return GraphVizPanel;
+  return GraphVizPanel;
 });

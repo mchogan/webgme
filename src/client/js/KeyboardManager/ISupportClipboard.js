@@ -2,21 +2,21 @@
 
 define([], function () {
 
-    "use strict";
+  'use strict';
 
-    var ISupportClipboard;
+  var ISupportClipboard;
 
-    ISupportClipboard = function () {
-    };
+  ISupportClipboard = function () {
+  };
 
-    ISupportClipboard.prototype.onCopy = function () {
-        this.logger.warning("ISupportClipboard.prototype.onCopy IS NOT IMPLEMENTED!!!");
-        return undefined;
-    };
+  ISupportClipboard.prototype.onCopy = function () {
+    this.logger.warning( 'ISupportClipboard.prototype.onCopy IS NOT IMPLEMENTED!!!' );
+    return undefined;
+  };
 
-    ISupportClipboard.prototype.onPaste = function (data) {
-        this.logger.warning("ISupportClipboard.prototype.onPaste IS NOT IMPLEMENTED!!! DATA: " + data);
-    };
+  ISupportClipboard.prototype.onPaste = function ( data ) {
+    this.logger.warning( 'ISupportClipboard.prototype.onPaste IS NOT IMPLEMENTED!!! DATA: ' + data );
+  };
 
-    return ISupportClipboard;
+  return ISupportClipboard;
 });

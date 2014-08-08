@@ -1,101 +1,101 @@
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define(['js/PanelBase/PanelBaseWithHeader',
+define([ 'js/PanelBase/PanelBaseWithHeader',
     'js/PanelManager/IActivePanel',
     'js/Widgets/ModelEditor/ModelEditorWidget',
     './ModelEditorControl'
-], function (PanelBaseWithHeader,
-             IActivePanel,
-             ModelEditorWidget,
-             ModelEditorControl) {
+  ], function ( PanelBaseWithHeader,
+  IActivePanel,
+  ModelEditorWidget,
+  ModelEditorControl ) {
 
-    "use strict";
+  'use strict';
 
-    var ModelEditorPanel;
+  var ModelEditorPanel;
 
-    ModelEditorPanel = function (layoutManager, params) {
-        var options = {};
-        //set properties from options
-        options[PanelBaseWithHeader.OPTIONS.LOGGER_INSTANCE_NAME] = "ModelEditorPanel";
-        options[PanelBaseWithHeader.OPTIONS.FLOATING_TITLE] = true;
+  ModelEditorPanel = function ( layoutManager, params ) {
+    var options = {};
+    //set properties from options
+    options[ PanelBaseWithHeader.OPTIONS.LOGGER_INSTANCE_NAME ] = 'ModelEditorPanel';
+    options[ PanelBaseWithHeader.OPTIONS.FLOATING_TITLE ] = true;
 
-        //call parent's constructor
-        PanelBaseWithHeader.apply(this, [options, layoutManager]);
+    //call parent's constructor
+    PanelBaseWithHeader.apply( this, [ options, layoutManager ]);
 
-        this._client = params.client;
+    this._client = params.client;
 
-        //initialize UI
-        this._initialize();
+    //initialize UI
+    this._initialize();
 
-        this.logger.debug("ModelEditorPanel ctor finished");
+    this.logger.debug( 'ModelEditorPanel ctor finished' );
+  };
+
+  //inherit from PanelBaseWithHeader
+  _.extend( ModelEditorPanel.prototype, PanelBaseWithHeader.prototype );
+  _.extend( ModelEditorPanel.prototype, IActivePanel.prototype );
+
+  ModelEditorPanel.prototype._initialize = function () {
+    var self = this;
+
+    this.widget = new ModelEditorWidget( this.$el, { 'toolBar': this.toolBar });
+
+    this.widget.setTitle = function ( title ) {
+      self.setTitle( title );
     };
 
-    //inherit from PanelBaseWithHeader
-    _.extend(ModelEditorPanel.prototype, PanelBaseWithHeader.prototype);
-    _.extend(ModelEditorPanel.prototype, IActivePanel.prototype);
-
-    ModelEditorPanel.prototype._initialize = function () {
-        var self = this;
-
-        this.widget = new ModelEditorWidget(this.$el, {'toolBar': this.toolBar});
-
-        this.widget.setTitle = function (title) {
-            self.setTitle(title);
-        };
-
-        this.widget.onUIActivity = function () {
-            WebGMEGlobal.PanelManager.setActivePanel(self);
-            WebGMEGlobal.KeyboardManager.setListener(self.widget);
-        };
-
-        this.control = new ModelEditorControl({"client": this._client,
-            "widget": this.widget});
-
-        this.onActivate();
+    this.widget.onUIActivity = function () {
+      WebGMEGlobal.PanelManager.setActivePanel( self );
+      WebGMEGlobal.KeyboardManager.setListener( self.widget );
     };
 
-    /* OVERRIDE FROM WIDGET-WITH-HEADER */
-    /* METHOD CALLED WHEN THE WIDGET'S READ-ONLY PROPERTY CHANGES */
-    ModelEditorPanel.prototype.onReadOnlyChanged = function (isReadOnly) {
-        //apply parent's onReadOnlyChanged
-        PanelBaseWithHeader.prototype.onReadOnlyChanged.call(this, isReadOnly);
+    this.control = new ModelEditorControl({ 'client': this._client,
+      'widget': this.widget });
 
-        this.widget.setReadOnly(isReadOnly);
-    };
+    this.onActivate();
+  };
 
-    ModelEditorPanel.prototype.onResize = function (width, height) {
-        this.logger.debug('onResize --> width: ' + width + ', height: ' + height);
-        this.widget.onWidgetContainerResize(width, height);
-    };
+  /* OVERRIDE FROM WIDGET-WITH-HEADER */
+  /* METHOD CALLED WHEN THE WIDGET'S READ-ONLY PROPERTY CHANGES */
+  ModelEditorPanel.prototype.onReadOnlyChanged = function ( isReadOnly ) {
+    //apply parent's onReadOnlyChanged
+    PanelBaseWithHeader.prototype.onReadOnlyChanged.call( this, isReadOnly );
 
-    ModelEditorPanel.prototype.destroy = function () {
-        this.control.destroy();
-        this.widget.destroy();
+    this.widget.setReadOnly( isReadOnly );
+  };
 
-        PanelBaseWithHeader.prototype.destroy.call(this);
-        WebGMEGlobal.KeyboardManager.setListener(undefined);
-        WebGMEGlobal.Toolbar.refresh();
-    };
+  ModelEditorPanel.prototype.onResize = function ( width, height ) {
+    this.logger.debug( 'onResize --> width: ' + width + ', height: ' + height );
+    this.widget.onWidgetContainerResize( width, height );
+  };
 
-    /* override IActivePanel.prototype.onActivate */
-    ModelEditorPanel.prototype.onActivate = function () {
-        this.widget.onActivate();
-        this.control.onActivate();
-        WebGMEGlobal.KeyboardManager.setListener(this.widget);
-        WebGMEGlobal.Toolbar.refresh();
-    };
+  ModelEditorPanel.prototype.destroy = function () {
+    this.control.destroy();
+    this.widget.destroy();
 
-    /* override IActivePanel.prototype.onDeactivate */
-    ModelEditorPanel.prototype.onDeactivate = function () {
-        this.widget.onDeactivate();
-        this.control.onDeactivate();
-        WebGMEGlobal.KeyboardManager.setListener(undefined);
-        WebGMEGlobal.Toolbar.refresh();
-    };
+    PanelBaseWithHeader.prototype.destroy.call( this );
+    WebGMEGlobal.KeyboardManager.setListener( undefined );
+    WebGMEGlobal.Toolbar.refresh();
+  };
 
-    ModelEditorPanel.prototype.getNodeID = function () {
-        return this.control.getNodeID();
-    };
+  /* override IActivePanel.prototype.onActivate */
+  ModelEditorPanel.prototype.onActivate = function () {
+    this.widget.onActivate();
+    this.control.onActivate();
+    WebGMEGlobal.KeyboardManager.setListener( this.widget );
+    WebGMEGlobal.Toolbar.refresh();
+  };
 
-    return ModelEditorPanel;
+  /* override IActivePanel.prototype.onDeactivate */
+  ModelEditorPanel.prototype.onDeactivate = function () {
+    this.widget.onDeactivate();
+    this.control.onDeactivate();
+    WebGMEGlobal.KeyboardManager.setListener( undefined );
+    WebGMEGlobal.Toolbar.refresh();
+  };
+
+  ModelEditorPanel.prototype.getNodeID = function () {
+    return this.control.getNodeID();
+  };
+
+  return ModelEditorPanel;
 });

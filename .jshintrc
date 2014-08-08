@@ -3,12 +3,13 @@
     "curly" : true,
     "eqeqeq": true,
     "noarg": true,
-    "noempty": true,
+    "noempty": false,
     "nonew": true,
     "undef": true,
     "strict": true,
     "browser": true,
     "jquery": true,
     "node": true,
-    "evil": true
+    "evil": true,
+    "quotmark": "single"
 }
