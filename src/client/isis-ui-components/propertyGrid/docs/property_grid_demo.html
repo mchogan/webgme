@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title></title>
+
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.14/require.min.js"></script>
+
+    <!--<script src="//cdnjs.cloudflare.com/ajax/libs/angular.js/1.2.20/angular.min.js"></script>-->
+
+    <script type="text/javascript">
+        var DEBUG = true,
+                _jqueryVersion = '2.1.0',
+                _jqueryUIVersion = '1.10.4',
+                _bootsrapVersion = '3.1.1';
+
+
+        require.config( {
+                            baseUrl: "../../../",
+
+                            map: {
+                                '*': {
+                                    'css': 'lib/require/require-css/css',
+                                    'text': 'lib/require/require-text/text'
+                                }
+                            },
+
+                            paths: {
+                                'jquery': 'lib/jquery/jquery-' + _jqueryVersion + ( DEBUG ? '.min' : '' ),
+                                'bootstrap': 'lib/bootstrap/' + _bootsrapVersion + '/js/bootstrap' + ( DEBUG ? '.min' : '' ),
+
+                                'angular': 'lib/angular/angular-1.2.19/angular' + ( DEBUG ? '.min' : '' ),
+                                'angular-ui-bootstrap': 'lib/angular/ui-bootstrap/ui-bootstrap-tpls-0.11.0.min'
+                            },
+
+                            shim: {
+                                'angular-ui-bootstrap': ['angular', 'bootstrap'],
+
+                                'bootstrap': [
+                                    'jquery',
+                                    'css!lib/bootstrap/' + _bootsrapVersion + '/css/bootstrap.min.css',
+                                    'css!lib/bootstrap/' + _bootsrapVersion + '/css/bootstrap-theme.min.css'
+                                ]
+                            },
+
+                            waitSeconds: 15
+                        } );
+
+        requirejs( [
+                       'angular-ui-bootstrap',
+                       'isis-ui-components/propertyGrid/propertyGrid'], function ( ngBootstrap, PropertyGrid ) {
+
+            var demoApp = angular.module( 'demoApp', ['ui.bootstrap', 'isis.ui.propertyGrid'] );
+
+            demoApp.controller( 'PropertyGridDemoController', function ( $scope ) {
+                var onChange = function (item) {
+
+                            console.log('Item changed > ' + item.label, item);
+
+                        },
+
+                        items = [
+                            {
+                                id: 'Name',
+                                label: 'Name',
+                                value: 'This is my name',
+                                onChange: onChange
+                            },
+                            {
+
+                                id: 'Position',
+                                label: 'Position',
+                                cssClass: '',
+                                value: [
+                                    {
+                                        id: 'Position_x',
+                                        label: 'X',
+                                        value: 10
+                                        //valueWidget: integerValueWidget,
+                                    },
+                                    {
+                                        id: 'Position_y',
+                                        label: 'Y',
+                                        value: 30
+                                        //valueWidget: integerValueWidget,
+                                    }
+                                ],
+                                onChange: onChange
+                            },
+                            {
+                                id: 'is_happy',
+                                label: 'Happy or not?',
+                                value: true,
+                                valueWidget: {
+                                    type: 'boolean'
+                                }
+                            },
+                            {
+                                id: 'country',
+                                label: 'Country',
+                                value: 'usa',
+                                valueWidget: {
+                                    type: 'select',
+                                    defaultValue: 'pol',
+                                    multi: false,
+                                    options: [
+                                        {
+                                            label: 'U.S.A.',
+                                            value: 'usa'
+                                        },
+                                        {
+                                            label: 'Poland',
+                                            value: 'pol'
+                                        },
+                                        {
+                                            label: 'England',
+                                            value: 'eng'
+                                        }
+                                    ]
+                                },
+                                onChange: onChange
+                            },
+                            {
+                                id: 'color',
+                                label: 'Color',
+                                value: '#ff0066',
+                                valueWidget: {
+                                    type: 'colorPicker'
+                                },
+                                onChange: onChange
+                            }
+                        ],
+                        config = {
+
+                        };
+
+                $scope.items = items;
+                $scope.config = config;
+
+            } );
+
+            angular.bootstrap( document, ['demoApp'] );
+        } );
+
+    </script>
+
+</head>
+<body>
+
+<div data-ng-controller="PropertyGridDemoController">
+    <property-grid items="items"></property-grid>
+</div>
+
+</body>
+</html>

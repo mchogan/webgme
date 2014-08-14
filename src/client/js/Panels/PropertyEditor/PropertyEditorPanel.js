@@ -4,7 +4,7 @@ define(['js/PanelBase/PanelBaseWithHeader',
     'js/Controls/PropertyGrid/PropertyGrid',
     './PropertyEditorPanelController',
 
-    'ui-components/PropertyGrid/PropertyGrid',
+    'isis-ui-components/propertyGrid/propertyGrid',
     './PropertyGridController'
 
        ], function (PanelBaseWithHeader,

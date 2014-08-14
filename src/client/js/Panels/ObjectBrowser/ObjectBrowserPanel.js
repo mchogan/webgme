@@ -14,7 +14,7 @@ define(
         'js/Widgets/TreeBrowser/TreeBrowserWidget',
 
 
-        'ui-components/TreeNavigator/TreeNavigator',
+        'isis-ui-components/treeNavigator/treeNavigator',
         './TreeNavigatorController',
 
         'css!./styles/ObjectBrowserPanel.css'], function (

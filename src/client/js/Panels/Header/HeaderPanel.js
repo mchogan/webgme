@@ -12,10 +12,10 @@ define(['js/PanelBase/PanelBase',
     'js/Toolbar/Toolbar',
     './DefaultToolbar',
 
-    'ui-components/DropdownNavigator/DropdownNavigator',
+    'isis-ui-components/dropdownNavigator/dropdownNavigator',
     './ProjectNavigatorController',
 
-    'ui-components/SearchBox/SearchBox',
+    'isis-ui-components/searchBox/searchBox',
     './SearchBoxController',
 
     'css!./styles/headerPanel.css'
@@ -31,17 +31,16 @@ define(['js/PanelBase/PanelBase',
 
        )
     {
-
     "use strict";
 
     var HeaderPanel,
         __parent__ = PanelBase;
 
     angular.module(
-        'propertyGrid',
-        [
-            'isis.ui.dropdownNavigator',
-            'isis.ui.searchBox'
+        'gme.ui.headerPanel', [
+          'isis.ui.dropdownNavigator',
+          'gme.ui.ProjectNavigator',
+          'isis.ui.searchBox'
         ]).run(function() {
 
     });

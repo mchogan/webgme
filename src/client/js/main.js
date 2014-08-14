@@ -198,10 +198,8 @@ require(
                     'ngRoute',
                     'routeStyles',
                     'ui.bootstrap',
-
-                    'headerPanel',
-                    'objectBrowserPanel',
-                    'propertyGrid'
+                    'gme.ui.projectsDialog',
+                    'gme.ui.headerPanel'
                 ]);
 
             webGME.start( function(client) {
