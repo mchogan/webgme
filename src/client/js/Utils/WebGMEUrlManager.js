@@ -18,7 +18,8 @@ define ([
             projectToLoad:  util.getURLParameterByName('project'),
             objectToLoad: util.getURLParameterByName('activeObject').toLowerCase(),
             createNewProject: util.getURLParameterByName('create') === "true",
-            branchToLoad: util.getURLParameterByName('branch')
+            branchToLoad: util.getURLParameterByName('branch'),
+            ui: parseInt(util.getURLParameterByName('ui'))
         };
     };
 

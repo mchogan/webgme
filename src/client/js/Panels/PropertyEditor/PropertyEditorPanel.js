@@ -50,20 +50,22 @@ define(['js/PanelBase/PanelBaseWithHeader',
         //set Widget title
         this.setTitle("Property Editor");
 
-        //load PropertyEditor control
-        //this.propertyGrid = new PropertyGrid();
-
-        // TODO: would be nice to get the app as a parameter
-        var app = angular.module('gmeApp');
-        app.controller('PropertyGridController', PropertyGridController);
+        if (WebGMEGlobal.ui === 2) {
+            // TODO: would be nice to get the app as a parameter
+            var app = angular.module('gmeApp');
+            app.controller('PropertyGridController', PropertyGridController);
 
 
-        this.$el.append($('<div data-ng-controller="PropertyGridController">' +
-        '    <property-grid items="items"></property-grid>' +
-        '</div>'));
+            this.$el.append($('<div data-ng-controller="PropertyGridController">' +
+                                  '    <property-grid items="items"></property-grid>' +
+                                  '</div>'));
+        } else {
+            //load PropertyEditor control
+            this.propertyGrid = new PropertyGrid();
 
-        //attach control to the PropertyGrid
-        //var p = new PropertyEditorPanelController(this._client, this.propertyGrid);
+            //attach control to the PropertyGrid
+            var p = new PropertyEditorPanelController( this._client, this.propertyGrid );
+        }
     };
 
     /* OVERRIDE FROM WIDGET-WITH-HEADER */
@@ -72,8 +74,11 @@ define(['js/PanelBase/PanelBaseWithHeader',
         //apply parent's onReadOnlyChanged
         __parent__.prototype.onReadOnlyChanged.call(this, isReadOnly);
 
-        // TODO: fix me in new implementation
-        //this.propertyGrid.setReadOnly(isReadOnly);
+        if (WebGMEGlobal.ui === 2) {
+
+        } else {
+            this.propertyGrid.setReadOnly( isReadOnly );
+        }
     };
 
     return PropertyEditorPanel;

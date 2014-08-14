@@ -73,6 +73,8 @@ define(['logManager',
 
         initialThingsToDo.branchToLoad = initialThingsToDo.branchToLoad || CONFIG.branch;
 
+        WebGMEGlobal.ui = initialThingsToDo.ui || 1;
+
         layoutManager = new LayoutManager();
         layoutManager.loadLayout(initialThingsToDo.layoutToLoad, function () {
             var panels = [],
