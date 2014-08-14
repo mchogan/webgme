@@ -297,6 +297,8 @@ define([
                 value   : nodeObj.getRegistry(registryNames[i])
             });
         }
+
+        self.update();
     };
 
     return PropertyGridController;
