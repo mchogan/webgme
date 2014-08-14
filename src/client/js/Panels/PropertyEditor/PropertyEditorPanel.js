@@ -16,7 +16,7 @@ define(['js/PanelBase/PanelBaseWithHeader',
     "use strict";
 
     angular.module(
-        'headerPanel',
+        'propertyGrid',
         [
             'isis.ui.propertyGrid'
         ]).run(function() {

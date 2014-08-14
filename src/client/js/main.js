@@ -199,7 +199,9 @@ require(
                     'routeStyles',
                     'ui.bootstrap',
                     'gme.ui.projectsDialog',
-                    'gme.ui.headerPanel'
+                    'gme.ui.headerPanel',
+                    'objectBrowserPanel',
+                    'propertyGrid'
                 ]);
 
             webGME.start( function(client) {
