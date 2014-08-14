@@ -30,6 +30,7 @@ define([
 
         // gmeClient specific objects
         self.currentObjectId = null;
+        self.territoryId = null;
 
         self.initialize();
     };
@@ -51,7 +52,11 @@ define([
 
         if ( self.gmeClient ) {
             // initialize with gmeClient
+            self.$scope.items = [];
+            self.$scope.config = {};
 
+            // TODO: in destroy function WebGMEGlobal.State.off
+            WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_OBJECT, self.stateActiveObjectChanged, self);
 
         } else {
             // initialize test with data
@@ -137,9 +142,38 @@ define([
         }
     };
 
-
     PropertyGridController.prototype.setReadOnly = function (isReadOnly) {
         console.warn('TODO: change read only state to isReadOnly: ', isReadOnly);
+    };
+
+    PropertyGridController.prototype.stateActiveObjectChanged = function (model, activeObjectId) {
+        var self = this,
+            pattern;
+
+        if (self.currentObjectId === activeObjectId) {
+            return;
+        }
+
+        if (self.territoryId) {
+            // TODO: clean up the territory
+            self.gmeClient.removeUI(self.territoryId);
+            self.territoryId = null;
+        }
+
+        self.currentObjectId = activeObjectId;
+
+        if (self.currentObjectId || self.currentObjectId === CONSTANTS.PROJECT_ROOT_ID) {
+
+            pattern = {};
+            pattern[self.currentObjectId] = { "children": 0 };
+
+            self.territoryId = self.gmeClient.addUI(self, function (events) {
+                self.logger.warning('TODO: handle event/update data');
+            }, self.guid);
+
+        } else {
+            self.logger.warning('No active object.');
+        }
     };
 
     return PropertyGridController;
