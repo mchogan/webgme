@@ -16,7 +16,7 @@ define(['js/PanelBase/PanelBaseWithHeader',
     "use strict";
 
     angular.module(
-        'propertyGrid',
+        'gme.ui.propertyEditor',
         [
             'isis.ui.propertyGrid'
         ]).run(function() {
@@ -62,6 +62,7 @@ define(['js/PanelBase/PanelBaseWithHeader',
         } else {
             //load PropertyEditor control
             this.propertyGrid = new PropertyGrid();
+            this.$el.append(this.propertyGrid.$el);
 
             //attach control to the PropertyGrid
             var p = new PropertyEditorPanelController( this._client, this.propertyGrid );

@@ -34,7 +34,7 @@ define(
 
 
         angular.module(
-                'objectBrowserPanel', ['isis.ui.treeNavigator']
+                'gme.ui.objectBrowserPanel', ['isis.ui.treeNavigator']
             ).run(
             function (
                 ) {

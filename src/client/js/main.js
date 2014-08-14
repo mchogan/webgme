@@ -200,8 +200,8 @@ require(
                     'ui.bootstrap',
                     'gme.ui.projectsDialog',
                     'gme.ui.headerPanel',
-                    'objectBrowserPanel',
-                    'propertyGrid'
+                    'gme.ui.objectBrowserPanel',
+                    'gme.ui.propertyEditor'
                 ]);
 
             webGME.start( function(client) {
