@@ -158,6 +158,9 @@ define([
             // TODO: clean up the territory
             self.gmeClient.removeUI(self.territoryId);
             self.territoryId = null;
+
+            self.$scope.items = [];
+            self.$scope.config = {};
         }
 
         self.currentObjectId = activeObjectId;
@@ -168,8 +171,39 @@ define([
             pattern[self.currentObjectId] = { "children": 0 };
 
             self.territoryId = self.gmeClient.addUI(self, function (events) {
-                self.logger.warning('TODO: handle event/update data');
+                var event,
+                    nodeObj,
+                    i;
+
+                if (events.length === 0) {
+                    return;
+                }
+
+                event = events[0];
+
+                if (event.etype === 'load' || event.etype === 'update') {
+                    nodeObj = self.gmeClient.getNode(event.eid);
+
+
+                    self.$scope.items.push({
+                        id      : 'Name',
+                        label   : 'Name',
+                        value   : nodeObj.getAttribute('name'),
+                        onChange: function () {}
+                    });
+
+                } else if (event.etype === 'unload') {
+                    self.$scope.items = [];
+                    self.$scope.config = {};
+
+                    self.update();
+                } else {
+                    self.logger.error('Unhandled event type: ' + event.etype + ' (id) ' + event.eid);
+                }
+
             }, self.guid);
+
+            self.gmeClient.updateTerritory(self.territoryId, pattern);
 
         } else {
             self.logger.warning('No active object.');
