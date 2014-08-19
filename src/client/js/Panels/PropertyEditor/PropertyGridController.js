@@ -43,17 +43,26 @@ define([
 
     PropertyGridController.prototype.initialize = function () {
         var self = this,
-            onChange;
+            onChange,
+
+            attributes,
+            visualizationProperties,
+            propertyGroup1,
+            propertyGroup2,
+            propertyGroups;
+
+        // initialize default configuration
+        self.config = {
+            propertyLabelPostfix: ':',
+            mode: 'read'
+        };
 
         // data model
-
-        self.$scope.items = [];
-        self.$scope.config = {};
+        self.$scope.grid = {};
 
         if ( self.gmeClient ) {
             // initialize with gmeClient
-            self.$scope.items = [];
-            self.$scope.config = {};
+            self.$scope.grid = {};
 
             // TODO: in destroy function WebGMEGlobal.State.off
             WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_OBJECT, self.stateActiveObjectChanged, self);
@@ -65,80 +74,146 @@ define([
                 console.log('Item changed > ' + item.label, item);
             };
 
-            self.$scope.config = {};
-
-            self.$scope.items = [
+            attributes = [
                 {
-                    id      : 'Name',
-                    label   : 'Name',
-                    value   : 'This is my name',
+                    id: 'Name',
+                    label: 'Name',
+                    values: [
+                        {
+                            value: 'This is my name'
+                        }
+                    ],
                     onChange: onChange
                 },
                 {
 
-                    id      : 'Position',
-                    label   : 'Position',
+                    id: 'compound',
+                    label: 'Compound something',
                     cssClass: '',
-                    value   : [
+                    values: [
                         {
-                            id   : 'Position_x',
+                            value: [
+                                {
+                                    items: [
+                                        {
+                                            id: 'Position_x',
+                                            label: 'X',
+                                            value: 10
+                                            //valueWidget: integerValueWidget,
+                                        },
+                                        {
+                                            id: 'Position_y',
+                                            label: 'Y',
+                                            value: 30
+                                            //valueWidget: integerValueWidget,
+                                        }
+                                    ]
+                                }
+                            ],
+                            widget: {
+                                type: 'compound'
+                            }
+                        }
+                    ],
+                    onChange: onChange
+                },
+                {
+                    id: 'is_happy',
+                    label: 'Happy or not?',
+                    values: [
+                        { value: true }
+                    ]
+                },
+                {
+                    id: 'country',
+                    label: 'Country',
+                    values: [
+                        {
+                            value: 'usa',
+                            widget: {
+                                type: 'select',
+                                defaultValue: 'pol',
+                                config: {
+                                    multi: false,
+                                    options: [
+                                        {
+                                            label: 'U.S.A.',
+                                            value: 'usa'
+                                        },
+                                        {
+                                            label: 'Poland',
+                                            value: 'pol'
+                                        },
+                                        {
+                                            label: 'England',
+                                            value: 'eng'
+                                        }
+                                    ]
+                                }
+                            }
+
+                        }
+                    ],
+                    onChange: onChange
+                }
+            ];
+            visualizationProperties = [
+                {
+                    id: 'color',
+                    label: 'Color',
+                    values: [
+                        {
+                            value: '#ff0066',
+                            widget: {
+                                type: 'colorPicker'
+                            }
+                        }
+                    ],
+                    onChange: onChange
+                },
+
+                {
+
+                    id: 'Position',
+                    label: 'Position',
+                    cssClass: '',
+                    values: [
+
+                        {
+                            id: 'Position_x',
                             label: 'X',
                             value: 10
                             //valueWidget: integerValueWidget,
                         },
                         {
-                            id   : 'Position_y',
+                            id: 'Position_y',
                             label: 'Y',
                             value: 30
                             //valueWidget: integerValueWidget,
                         }
                     ],
                     onChange: onChange
-                },
-                {
-                    id         : 'is_happy',
-                    label      : 'Happy or not?',
-                    value      : true,
-                    valueWidget: {
-                        type: 'boolean'
-                    }
-                },
-                {
-                    id         : 'country',
-                    label      : 'Country',
-                    value      : 'usa',
-                    valueWidget: {
-                        type        : 'select',
-                        defaultValue: 'pol',
-                        multi       : false,
-                        options     : [
-                            {
-                                label: 'U.S.A.',
-                                value: 'usa'
-                            },
-                            {
-                                label: 'Poland',
-                                value: 'pol'
-                            },
-                            {
-                                label: 'England',
-                                value: 'eng'
-                            }
-                        ]
-                    },
-                    onChange   : onChange
-                },
-                {
-                    id         : 'color',
-                    label      : 'Color',
-                    value      : '#ff0066',
-                    valueWidget: {
-                        type: 'colorPicker'
-                    },
-                    onChange   : onChange
                 }
+
             ];
 
+            propertyGroup1 = {
+                label: 'Attributes',
+                expanded: true,
+                items: attributes
+            };
+            propertyGroup2 = {
+                label: 'Visualization properties',
+                expanded: true,
+                items: visualizationProperties
+            };
+            propertyGroups = [ propertyGroup1, propertyGroup2 ];
+
+            self.$scope.grid = {
+                propertyGroups: propertyGroups,
+                config: self.config,
+                id: 'propertyGrid1'
+            };
         }
     };
 
@@ -159,8 +234,7 @@ define([
             self.gmeClient.removeUI(self.territoryId);
             self.territoryId = null;
 
-            self.$scope.items = [];
-            self.$scope.config = {};
+            self.$scope.grid = {};
         }
 
         self.currentObjectId = activeObjectId;
@@ -183,8 +257,7 @@ define([
                     self.updateProperties(event.eid);
 
                 } else if (event.etype === 'unload') {
-                    self.$scope.items = [];
-                    self.$scope.config = {};
+                    self.$scope.grid = {};
 
                     self.update();
                 } else {
@@ -212,91 +285,122 @@ define([
             pointers,
             pointerNames,
 
+            propertyGroupGeneral,
+            propertyGroupAttributes,
+            propertyGroupRegistry,
+            propertyGroupPointers,
+
+            propertyGroups,
+
             onChange;
 
         onChange = function () {
             self.logger.warning('TODO: handle property change event: ' + JSON.stringify(arguments));
         };
 
+
+        // general properties
+        propertyGroupGeneral = {
+            label   : 'General',
+            expanded: true,
+            items   : []
+        };
+
         // TODO: this is read-only
-        self.$scope.items.push({
+        propertyGroupGeneral.items.push({
             id      : 'guid',
             label   : 'GUID',
-            value   : nodeObj.getGuid(),
+            values  : {
+                value : nodeObj.getGuid()
+            },
             onChange: null
         });
 
         // TODO: this should be a link, when we copy the value
-        self.$scope.items.push({
+        propertyGroupGeneral.items.push({
             id      : 'id',
             label   : 'ID',
-            value   : nodeObj.getId(),
+            values  : {
+                value: nodeObj.getId()
+            },
             onChange: null
         });
 
-        // attributes
-        attributes = {
-            id      : 'attributes',
-            label   : 'Attributes',
-            value   : [],
-            onChange: onChange
-        };
 
-        self.$scope.items.push(attributes);
+        // attributes
+        propertyGroupAttributes = {
+            label   : 'Attributes',
+            expanded: true,
+            items   : []
+        };
 
         attributeNames = nodeObj.getAttributeNames();
 
         for (i = 0; i < attributeNames.length; i += 1) {
             // TODO: handle types and complex values
 
-            attributes.value.push({
+            propertyGroupAttributes.items.push({
                 id      : attributeNames[i],
                 label   : attributeNames[i],
-                value   : nodeObj.getAttribute(attributeNames[i])
+                values  : {
+                    value: nodeObj.getAttribute( attributeNames[i] )
+                }
             });
         }
 
         // pointers
-        pointers = {
-            id      : 'pointers',
+        propertyGroupPointers = {
             label   : 'Pointers',
-            value   : [],
-            onChange: onChange
+            expended: false,
+            items   : []
         };
-
-        self.$scope.items.push(pointers);
 
         pointerNames = nodeObj.getPointerNames();
 
         for (i = 0; i < pointerNames.length; i += 1) {
             // TODO: handle types and complex values
-            pointers.value.push({
+            propertyGroupPointers.items.push({
                 id      : pointerNames[i],
                 label   : pointerNames[i],
-                value   : nodeObj.getPointer(pointerNames[i])
+                values  : {
+                    value: nodeObj.getPointer( pointerNames[i] )
+                }
             });
         }
 
         // registry
-        registry = {
-            id      : 'registry',
+        propertyGroupRegistry = {
             label   : 'Registry',
-            value   : [],
-            onChange: onChange
+            expended: false,
+            items   : []
         };
-
-        self.$scope.items.push(registry);
 
         registryNames = nodeObj.getRegistryNames();
 
         for (i = 0; i < registryNames.length; i += 1) {
             // TODO: handle types and complex values
-            registry.value.push({
+            propertyGroupRegistry.items.push({
                 id      : registryNames[i],
                 label   : registryNames[i],
-                value   : nodeObj.getRegistry(registryNames[i])
+                values  : {
+                    value: nodeObj.getRegistry(registryNames[i])
+                }
             });
         }
+
+
+        propertyGroups = [
+            propertyGroupGeneral,
+            propertyGroupAttributes,
+            propertyGroupPointers,
+            propertyGroupRegistry
+        ];
+
+        self.$scope.grid = {
+            propertyGroups: propertyGroups,
+            config: self.config,
+            id: self.guid
+        };
 
         self.update();
     };
