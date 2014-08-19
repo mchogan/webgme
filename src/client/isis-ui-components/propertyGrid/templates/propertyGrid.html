@@ -1,15 +1,14 @@
-<div class="property-grid">
+<div class="property-grid" ng-attr-id="gridData.id">
 
-    <script type="text/ng-template" id="property-grid-item-template">
-        <div class="item row">
-            <label class="col-md-3">{{ item.label }}</label>
-            <div class="col-md-9">{{ item.value }}</div>
-        </div>
-    </script>
+    <form>
+    <!--<script type="text/ng-template" id="property-grid-item-template">-->
+        <!--<div class="item row">-->
+            <!--<label class="col-md-3">{{ item.label }}</label>-->
+            <!--<div class="col-md-9">{{ item.value }}</div>-->
+        <!--</div>-->
+    <!--</script>-->
+        <property-grid-body property-groups="gridData.propertyGroups"></property-grid-body>
 
-   <ul class="item-list">
-        <li data-ng-repeat="item in items"
-            data-ng-include="'property-grid-item-template'">
-        </li>
-    </ul>
+    </form>
+
 </div>

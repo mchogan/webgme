@@ -1,0 +1,18 @@
+<div class="property-grid-body">
+
+    <accordion close-others="false">
+
+    <accordion-group
+            data-ng-repeat="propertyGroup in propertyGroups"
+            is-open="propertyGroup.expanded"
+            >
+        <accordion-heading>
+            {{propertyGroup.label}} <i class="pull-right glyphicon" ng-class="{'glyphicon-chevron-down': propertyGroup.expanded, 'glyphicon-chevron-right': !propertyGroup.expanded}"></i>
+        </accordion-heading>
+
+        <property-group items="propertyGroup.items"></property-group>
+
+    </accordion-group>
+
+    </accordion>
+</div>

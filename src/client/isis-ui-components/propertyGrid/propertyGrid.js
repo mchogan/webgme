@@ -1,37 +1,55 @@
 /*globals define, angular, alert*/
 
 
-define([
-    'angular',
-    'text!./templates/propertyGrid.html',
-    'css!./styles/propertyGrid.css'
+define( [
+  'angular',
+  'text!./templates/propertyGrid.html',
+  'css!./styles/propertyGrid.css',
 
-], function(
-    ng,
-    template ){
+  './propertyGridBody'
 
-    "use strict";
+], function ( ng, defaultTemplate ) {
 
-    angular.module(
-        'isis.ui.propertyGrid',
-        [
-        ]
+  'use strict';
+
+  angular.module(
+      'isis.ui.propertyGrid',
+      [
+        'isis.ui.propertyGridBody'
+      ]
 
     ).directive(
-        'propertyGrid',
-         function () {
+    'propertyGrid',
+    ['$log', '$compile',
+    function ($log, $compile) {
 
-             return {
-                 scope: {
-                     items: '=',
-                     config: '='
-                 },
-                 restrict: 'E',
-                 replace: true,
-                 template: template
+      return {
+        scope: {
+          gridData: '='
+        },
+        restrict: 'E',
+        replace: true,
 
-             };
-    });
+        compile: function($elm, $attrs) {
+          return {
+            pre: function ($scope, $elm, $attrs, controllers) {
+
+              var template = angular.element(defaultTemplate);
+
+              $elm.append($compile(template)($scope));
 
 
-});
+            },
+            post: function($scope, $elm, $attrs) {
+
+
+            }
+          };
+        }
+
+      };
+    }]
+    );
+
+
+} );
