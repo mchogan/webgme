@@ -3,8 +3,8 @@
 
 define( [
   'angular',
-  'text!./templates/stringWidget.html',
-  'css!./styles/stringWidget.css'
+  'text!./templates/compoundWidget.html',
+  'css!./styles/compoundWidget.css'
 
 ], function ( ng, template ) {
 

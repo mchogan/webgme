@@ -21,7 +21,7 @@ define( [
     ).directive(
     'propertyValue',
     ['$log', '$compile', '$valueWidgets',
-    function ($log, $compile, $valueWidgets) {
+    function ($log, $compile) {
 
       return {
         restrict: 'E',
@@ -36,14 +36,6 @@ define( [
                 widgetElement;
 
               $elm.append($compile(template)($scope));
-
-              if (angular.isObject($scope.value) && angular.isObject($scope.value.widget)) {
-                widgetType = $scope.value.widget.type;
-              }
-
-              widgetElement = $valueWidgets.getWidgetElementForType(widgetType);
-
-              $log.log(widgetElement);
 
             },
             post: function($scope, $elm, $attrs) {

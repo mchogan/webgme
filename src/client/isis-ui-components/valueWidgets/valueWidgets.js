@@ -23,17 +23,17 @@ define( [
         'isis.ui.compoundWidget'
       ]
 
-    ).factory('$valueWidgets', function() {
+    ).factory( '$valueWidgets', function () {
       var getWidgetElementForType;
 
-      getWidgetElementForType = function( type ) {
+      getWidgetElementForType = function ( type ) {
 
         var result = availableWidgets[ type ];
-        
-        if (!result) {
+
+        if ( !result ) {
           result = 'string-widget';
         }
-        
+
         return result;
 
       };
@@ -41,7 +41,47 @@ define( [
       return {
         getWidgetElementForType: getWidgetElementForType
       };
-    });
+    } )
+    .directive( 'valueWidget',
+      [ '$log', '$compile', '$valueWidgets',
+        function ( $log, $compile, $valueWidgets ) {
+
+          return {
+            restrict: 'E',
+            replace: true,
+
+            compile: function ( $elm, $attrs ) {
+              return {
+                pre: function ( $scope, $elm, $attrs, controllers ) {
+                },
+                post: function ( $scope, $elm, $attrs ) {
+
+                  var
+                    templateStr,
+                    template,
+                    widgetType,
+                    widgetElement;
+
+                  if ( angular.isObject( $scope.value ) && angular.isObject( $scope.value.widget ) ) {
+                    widgetType = $scope.value.widget.type;
+                  }
+
+                  widgetElement = $valueWidgets.getWidgetElementForType( widgetType );
+
+                  templateStr = '<' + widgetElement + ' value="value">' + '</' + widgetElement + '>';
+
+                  //$log.log(templateStr);
+
+                  template = angular.element(templateStr);
+
+                  $elm.append( $compile( template )( $scope ) );
+
+                }
+              };
+            }
+          };
+
+        }] );
 
 
 } );
