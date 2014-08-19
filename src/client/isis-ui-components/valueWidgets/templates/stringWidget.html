@@ -4,7 +4,7 @@
 
     <div ng-switch-when="display">{{value.value}}</div>
     <div ng-switch-when="edit">
-        <input type="text" class="form-control" placeholder="{{value.placeHolder}}" value="{{value.value}}">
+        <input type="text" class="form-control" placeholder="{{value.placeHolder}}" ng-model="value.value">
     </div>
 
 </div>
