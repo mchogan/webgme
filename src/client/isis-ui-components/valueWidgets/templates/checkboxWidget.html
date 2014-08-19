@@ -1,0 +1,23 @@
+<div class="checkbox-widget"
+     ng-class="mode"
+     ng-switch on="mode">
+
+    <div ng-switch-when="display" >
+        <div ng-switch on="value.value">
+            <div ng-switch-when="true" >
+                <i class="glyphicon glyphicon-ok"></i>
+            </div>
+            <div ng-switch-when="false" >
+                <i class="glyphicon glyphicon-remove"></i>
+            </div>
+        </div>
+
+    </div>
+    <div ng-switch-when="edit">
+        <div class="btn-group btn-group-sm">
+            <label class="btn btn-sm btn-default" ng-model="value.value" btn-radio="true">Yes</label>
+            <label class="btn btn-sm btn-default" ng-model="value.value" btn-radio="false">No</label>
+        </div>
+    </div>
+
+</div>

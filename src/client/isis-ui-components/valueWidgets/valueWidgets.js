@@ -5,30 +5,35 @@ define( [
   'angular',
 
   './stringWidget',
-  './compoundWidget'
+  './compoundWidget',
+  './checkboxWidget'
 
 ], function ( ng ) {
 
   'use strict';
 
   var availableWidgets = {
-    'string': 'string-widget',
-    'compound': 'compound-widget'
-  };
+    'string': [  'stringWidget', 'string-widget' ],
+    'compound': [ 'compoundWidget', 'compound-widget' ],
+    'checkbox': [ 'checkboxWidget', 'checkbox-widget' ]
+    },
+    widgetModules = [];
+
+  angular.forEach(availableWidgets, function(value, key) {
+       this.push( 'isis.ui.' + value[0]);
+  }, widgetModules);
 
   angular.module(
       'isis.ui.valueWidgets',
-      [
-        'isis.ui.stringWidget',
-        'isis.ui.compoundWidget'
-      ]
+
+      widgetModules
 
     ).factory( '$valueWidgets', function () {
       var getWidgetElementForType;
 
       getWidgetElementForType = function ( type ) {
 
-        var result = availableWidgets[ type ];
+        var result = availableWidgets[ type ] && availableWidgets[ type ][1];
 
         if ( !result ) {
           result = 'string-widget';
@@ -71,9 +76,21 @@ define( [
                     widgetType,
                     widgetElement;
 
-                  if ( angular.isObject( $scope.value ) && angular.isObject( $scope.value.widget ) ) {
-                    widgetType = $scope.value.widget.type;
+                  if ( angular.isObject( $scope.value )) {
+
+                    if (angular.isObject( $scope.value.widget ) ) {
+                      widgetType = $scope.value.widget.type;
+                    } else {
+
+
+                      if ( typeof $scope.value.value === 'boolean') {
+                        widgetType = 'checkbox';
+                      }
+
+                    }
+
                   }
+
 
                   widgetElement = $valueWidgets.getWidgetElementForType( widgetType );
 
