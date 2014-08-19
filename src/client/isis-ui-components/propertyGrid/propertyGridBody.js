@@ -24,7 +24,8 @@ define( [
 
       return {
         scope: {
-          propertyGroups: '='
+          propertyGroups: '=',
+          config: '='
         },
         restrict: 'E',
         replace: true,

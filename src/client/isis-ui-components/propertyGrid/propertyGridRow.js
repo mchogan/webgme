@@ -27,12 +27,12 @@ define( [
       return {
         scope: {
           label: '=',
-          values: '='
+          values: '=',
+          config: '='
         },
         restrict: 'E',
         replace: true,
         template: template
-
       };
     } );
 
