@@ -1,1 +1,10 @@
-<div class="string-widget">{{value}}</div>
+<div class="string-widget"
+     ng-class="mode"
+     ng-switch on="mode">
+
+    <div ng-switch-when="display">{{value.value}}</div>
+    <div ng-switch-when="edit">
+        <input type="text" class="form-control" placeholder="{{value.placeHolder}}" value="{{value.value}}">
+    </div>
+
+</div>

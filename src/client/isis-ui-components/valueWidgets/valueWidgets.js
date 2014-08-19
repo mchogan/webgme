@@ -49,10 +49,19 @@ define( [
           return {
             restrict: 'E',
             replace: true,
+            scope: {
+              mode: '=',
+              value: '='
+            },
 
             compile: function ( $elm, $attrs ) {
               return {
                 pre: function ( $scope, $elm, $attrs, controllers ) {
+
+                  if (!$scope.mode) {
+                    $scope.mode = 'edit';
+                  }
+
                 },
                 post: function ( $scope, $elm, $attrs ) {
 
@@ -68,9 +77,9 @@ define( [
 
                   widgetElement = $valueWidgets.getWidgetElementForType( widgetType );
 
-                  templateStr = '<' + widgetElement + ' value="value">' + '</' + widgetElement + '>';
+                  templateStr = '<' + widgetElement + ' value="value" mode="mode">' + '</' + widgetElement + '>';
 
-                  //$log.log(templateStr);
+                  $log.log(templateStr);
 
                   template = angular.element(templateStr);
 
