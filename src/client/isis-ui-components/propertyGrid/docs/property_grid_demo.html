@@ -238,11 +238,19 @@ requirejs( [
 
 </script>
 
+<style>
+    .property-panel {
+        width: 300px;
+        font-size: 13px;
+    }
+
+</style>
+
 </head>
 <body>
 
 <div data-ng-controller="PropertyGridDemoController" style="padding: 10px">
-    <div class="container">
+    <div class="container-fluid">
         <div class="row">
             <div class="col-md-1">Mode:</div>
             <div class="col-md-4">
@@ -255,8 +263,14 @@ requirejs( [
     </div>
 
     <p></p>
+    <div class="container-fluid">
+        <property-grid grid-data="grid"></property-grid>
+    </div>
 
-    <property-grid grid-data="grid"></property-grid>
+    <div class="property-panel">
+        <property-grid grid-data="grid"></property-grid>
+    </div>
+    </div>
 </div>
 
 </body>

@@ -1,9 +1,8 @@
-<div class="compound-widget"
+<div class="compound-widget col-lg-8 col-md-8 col-sm-8 col-xs-12"
      ng-init="displayValue = value.getDisplayValue(value)">
-
     <accordion close-others="false">
         <accordion-group is-open="value.widget.expanded">
-            <accordion-heading> {{displayValue}}
+            <accordion-heading class="compound-display-value"> {{displayValue}}
                 <i class="pull-right glyphicon"
                                            ng-class="{'glyphicon-chevron-down': value.widget.expanded, 'glyphicon-chevron-right': !value.widget.expanded}"></i>
             </accordion-heading>
@@ -11,5 +10,4 @@
             <property-group items="value.value" config="config"></property-group>
         </accordion-group>
     </accordion>
-
 </div>
