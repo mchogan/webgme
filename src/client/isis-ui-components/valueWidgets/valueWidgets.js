@@ -55,7 +55,7 @@ define( [
             restrict: 'E',
             replace: true,
             scope: {
-              mode: '=',
+              config: '=',
               value: '='
             },
 
@@ -63,8 +63,10 @@ define( [
               return {
                 pre: function ( $scope, $elm, $attrs, controllers ) {
 
-                  if (!$scope.mode) {
-                    $scope.mode = 'edit';
+                  if (!$scope.config) {
+                    $scope.config = {
+                      mode: 'edit'
+                    };
                   }
 
                 },
@@ -94,7 +96,7 @@ define( [
 
                   widgetElement = $valueWidgets.getWidgetElementForType( widgetType );
 
-                  templateStr = '<' + widgetElement + ' value="value" mode="mode">' + '</' + widgetElement + '>';
+                  templateStr = '<' + widgetElement + ' value="value" config="config">' + '</' + widgetElement + '>';
 
                   $log.log(templateStr);
 

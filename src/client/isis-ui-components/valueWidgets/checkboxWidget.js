@@ -24,7 +24,7 @@ define( [
         replace: true,
         template: template,
         scope: {
-          mode: '=',
+          config: '=',
           value: '='
         }
 
