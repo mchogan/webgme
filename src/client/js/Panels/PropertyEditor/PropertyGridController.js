@@ -94,22 +94,41 @@ define([
                         {
                             value: [
                                 {
-                                    items: [
+                                    id: 'Position_x',
+                                    label: 'X',
+                                    values:[
                                         {
-                                            id: 'Position_x',
-                                            label: 'X',
                                             value: 10
-                                            //valueWidget: integerValueWidget,
-                                        },
-                                        {
-                                            id: 'Position_y',
-                                            label: 'Y',
-                                            value: 30
-                                            //valueWidget: integerValueWidget,
                                         }
                                     ]
+                                    //valueWidget: integerValueWidget,
+                                },
+                                {
+                                    id: 'Position_y',
+                                    label: 'Y',
+                                    values: [
+                                        {
+                                            value: 30
+                                        }
+                                    ]
+                                    //valueWidget: integerValueWidget,
+                                },
+                                {
+                                    id: 'Dabrack',
+                                    label: 'Dabrack',
+                                    values: [
+                                        {
+                                            value: 'This is my name'
+                                        }
+                                    ],
+                                    onChange: onChange
                                 }
                             ],
+                            getDisplayValue: function ( value ) {
+                                var coordinates = value.value;
+
+                                return coordinates[0].values[0].value + ', ' + coordinates[1].values[0].value;
+                            },
                             widget: {
                                 type: 'compound'
                             }
@@ -122,6 +141,13 @@ define([
                     label: 'Happy or not?',
                     values: [
                         { value: true }
+                    ]
+                },
+                {
+                    id: 'is_rich',
+                    label: 'Rich or not?',
+                    values: [
+                        { value: false }
                     ]
                 },
                 {
@@ -196,6 +222,7 @@ define([
                 }
 
             ];
+
 
             propertyGroup1 = {
                 label: 'Attributes',
@@ -310,9 +337,9 @@ define([
         propertyGroupGeneral.items.push({
             id      : 'guid',
             label   : 'GUID',
-            values  : {
+            values  : [{
                 value : nodeObj.getGuid()
-            },
+            }],
             onChange: null
         });
 
@@ -320,9 +347,9 @@ define([
         propertyGroupGeneral.items.push({
             id      : 'id',
             label   : 'ID',
-            values  : {
+            values  : [{
                 value: nodeObj.getId()
-            },
+            }],
             onChange: null
         });
 
@@ -342,9 +369,9 @@ define([
             propertyGroupAttributes.items.push({
                 id      : attributeNames[i],
                 label   : attributeNames[i],
-                values  : {
+                values  : [{
                     value: nodeObj.getAttribute( attributeNames[i] )
-                }
+                }]
             });
         }
 
@@ -362,9 +389,9 @@ define([
             propertyGroupPointers.items.push({
                 id      : pointerNames[i],
                 label   : pointerNames[i],
-                values  : {
+                values  : [{
                     value: nodeObj.getPointer( pointerNames[i] )
-                }
+                }]
             });
         }
 
@@ -382,9 +409,9 @@ define([
             propertyGroupRegistry.items.push({
                 id      : registryNames[i],
                 label   : registryNames[i],
-                values  : {
+                values  : [{
                     value: nodeObj.getRegistry(registryNames[i])
-                }
+                }]
             });
         }
 
