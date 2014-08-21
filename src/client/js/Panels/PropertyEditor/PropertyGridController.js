@@ -334,24 +334,20 @@ define([
         };
 
         // TODO: this is read-only
-        propertyGroupGeneral.items.push({
-            id      : 'guid',
-            label   : 'GUID',
-            values  : [{
-                value : nodeObj.getGuid()
-            }],
-            onChange: null
-        });
+        propertyGroupGeneral.items.push(
+            self.createPropertyEntry(
+                'GUID',
+                nodeObj.getGuid()
+            )
+        );
 
         // TODO: this should be a link, when we copy the value
-        propertyGroupGeneral.items.push({
-            id      : 'id',
-            label   : 'ID',
-            values  : [{
-                value: nodeObj.getId()
-            }],
-            onChange: null
-        });
+        propertyGroupGeneral.items.push(
+            self.createPropertyEntry(
+                'ID',
+                nodeObj.getId()
+            )
+        );
 
 
         // attributes
@@ -366,13 +362,12 @@ define([
         for (i = 0; i < attributeNames.length; i += 1) {
             // TODO: handle types and complex values
 
-            propertyGroupAttributes.items.push({
-                id      : attributeNames[i],
-                label   : attributeNames[i],
-                values  : [{
-                    value: nodeObj.getAttribute( attributeNames[i] )
-                }]
-            });
+            propertyGroupAttributes.items.push(
+                self.createPropertyEntry(
+                    attributeNames[i],
+                    nodeObj.getAttribute( attributeNames[i] )
+                )
+            );
         }
 
         // pointers
@@ -386,13 +381,12 @@ define([
 
         for (i = 0; i < pointerNames.length; i += 1) {
             // TODO: handle types and complex values
-            propertyGroupPointers.items.push({
-                id      : pointerNames[i],
-                label   : pointerNames[i],
-                values  : [{
-                    value: nodeObj.getPointer( pointerNames[i] )
-                }]
-            });
+            propertyGroupPointers.items.push(
+                self.createPropertyEntry(
+                    pointerNames[i],
+                    nodeObj.getPointer( pointerNames[i] )
+                )
+            );
         }
 
         // registry
@@ -406,13 +400,12 @@ define([
 
         for (i = 0; i < registryNames.length; i += 1) {
             // TODO: handle types and complex values
-            propertyGroupRegistry.items.push({
-                id      : registryNames[i],
-                label   : registryNames[i],
-                values  : [{
-                    value: nodeObj.getRegistry(registryNames[i])
-                }]
-            });
+            propertyGroupRegistry.items.push(
+                self.createPropertyEntry(
+                    registryNames[i],
+                    nodeObj.getRegistry(registryNames[i])
+                )
+            );
         }
 
 
@@ -430,6 +423,18 @@ define([
         };
 
         self.update();
+    };
+
+    PropertyGridController.prototype.createPropertyEntry = function (name, value) {
+        var property = {
+            id: name,
+            label: name,
+            values: []
+        };
+
+        property.values.push({value: value});
+
+        return property;
     };
 
     return PropertyGridController;
