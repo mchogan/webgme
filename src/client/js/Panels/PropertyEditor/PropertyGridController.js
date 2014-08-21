@@ -359,6 +359,10 @@ define([
 
         attributeNames = nodeObj.getAttributeNames();
 
+        attributeNames.sort(function (a, b) {
+            return a.toLowerCase().localeCompare(b.toLowerCase());
+        });
+
         for (i = 0; i < attributeNames.length; i += 1) {
             // TODO: handle types and complex values
 
@@ -379,6 +383,10 @@ define([
 
         pointerNames = nodeObj.getPointerNames();
 
+        pointerNames.sort(function (a, b) {
+            return a.toLowerCase().localeCompare(b.toLowerCase());
+        });
+
         for (i = 0; i < pointerNames.length; i += 1) {
             // TODO: handle types and complex values
             propertyGroupPointers.items.push(
@@ -397,6 +405,10 @@ define([
         };
 
         registryNames = nodeObj.getRegistryNames();
+
+        registryNames.sort(function (a, b) {
+            return a.toLowerCase().localeCompare(b.toLowerCase());
+        });
 
         for (i = 0; i < registryNames.length; i += 1) {
             // TODO: handle types and complex values
@@ -426,13 +438,58 @@ define([
     };
 
     PropertyGridController.prototype.createPropertyEntry = function (name, value) {
-        var property = {
-            id: name,
-            label: name,
-            values: []
-        };
+        var self = this,
+            type = typeof value,
+            typeString,
+            i,
+            property = {
+                id: name,
+                label: name,
+                values: []
+            },
+            key,
+            compound = {
+                value: [],
+                widget: {
+                    type: 'compound'
+                },
+                getDisplayValue: function ( value ) {
+                    // TODO: implement this function properly
+                    return '';
+                }
+            };
 
-        property.values.push({value: value});
+        if (type === 'object') {
+            // Note: toString is really slow
+            typeString = ({}).toString.call(value);
+
+            if (typeString === '[object Object]') {
+                for ( key in value ) {
+                    if ( value.hasOwnProperty( key ) ) {
+                        compound.value.push( self.createPropertyEntry( key, value[key] ) );
+                    }
+                }
+
+                property.values.push( compound );
+
+            } else if (typeString === '[object Array]') {
+
+                for (i = 0; i < value.length; i += 1) {
+                    compound.value.push( self.createPropertyEntry( i, value[i] ) );
+                }
+
+                property.values.push( compound );
+
+            } else {
+                self.logger.error('Type is not supported: "' + typeString + '" value: ' + JSON.stringify(value));
+            }
+
+        } else if (type === 'string' || type === 'boolean' || type === 'number') {
+            property.values.push({value: value});
+
+        } else {
+            self.logger.error('Type is not supported: "' + type + '" value: ' + JSON.stringify(value));
+        }
 
         return property;
     };
