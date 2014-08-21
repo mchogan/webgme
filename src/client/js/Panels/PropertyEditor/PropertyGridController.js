@@ -54,7 +54,7 @@ define([
         // initialize default configuration
         self.config = {
             propertyLabelPostfix: ':',
-            mode: 'read'
+            mode: 'display'
         };
 
         // data model

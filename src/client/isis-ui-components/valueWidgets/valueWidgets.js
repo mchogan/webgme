@@ -56,7 +56,8 @@ define( [
             replace: true,
             scope: {
               config: '=',
-              value: '='
+              value: '=',
+              unresponsive: '='
             },
 
             compile: function ( $elm, $attrs ) {
@@ -96,7 +97,9 @@ define( [
 
                   widgetElement = $valueWidgets.getWidgetElementForType( widgetType );
 
-                  templateStr = '<' + widgetElement + ' value="value" config="config">' + '</' + widgetElement + '>';
+                  templateStr = '<' + widgetElement +
+                    ' value="value" config="config" unresponsive="unresponsive">' +
+                    '</' + widgetElement + '>';
 
                   $log.log(templateStr);
 

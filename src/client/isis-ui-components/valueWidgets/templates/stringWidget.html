@@ -1,5 +1,5 @@
-<div class="string-widget col-lg-3 col-md-4 col-sm-5 col-xs-12"
-     ng-class="mode"
+<div class="string-widget"
+     ng-class="unresponsive? config.mode : ('col-lg-3 col-md-4 col-sm-5 col-xs-12 ' + config.mode)"
      ng-switch on="config.mode">
 
     <div ng-switch-when="display">{{value.value}}</div>

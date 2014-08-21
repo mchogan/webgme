@@ -25,7 +25,8 @@ define( [
         template: template,
         scope: {
           config: '=',
-          value: '='
+          value: '=',
+          unresponsive: '='
         }
 
       };

@@ -1,5 +1,5 @@
-<div class="checkbox-widget col-lg-8 col-md-8 col-sm-8 col-xs-4"
-     ng-class="mode"
+<div class="checkbox-widget"
+     ng-class="unresponsive? config.mode : ('col-lg-8 col-md-8 col-sm-8 col-xs-4 ' + config.mode)"
      ng-switch on="config.mode">
 
     <div ng-switch-when="display" class="pull-left" >
