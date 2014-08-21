@@ -6,7 +6,8 @@ define( [
 
   './stringWidget',
   './compoundWidget',
-  './checkboxWidget'
+  './checkboxWidget',
+  './selectWidget'
 
 ], function ( ng ) {
 
@@ -15,7 +16,8 @@ define( [
   var availableWidgets = {
     'string': [  'stringWidget', 'string-widget' ],
     'compound': [ 'compoundWidget', 'compound-widget' ],
-    'checkbox': [ 'checkboxWidget', 'checkbox-widget' ]
+    'checkbox': [ 'checkboxWidget', 'checkbox-widget' ],
+    'select': [ 'selectWidget', 'select-widget' ]
     },
     widgetModules = [];
 
