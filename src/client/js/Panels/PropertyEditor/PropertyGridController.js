@@ -54,7 +54,7 @@ define([
         // initialize default configuration
         self.config = {
             propertyLabelPostfix: ':',
-            mode: 'read'
+            mode: 'display'
         };
 
         // data model
@@ -94,22 +94,41 @@ define([
                         {
                             value: [
                                 {
-                                    items: [
+                                    id: 'Position_x',
+                                    label: 'X',
+                                    values:[
                                         {
-                                            id: 'Position_x',
-                                            label: 'X',
                                             value: 10
-                                            //valueWidget: integerValueWidget,
-                                        },
-                                        {
-                                            id: 'Position_y',
-                                            label: 'Y',
-                                            value: 30
-                                            //valueWidget: integerValueWidget,
                                         }
                                     ]
+                                    //valueWidget: integerValueWidget,
+                                },
+                                {
+                                    id: 'Position_y',
+                                    label: 'Y',
+                                    values: [
+                                        {
+                                            value: 30
+                                        }
+                                    ]
+                                    //valueWidget: integerValueWidget,
+                                },
+                                {
+                                    id: 'Dabrack',
+                                    label: 'Dabrack',
+                                    values: [
+                                        {
+                                            value: 'This is my name'
+                                        }
+                                    ],
+                                    onChange: onChange
                                 }
                             ],
+                            getDisplayValue: function ( value ) {
+                                var coordinates = value.value;
+
+                                return coordinates[0].values[0].value + ', ' + coordinates[1].values[0].value;
+                            },
                             widget: {
                                 type: 'compound'
                             }
@@ -122,6 +141,13 @@ define([
                     label: 'Happy or not?',
                     values: [
                         { value: true }
+                    ]
+                },
+                {
+                    id: 'is_rich',
+                    label: 'Rich or not?',
+                    values: [
+                        { value: false }
                     ]
                 },
                 {
@@ -196,6 +222,7 @@ define([
                 }
 
             ];
+
 
             propertyGroup1 = {
                 label: 'Attributes',
@@ -307,24 +334,20 @@ define([
         };
 
         // TODO: this is read-only
-        propertyGroupGeneral.items.push({
-            id      : 'guid',
-            label   : 'GUID',
-            values  : {
-                value : nodeObj.getGuid()
-            },
-            onChange: null
-        });
+        propertyGroupGeneral.items.push(
+            self.createPropertyEntry(
+                'GUID',
+                nodeObj.getGuid()
+            )
+        );
 
         // TODO: this should be a link, when we copy the value
-        propertyGroupGeneral.items.push({
-            id      : 'id',
-            label   : 'ID',
-            values  : {
-                value: nodeObj.getId()
-            },
-            onChange: null
-        });
+        propertyGroupGeneral.items.push(
+            self.createPropertyEntry(
+                'ID',
+                nodeObj.getId()
+            )
+        );
 
 
         // attributes
@@ -336,16 +359,19 @@ define([
 
         attributeNames = nodeObj.getAttributeNames();
 
+        attributeNames.sort(function (a, b) {
+            return a.toLowerCase().localeCompare(b.toLowerCase());
+        });
+
         for (i = 0; i < attributeNames.length; i += 1) {
             // TODO: handle types and complex values
 
-            propertyGroupAttributes.items.push({
-                id      : attributeNames[i],
-                label   : attributeNames[i],
-                values  : {
-                    value: nodeObj.getAttribute( attributeNames[i] )
-                }
-            });
+            propertyGroupAttributes.items.push(
+                self.createPropertyEntry(
+                    attributeNames[i],
+                    nodeObj.getAttribute( attributeNames[i] )
+                )
+            );
         }
 
         // pointers
@@ -357,15 +383,18 @@ define([
 
         pointerNames = nodeObj.getPointerNames();
 
+        pointerNames.sort(function (a, b) {
+            return a.toLowerCase().localeCompare(b.toLowerCase());
+        });
+
         for (i = 0; i < pointerNames.length; i += 1) {
             // TODO: handle types and complex values
-            propertyGroupPointers.items.push({
-                id      : pointerNames[i],
-                label   : pointerNames[i],
-                values  : {
-                    value: nodeObj.getPointer( pointerNames[i] )
-                }
-            });
+            propertyGroupPointers.items.push(
+                self.createPropertyEntry(
+                    pointerNames[i],
+                    nodeObj.getPointer( pointerNames[i] )
+                )
+            );
         }
 
         // registry
@@ -377,15 +406,18 @@ define([
 
         registryNames = nodeObj.getRegistryNames();
 
+        registryNames.sort(function (a, b) {
+            return a.toLowerCase().localeCompare(b.toLowerCase());
+        });
+
         for (i = 0; i < registryNames.length; i += 1) {
             // TODO: handle types and complex values
-            propertyGroupRegistry.items.push({
-                id      : registryNames[i],
-                label   : registryNames[i],
-                values  : {
-                    value: nodeObj.getRegistry(registryNames[i])
-                }
-            });
+            propertyGroupRegistry.items.push(
+                self.createPropertyEntry(
+                    registryNames[i],
+                    nodeObj.getRegistry(registryNames[i])
+                )
+            );
         }
 
 
@@ -403,6 +435,63 @@ define([
         };
 
         self.update();
+    };
+
+    PropertyGridController.prototype.createPropertyEntry = function (name, value) {
+        var self = this,
+            type = typeof value,
+            typeString,
+            i,
+            property = {
+                id: name,
+                label: name,
+                values: []
+            },
+            key,
+            compound = {
+                value: [],
+                widget: {
+                    type: 'compound'
+                },
+                getDisplayValue: function ( value ) {
+                    // TODO: implement this function properly
+                    return '';
+                }
+            };
+
+        if (type === 'object') {
+            // Note: toString is really slow
+            typeString = ({}).toString.call(value);
+
+            if (typeString === '[object Object]') {
+                for ( key in value ) {
+                    if ( value.hasOwnProperty( key ) ) {
+                        compound.value.push( self.createPropertyEntry( key, value[key] ) );
+                    }
+                }
+
+                property.values.push( compound );
+
+            } else if (typeString === '[object Array]') {
+
+                for (i = 0; i < value.length; i += 1) {
+                    compound.value.push( self.createPropertyEntry( i, value[i] ) );
+                }
+
+                property.values.push( compound );
+
+            } else {
+                self.logger.error('Type is not supported: "' + typeString + '" value: ' + JSON.stringify(value));
+            }
+
+        } else if (type === 'string' || type === 'boolean' || type === 'number') {
+            property.values.push({value: value});
+
+        } else {
+            self.logger.error('Type is not supported: "' + type + '" value: ' + JSON.stringify(value));
+        }
+
+        return property;
     };
 
     return PropertyGridController;

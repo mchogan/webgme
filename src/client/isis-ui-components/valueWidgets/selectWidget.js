@@ -3,20 +3,20 @@
 
 define( [
   'angular',
-  'text!./templates/checkboxWidget.html',
-  'css!./styles/checkboxWidget.css'
+  'text!./templates/selectWidget.html',
+  'css!./styles/selectWidget.css'
 
 ], function ( ng, template ) {
 
   'use strict';
 
   angular.module(
-      'isis.ui.checkboxWidget',
+      'isis.ui.selectWidget',
       [
       ]
 
     ).directive(
-    'checkboxWidget',
+    'selectWidget',
     function () {
 
       return {

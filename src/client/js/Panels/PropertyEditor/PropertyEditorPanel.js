@@ -57,7 +57,7 @@ define(['js/PanelBase/PanelBaseWithHeader',
 
 
             this.$el.append($('<div data-ng-controller="PropertyGridController">' +
-                                  '    <property-grid grid-data="grid"></property-grid>' +
+                                  '    <property-grid grid-data="grid" unresponsive="true"></property-grid>' +
                                   '</div>'));
         } else {
             //load PropertyEditor control

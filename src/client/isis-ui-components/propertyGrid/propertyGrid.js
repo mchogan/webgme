@@ -25,17 +25,23 @@ define( [
 
       return {
         scope: {
-          gridData: '='
+          gridData: '=',
+          unresponsive: '='
         },
         restrict: 'E',
         replace: true,
+
+        controller: function($scope, $element, $attrs) {
+          this.isUnresponsive = function() {
+            return $scope.unresponsive;
+          };
+        },
 
         compile: function($elm, $attrs) {
           return {
             pre: function ($scope, $elm, $attrs, controllers) {
 
               var template = angular.element(defaultTemplate);
-
               $elm.append($compile(template)($scope));
 
 

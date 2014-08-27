@@ -6,7 +6,8 @@ define( [
 
   './stringWidget',
   './compoundWidget',
-  './checkboxWidget'
+  './checkboxWidget',
+  './selectWidget'
 
 ], function ( ng ) {
 
@@ -15,7 +16,8 @@ define( [
   var availableWidgets = {
     'string': [  'stringWidget', 'string-widget' ],
     'compound': [ 'compoundWidget', 'compound-widget' ],
-    'checkbox': [ 'checkboxWidget', 'checkbox-widget' ]
+    'checkbox': [ 'checkboxWidget', 'checkbox-widget' ],
+    'select': [ 'selectWidget', 'select-widget' ]
     },
     widgetModules = [];
 
@@ -56,7 +58,8 @@ define( [
             replace: true,
             scope: {
               config: '=',
-              value: '='
+              value: '=',
+              unresponsive: '='
             },
 
             compile: function ( $elm, $attrs ) {
@@ -96,7 +99,9 @@ define( [
 
                   widgetElement = $valueWidgets.getWidgetElementForType( widgetType );
 
-                  templateStr = '<' + widgetElement + ' value="value" config="config">' + '</' + widgetElement + '>';
+                  templateStr = '<' + widgetElement +
+                    ' value="value" config="config" unresponsive="unresponsive">' +
+                    '</' + widgetElement + '>';
 
                   $log.log(templateStr);
 
