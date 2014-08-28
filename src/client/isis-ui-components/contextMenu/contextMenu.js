@@ -41,16 +41,13 @@ define([
               $window
             );
 
-
           handleKeyUpEvent = function (event) {
-
             if (opened && event.keyCode === 27) {
               service.close();
             }
           };
 
           handleMouseDownEvent = function (event) {
-
             if (opened &&
               service.menuElement && !$.contains(service.menuElement[0], event.target)) {
               service.close();
@@ -253,37 +250,67 @@ define([
             disabled: '&contextMenuDisabled'
           },
 
-          link: function (scope, element) {
+          link: function ($scope, element) {
 
             var open,
               handleContextmenuEvent,
-              hierarchicalMenuTemplate = '<hierarchical-menu menu="contextmenuData" config="contextmenuConfig"></hierarchical-menu>';
+              hierarchicalMenuTemplate = '<hierarchical-menu menu="contextmenuData" config="contextmenuConfig"></hierarchical-menu>',
+
+              options = {
+                triggerEvent: 'contextmenu',
+                contentTemplate: hierarchicalMenuTemplate
+              };
+
+            if (angular.isObject($scope.contextmenuConfig)) {
+              angular.extend(options, $scope.contextmenuConfig);
+            }
 
             open = function (event) {
-              if (!scope.disabled()) {
-                contextmenuService.open(element, hierarchicalMenuTemplate, scope,
-                  {
-                    pageX: event.pageX,
-                    pageY: event.pageY
-                  }
+
+              var position, bounds;
+
+              position =  {
+                pageX: event.pageX,
+                pageY: event.pageY
+              };
+
+              if ($scope.contextmenuConfig && $scope.contextmenuConfig.position) {
+
+                bounds = element[0].getBoundingClientRect();
+
+                if ($scope.contextmenuConfig.position === 'left bottom') {
+
+                  position.pageX = bounds.left;
+                  position.pageY = bounds.bottom;
+
+                } else if ($scope.contextmenuConfig.position === 'right bottom') {
+
+                  position.pageX = bounds.right;
+                  position.pageY = bounds.bottom;
+
+                }
+              }
+
+              if (!$scope.disabled()) {
+                contextmenuService.open(
+                  element, options.contentTemplate, $scope, position
                 );
 
               }
             };
 
-
             handleContextmenuEvent = function (event) {
-              if (!scope.disabled()) {
+              if (!$scope.disabled()) {
 
                 contextmenuService.element = event.target;
 
                 event.preventDefault();
                 event.stopPropagation();
 
-                scope.$apply(
+                $scope.$apply(
                   function () {
 
-                    scope.callback({ $event: event });
+                    $scope.callback({ $event: event });
 
                     open(event);
 
@@ -292,12 +319,11 @@ define([
               }
             };
 
-
             element.bind(
-              'contextmenu', handleContextmenuEvent
+              options.triggerEvent, handleContextmenuEvent
             );
 
-            scope.$on(
+            $scope.$on(
               '$destroy', function () {
                 element.unbind(
                   'contextmenu', handleContextmenuEvent
