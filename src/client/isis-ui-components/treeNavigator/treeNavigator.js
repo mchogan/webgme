@@ -10,9 +10,8 @@ define([
     'text!./templates/treeNavigator.html',
     'css!./styles/treeNavigator.css',
 
-    './../hierarchicalDropDown/hierarchicalDropdown',
-    './../directives',
-    'ng-context-menu'
+    './../contextmenu/contextmenu',
+    './../directives'
 
 ], function(
     ng,
@@ -23,9 +22,8 @@ define([
     angular.module(
         'isis.ui.treeNavigator',
         [
-            'isis.ui.hierarchicalDropdown',
-            'isis.ui.directives',
-            'ng-context-menu'
+            'isis.ui.contextMenu',
+            'isis.ui.directives'
         ]
 
     ).directive(

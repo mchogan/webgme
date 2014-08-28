@@ -138,7 +138,8 @@ require(
         'angular',
         'angular-route',
         'angular-route-styles',
-        'angular-ui-bootstrap'
+        'angular-ui-bootstrap',
+        ''
 
     ],
     function (domReady, jQuery, jQueryUi, jQueryUiiPad, jqueryWebGME, jqueryDataTables, bootstrap, underscore,
@@ -201,7 +202,8 @@ require(
                     'gme.ui.projectsDialog',
                     'gme.ui.headerPanel',
                     'gme.ui.objectBrowserPanel',
-                    'gme.ui.propertyEditor'
+                    'gme.ui.propertyEditor',
+                    'isis.ui.hierarchicalMenu'
                 ]);
 
             webGME.start( function(client) {

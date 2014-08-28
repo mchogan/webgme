@@ -13,8 +13,9 @@ ul.dropdown-navigator {
 
     position: relative;
 
-    > .hierarchical-dropdown {
+    > .hierarchical-menu {
       display: none;
+      position: absolute;
     }
 
     .label-container {
@@ -28,7 +29,7 @@ ul.dropdown-navigator {
     background-color: #00235B;
     cursor: pointer;
 
-    > .hierarchical-dropdown {
+    > .hierarchical-menu{
       display: block;
     }
 

@@ -44,8 +44,9 @@
              data-ng-init="treeData = node"
              data-ng-class="{ 'loading': treeData.isLoading }"
              data-ng-click="treeData.nodeClick($event, treeData)"
-             context-menu="treeData.onContextMenu(treeData)"
-             data-target="tree-context-menu"
+             contextmenu="treeData.onContextMenu(treeData)"
+             contextmenu-data="contextMenuData"
+
              data-ng-include="'tree-navigator-node-label-template'">
 
         </div>
@@ -66,8 +67,8 @@
 
              data-ng-class="{ 'loading': treeData.isLoading }"
              data-ng-click="treeData.nodeClick($event, treeData)"
-             context-menu="treeData.onContextMenu(treeData)"
-             data-target="tree-context-menu"
+             contextmenu="treeData.onContextMenu(treeData)"
+             contextmenu-data="contextMenuData"
              data-ng-include="'tree-navigator-node-label-template'"
 
              data-ng-if="config.showRootLabel">
@@ -85,10 +86,4 @@
         </ul>
 
     </div>
-
-    <hierarchical-dropdown
-            menu="contextMenuData"
-            id="tree-context-menu"
-            class="context-menu position-fixed"></hierarchical-dropdown>
-
 </nav>
