@@ -14,8 +14,6 @@ define([
     'coreclient/dumpmore',
     'coreclient/import',
     'coreclient/copyimport',
-    '/listAllDecorators',
-    '/listAllPlugins',
     'coreclient/serialization'
 ],
     function (
@@ -32,8 +30,6 @@ define([
         DumpMore,
         MergeImport,
         Import,
-        AllDecorators,
-        AllPlugins,
         Serialization
         ) {
 
@@ -82,7 +78,22 @@ define([
                 _previousRootHash = null,
                 _changeTree = null,
                 _inheritanceHash = {},
-                _gHash = 0;
+                _gHash = 0,
+                _addOns = {},
+                _constraintCallback = null,
+                AllPlugins,AllDecorators;
+
+            if(!_configuration.host){
+                if(window){
+                    _configuration.host = window.location.protocol+"//"+window.location.host;
+                } else {
+                    _configuration.host = "";
+                }
+            }
+            require([_configuration.host+'/listAllDecorators',_configuration.host+'/listAllPlugins'],function(d,p){
+                AllDecorators = d;
+                AllPlugins = p;
+            });
 
             function print_nodes(pretext){
                 if(pretext){
@@ -108,7 +119,12 @@ define([
             _configuration.autostart = _configuration.autostart === null || _configuration.autostart === undefined ? false : _configuration.autostart;
 
 
-            $.extend(_self, new EventDispatcher());
+            //TODO remove the usage of jquery
+            //$.extend(_self, new EventDispatcher());
+            var eDisp = new EventDispatcher();
+            for(var i in eDisp){
+                _self[i] = eDisp[i];
+            }
             _self.events = {
                 "NETWORKSTATUS_CHANGED" : "NETWORKSTATUS_CHANGED",
                 "BRANCHSTATUS_CHANGED"  : "BRANCHSTATUS_CHANGED",
@@ -142,7 +158,7 @@ define([
             }
 
             function newDatabase(){
-                return Storage({log:LogManager.create('client-storage'),user:getUserId()});
+                return Storage({log:LogManager.create('client-storage'),user:getUserId(),host:_configuration.host});
             }
 
             function changeBranchState(newstate){
@@ -169,6 +185,7 @@ define([
                 //TODO we should try to update the branch with our latest commit
                 //and 'restart' listening to branch changes
                 if(_offline){
+                    stopRunningAddOns();
                     branchWatcher(_branch);
                 }
             }
@@ -176,7 +193,7 @@ define([
             function addCommit(commitHash){
                 _commitCache.newCommit(commitHash);
                 _recentCommits.unshift(commitHash);
-                if(_recentCommits.length > 10){
+                if(_recentCommits.length > 100){
                     _recentCommits.pop();
                 }
             }
@@ -212,6 +229,173 @@ define([
                     };
                 _database.getNextServerEvent(lastGuid,nextServerEvent);
             }
+
+            //addOn functions
+            function startAddOnAsync(name,projectName,branchName,callback){
+                if(_addOns[name] === undefined){
+                    _addOns[name] = "loading";
+                    _database.simpleRequest({command:'connectedWorkerStart',workerName:name,project:projectName,branch:branchName},function(err,id){
+                        if(err){
+                            delete _addOns[name];
+                            return callback(err);
+                        }
+
+                        _addOns[name] = id;
+                        callback(null);
+                    });
+                }
+            }
+            function startAddOn(name){
+                if(_addOns[name] === undefined){
+                    _addOns[name] = "loading";
+                    _database.simpleRequest({command:'connectedWorkerStart',workerName:name,project:_projectName,branch:_branch},function(err,id){
+                        console.log('started addon',err);
+                        if(err){
+                            delete _addOns[name];
+                            return logger.error(err);
+                        }
+
+                        _addOns[name] = id;
+                    });
+                }
+
+            }
+            function queryAddOn(name,query,callback){
+                if(!_addOns[name] || _addOns[name] === "loading"){
+                    return callback(new Error('no such addOn is ready for queries'));
+                }
+                _database.simpleQuery(_addOns[name],query,callback);
+            }
+            function stopAddOn(name,callback){
+                if(_addOns[name] && _addOns[name] !== "loading"){
+                    _database.simpleResult(_addOns[name],callback);
+                    delete _addOns[name];
+                } else {
+                    callback(_addOns[name] ? new Error("addon loading") : null);
+                }
+            }
+
+            //generic project related addOn handling
+            function updateRunningAddOns(root){
+                var neededAddOns = _core.getRegistry(root,"usedAddOns"),
+                    i,
+                    runningAddOns = getRunningAddOnNames();
+                neededAddOns = neededAddOns ? neededAddOns.split(" ") : [];
+                for(i=0;i<neededAddOns.length;i++){
+                    if(!_addOns[neededAddOns[i]]){
+                        startAddOn(neededAddOns[i]);
+                    }
+                }
+                for(i=0;i<runningAddOns.length;i++){
+                    if(neededAddOns.indexOf(runningAddOns[i]) === -1){
+                        stopAddOn(runningAddOns[i],function(err){});
+                    }
+                }
+            }
+            function stopRunningAddOns(){
+                var i,
+                    keys = Object.keys(_addOns),
+                    callback = function(err){
+                        if(err){
+                            console.log("stopAddOn",err);
+                        }
+                    };
+                for(i=0;i<keys.length;i++){
+                    stopAddOn(keys[i],callback);
+                }
+            }
+            function getRunningAddOnNames(){
+                var i,
+                    names = [],
+                    keys = Object.keys(_addOns);
+                for(i=0;i<keys.length;i++){
+                    if(_addOns[keys[i]] !== 'loading'){
+                        names.push(keys[i]);
+                    }
+                }
+                return names;
+            }
+
+            //core addOns
+            function startCoreAddOnsAsync(project,branch,callback){
+                var needed = 2,
+                    error = null,
+                    icb = function(err){
+                        error = error || err;
+                        if(--needed === 0){
+                            callback(error);
+                        }
+                    };
+
+                startHistoryAsync(project,branch,icb);
+                startConstraintAsync(project,branch,icb);
+            }
+            //history
+            function startHistoryAsync(project,branch,callback){
+                if(_addOns['HistoryAddOn'] && _addOns['HistoryAddOn'] !== 'loading'){
+                    stopAddOn('HistoryAddOn',function(err){
+                        if(err){
+                            callback(err);
+                        } else {
+                            startAddOnAsync('HistoryAddOn', project, branch, callback);
+                        }
+                    });
+                } else {
+                    startAddOnAsync('HistoryAddOn',project,branch,callback);
+                }
+            }
+            function getDetailedHistoryAsync(callback){
+                if(_addOns['HistoryAddOn'] && _addOns['HistoryAddOn'] !== 'loading'){
+                    queryAddOn('HistoryAddOn',{},callback);
+                } else {
+                    callback(new Error('history information is not available'));
+                }
+            }
+
+            //constraint
+            function startConstraintAsync(project,branch,callback){
+                if(_addOns['ConstraintAddOn'] && _addOns['ConstraintAddOn'] !== 'loading'){
+                    stopAddOn('ConstraintAddOn',function(err){
+                        if(err){
+                            callback(err);
+                        } else {
+                            startAddOnAsync('ConstraintAddOn', project, branch, callback);
+                        }
+                    });
+                } else {
+                    startAddOnAsync('ConstraintAddOn',project,branch,callback);
+                }
+            }
+            function validateProjectAsync(callback){
+                callback = callback || _constraintCallback || function(err,result){};
+                if(_addOns['ConstraintAddOn'] && _addOns['ConstraintAddOn'] !== 'loading'){
+                    queryAddOn("ConstraintAddOn", {querytype:'checkProject'}, callback);
+                } else {
+                    callback(new Error('constraint checking is not available'));
+                }
+            }
+            function validateModelAsync(path,callback){
+                callback = callback || _constraintCallback || function(err,result){};
+                if(_addOns['ConstraintAddOn'] && _addOns['ConstraintAddOn'] !== 'loading'){
+                    queryAddOn("ConstraintAddOn", {querytype:'checkModel',path:path}, callback);
+                } else {
+                    callback(new Error('constraint checking is not available'));
+                }
+            }
+            function validateNodeAsync(path,callback){
+                callback = callback || _constraintCallback || function(err,result){};
+                if(_addOns['ConstraintAddOn'] && _addOns['ConstraintAddOn'] !== 'loading'){
+                    queryAddOn("ConstraintAddOn", {querytype:'checkNode',path:path}, callback);
+                } else {
+                    callback(new Error('constraint checking is not available'));
+                }
+            }
+            function setValidationCallback(cFunction){
+                if(typeof cFunction === 'function' || cFunction === null){
+                    _constraintCallback = cFunction;
+                }
+            }
+            //core addOns end
 
             function tokenWatcher(){
                 var token = null,
@@ -261,6 +445,16 @@ define([
                                     _project.loadObject(newhash,function(err,commitObj){
                                         if(!err && commitObj){
                                             loading(commitObj.root);
+                                        } else {
+                                            setTimeout(function(){
+                                                _project.loadObject(newhash,function(err,commitObj){
+                                                    if(!err && commitObj){
+                                                        loading(commitObj.root);
+                                                    } else {
+                                                        console.log("second load try failed on commit!!!",err);
+                                                    }
+                                                });
+                                            },1000);
                                         }
                                     });
                                 }
@@ -487,59 +681,76 @@ define([
                 });
             }
             function openProject(name,callback){
+                //this function cannot create new project
                 ASSERT(_database);
-                _database.openProject(name,function(err,p){
-                    if(!err &&  p){
-                        _database.getAuthorizationInfo(name,function(err,authInfo){
-                            _readOnlyProject = authInfo ? (authInfo.write === true ? false : true) : true;
-                            _project = p;
-                            _projectName = name;
-                            _inTransaction = false;
-                            _nodes = {};
-                            _metaNodes = {};
-                            _core = getNewCore(_project);
-                            META.initialize(_core,_metaNodes,saveRoot);
-                            if(_commitCache){
-                                _commitCache.clearCache();
-                            } else {
-                                _commitCache = commitCache();
+                var waiting = 1,
+                    innerCallback = function(err){
+                        error = error || err;
+                        if(--waiting === 0){
+                            if(error){
+                                logger.error('The branch '+firstName+' of project '+name+' cannot be selected! ['+JSON.stringify(error)+']');
                             }
-                            _self.dispatchEvent(_self.events.PROJECT_OPENED, _projectName);
-
-                            //check for master or any other branch
-                            _project.getBranchNames(function(err,names){
-                                if(!err && names){
-                                    var firstName = null;
-
-                                    if(names['master']){
-                                        firstName = 'master';
+                            callback(error);
+                        }
+                    },
+                    firstName = null,
+                    error = null;
+                _database.getProjectNames(function(err,names){
+                    if(err){
+                        return callback(err);
+                    }
+                    if(names.indexOf(name) !== -1){
+                        _database.openProject(name,function(err,p){
+                            if(!err &&  p){
+                                _database.getAuthorizationInfo(name,function(err,authInfo){
+                                    _readOnlyProject = authInfo ? (authInfo.write === true ? false : true) : true;
+                                    _project = p;
+                                    _projectName = name;
+                                    _inTransaction = false;
+                                    _nodes = {};
+                                    _metaNodes = {};
+                                    _core = getNewCore(_project);
+                                    META.initialize(_core,_metaNodes,saveRoot);
+                                    if(_commitCache){
+                                        _commitCache.clearCache();
                                     } else {
-                                        firstName = Object.keys(names)[0] || null;
+                                        _commitCache = commitCache();
                                     }
+                                    _self.dispatchEvent(_self.events.PROJECT_OPENED, _projectName);
 
-                                    if(firstName){
-                                        branchWatcher(firstName,function(err){
-                                            if(!err){
-                                                callback(null);
+                                    //check for master or any other branch
+                                    _project.getBranchNames(function(err,names){
+                                        if(!err && names){
+
+                                            if(names['master']){
+                                                firstName = 'master';
                                             } else {
-                                                logger.error('The branch '+firstName+' of project '+name+' cannot be selected! ['+JSON.stringify(err)+']');
-                                                callback(err);
+                                                firstName = Object.keys(names)[0] || null;
                                             }
-                                        });
-                                    } else {
-                                        //we should try the latest commit
-                                        viewLatestCommit(callback);
-                                    }
-                                } else {
-                                    //we should try the latest commit
-                                    viewLatestCommit(callback);
-                                }
-                            });
+
+                                            if(firstName){
+                                                stopRunningAddOns();
+                                                branchWatcher(firstName,innerCallback);
+                                                //startCoreAddOnsAsync(_projectName,firstName,innerCallback);
+                                            } else {
+                                                //we should try the latest commit
+                                                viewLatestCommit(callback);
+                                            }
+                                        } else {
+                                            //we should try the latest commit
+                                            viewLatestCommit(callback);
+                                        }
+                                    });
+                                });
+                            } else {
+                                logger.error('The project '+name+' cannot be opened! ['+JSON.stringify(err)+']');
+                                callback(err);
+                            }
                         });
                     } else {
-                        logger.error('The project '+name+' cannot be opened! ['+JSON.stringify(err)+']');
-                        callback(err);
+                        callback(new Error('there is no such project'));
                     }
+
                 });
             }
 
@@ -924,40 +1135,7 @@ define([
                     });
                 }
             }
-            /*function loadRoot(newRootHash,callback){
-                _loadNodes = {};
-                _loadError = 0;
-                _core.loadRoot(newRootHash,function(err,root){
-                    if(!err){
-                        var missing = 0,
-                            error = null;
-                        _loadNodes[_core.getPath(root)] = {node:root,incomplete:true,basic:true,hash:getStringHash(root)};
-                        _metaNodes[_core.getPath(root)] = root;
 
-                        for(var i in _users){
-                            for(var j in _users[i].PATTERNS){
-                                missing++;
-                            }
-                        }
-                        if(missing > 0){
-                            for(i in _users){
-                                for(j in _users[i].PATTERNS){
-                                    loadPattern(_core,j,_users[i].PATTERNS[j],_loadNodes,function(err){
-                                        error = error || err;
-                                        if(--missing === 0){
-                                            callback(error);
-                                        }
-                                    });
-                                }
-                            }
-                        } else {
-                            callback(error);
-                        }
-                    } else {
-                        callback(err);
-                    }
-                });
-            }*/
             function orderStringArrayByElementLength(strArray){
                 var ordered = [],
                     i, j,index;
@@ -1052,6 +1230,8 @@ define([
                 _core.loadRoot(newRootHash,function(err,root){
                     error = error || err;
                     if(!err){
+                        //TODO here is the point where we can start / stop our addOns - but we will not wait for them to start
+                        updateRunningAddOns(root);
                         _loadNodes[_core.getPath(root)] = {node:root,incomplete:true,basic:true,hash:getStringHash(root)};
                         _metaNodes[_core.getPath(root)] = root;
                         if(orderedPatternIds.length === 0 && Object.keys(_users) > 0){
@@ -1388,9 +1568,30 @@ define([
                 }
             }
             function selectBranchAsync(branch,callback){
+                var waiting = 1,
+                    error = null,
+                    innerCallback = function(err){
+                        error = error || err;
+                        if(--waiting === 0){
+                            callback(error);
+                        }
+                    }
                 if(_database){
                     if(_project){
-                        branchWatcher(branch,callback);
+                        _project.getBranchNames(function(err,names){
+                            if(err){
+                                return callback(err);
+                            }
+
+                            if(names[branch]){
+                                stopRunningAddOns();
+                                branchWatcher(branch,innerCallback);
+                                //startCoreAddOnsAsync(_projectName,branch,innerCallback);
+                            } else {
+                                callback(new Error('there is no such branch!'));
+                            }
+
+                        });
                     } else {
                         callback(new Error('there is no open project!'));
                     }
@@ -2281,6 +2482,9 @@ define([
                 var getConstraintNames = function(){
                     return _core.getConstraintNames(_nodes[_id].node);
                 };
+                var getOwnConstraintNames = function(){
+                    return _core.getOwnConstraintNames(_nodes[_id].node);
+                };
                 var getConstraint = function(name){
                     return _core.getConstraint(_nodes[_id].node,name);
                 };
@@ -2346,15 +2550,16 @@ define([
                         getEditableChildrenMetaDescriptor : getEditableChildrenMetaDescriptor,
 
                         //constraint functions
-                        getConstraintNames : getConstraintNames,
-                        getConstraint      : getConstraint,
+                        getConstraintNames    : getConstraintNames,
+                        getOwnConstraintNames : getOwnConstraintNames,
+                        getConstraint         : getConstraint,
 
                         printData : printData,
                         toString: toString,
 
                         getCollectionPaths: getCollectionPaths
 
-                    }
+                    };
                 }
 
                 return null;
@@ -2363,25 +2568,6 @@ define([
 
             //testing
             function testMethod(testnumber){
-                /*deleteBranchAsync("blabla",function(err){
-                 getBranchesAsync(function(err,branches){
-                 console.log('kecso');
-                 });
-                 /*setTimeout(function(){
-                 getBranchesAsync(function(err,branches){
-                 console.log('kecso');
-                 });
-                 },0);
-                 });*/
-                //_database.getNextServerEvent("",function(err,guid,parameters){
-                //    console.log(err,guid,parameters);
-                //});
-                //connectToDatabaseAsync({open:true},function(err){
-                //    console.log('kecso connecting to database',err);
-                //});
-                //_self.addEventListener(_self.events.SERVER_BRANCH_UPDATED,function(client,data){
-                //    console.log(data);
-                //});
                 switch(testnumber){
                     case 1:
                         var objectPath = WebGMEGlobal.State.getActiveObject(),
@@ -2486,7 +2672,6 @@ define([
                                 });
                             }
                         });
-
                 }
 
             }
@@ -2609,6 +2794,14 @@ define([
                     } else {
                         saveRoot('importNode under '+parentPath, callback);
                     }
+                });
+            }
+            function _createProjectFromFileAsync(projectname,jProject,callback){
+                _database.simpleRequest({command:'createProjectFromFile',name:projectname,json:jProject},function(err,id){
+                    if(err){
+                        return callback(err);
+                    }
+                    _database.simpleResult(id,callback);
                 });
             }
             function createProjectFromFileAsync(projectname,jProject,callback){
@@ -2913,6 +3106,13 @@ define([
                 setConstraint: setConstraint,
                 delConstraint: delConstraint,
 
+                //coreAddOn functions
+                validateProjectAsync : validateProjectAsync,
+                validateModelAsync: validateModelAsync,
+                validateNodeAsync: validateNodeAsync,
+                setValidationCallback: setValidationCallback,
+                getDetailedHistoryAsync : getDetailedHistoryAsync,
+                getRunningAddOnNames : getRunningAddOnNames,
 
                 //territory functions for the UI
                 addUI: addUI,
@@ -2928,4 +3128,3 @@ define([
 
         return Client;
     });
-

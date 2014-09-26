@@ -923,13 +923,6 @@ define(['logManager',
         }
     };
 
-    ModelEditorControl.prototype._constraintCheck = function () {
-        //Cconstraint Checking goes here...
-        if (this.currentNodeInfo.id) {
-            WebGMEGlobal.ConstraintManager.validate(this.currentNodeInfo.id);
-        }
-    };
-
     ModelEditorControl.prototype._stateActiveObjectChanged = function (model, activeObjectId) {
         this.selectedObjectChanged(activeObjectId);
     };
@@ -1011,16 +1004,6 @@ define(['logManager',
         this._toolbarItems.push(this.$btnModelHierarchyUp);
 
         this.$btnModelHierarchyUp.hide();
-
-
-        /************************ CONTSTRAINT VALIDATION ******************/
-        this.$btnConstraintValidate = toolBar.addButton({ "title": "Constraint check...",
-            "icon": "glyphicon glyphicon-fire",
-            "clickFn": function (/*data*/) {
-                self._constraintCheck();
-            }
-        });
-        this._toolbarItems.push(this.$btnConstraintValidate);
 
         /************** REMOVE CONNECTION SEGMENTPOINTS BUTTON ****************/
         this.$btnConnectionRemoveSegmentPoints = toolBar.addButton(

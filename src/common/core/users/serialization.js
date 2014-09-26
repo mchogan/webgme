@@ -1,5 +1,6 @@
 define(['util/assert'],function(ASSERT){
 
+    "use strict";
     var _nodes = {},
         _core = null,
         _pathToGuidMap = {},
@@ -50,10 +51,122 @@ define(['util/assert'],function(ASSERT){
             _export.relids = getRelIdInfo();
             _export.containment = {}; fillContainmentTree(libraryRoot,_export.containment);
             _export.nodes = getNodesData();
+            _export.metaSheets = core.getParent(libraryRoot) ? getMetaSheetInfo(_core.getRoot(libraryRoot)) : {}; //we export MetaSheet info only if not the whole project is exported!!!
 
             callback(null,_export);
 
         });
+    }
+    function getMetaSheetInfo(root){
+        var getMemberRegistry = function(setname,memberpath){
+                var names = _core.getMemberRegistryNames(root,setname,memberpath),
+                    i,
+                    registry = {};
+                for(i=0;i<names.length;i++){
+                    registry[names[i]] = _core.getMemberRegistry(root,setname,memberpath,names[i]);
+                }
+                return registry;
+            },
+            getMemberAttributes = function(setname,memberpath){
+                var names = _core.getMemberAttributeNames(root,setname,memberpath),
+                    i,
+                    attributes = {};
+                for(i=0;i<names.length;i++){
+                    attributes[names[i]] = _core.getMemberAttribute(root,setname,memberpath,names[i]);
+                }
+                return attributes;
+            },
+            getRegistryEntry = function(setname){
+                var index = registry.length;
+
+                while(--index >= 0){
+                    if(registry[index].SetID === setname){
+                        return registry[index];
+                    }
+                }
+                return {};
+            },
+            sheets = {},
+            registry = _core.getRegistry(root,"MetaSheets"),
+            keys = _core.getSetNames(root),
+            elements,guid,
+            i,j;
+        for(i=0;i<keys.length;i++){
+            if(keys[i].indexOf("MetaAspectSet_") === 0){
+                elements = _core.getMemberPaths(root,keys[i]);
+                for(j=0;j<elements.length;j++){
+                    guid = _pathToGuidMap[elements[j]] || _extraBasePaths[elements[j]];
+                    if(guid){
+                        sheets[keys[i]] = sheets[keys[i]] || {};
+                        sheets[keys[i]][guid] = {registry:getMemberRegistry(keys[i],elements[j]),attributes:getMemberAttributes(keys[i],elements[j])};
+                    }
+                }
+
+                if(sheets[keys[i]]){
+                    //we add the global registry values as well
+                    sheets[keys[i]].global = getRegistryEntry(keys[i]);
+                }
+            }
+        }
+        console.log('sheets',sheets);
+        return sheets;
+    }
+    function importMetaSheetInfo(root){
+        var setMemberAttributesAndRegistry = function(setname,memberguid){
+                var attributes = oldSheets[setname][memberguid].attributes || {},
+                    registry = oldSheets[setname][memberguid].registry || {},
+                    keys,i;
+                keys = Object.keys(attributes);
+                for(i=0;i<keys.length;i++) {
+                    _core.setMemberAttribute(root,setname,_core.getPath(_nodes[memberguid]),keys[i],attributes[keys[i]]);
+                }
+                keys = Object.keys(registry);
+                for(i=0;i<keys.length;i++) {
+                    _core.setMemberRegistry(root,setname,_core.getPath(_nodes[memberguid]),keys[i],registry[keys[i]]);
+                }
+            },
+            updateSheet = function(name){
+                //the removed object should be already removed...
+                //if some element is extra in the place of import, then it stays untouched
+                var oldMemberGuids = Object.keys(oldSheets[name]),
+                    i;
+                oldMemberGuids.splice(oldMemberGuids.indexOf("global"),1);
+                for(i=0;i<oldMemberGuids.length;i++) {
+                    _core.addMember(root,name,_nodes[oldMemberGuids[i]]);
+                    setMemberAttributesAndRegistry(name,oldMemberGuids[i]);
+                }
+            },
+            addSheet = function(name) {
+                var registry = JSON.parse(JSON.stringify(_core.getRegistry(root,"MetaSheets")) || {}),
+                    i,
+                    memberpath,
+                    memberguids = Object.keys(oldSheets[name]);
+
+                memberguids.splice(memberguids.indexOf('global'),1);
+
+                registry.push(oldSheets[name].global);
+                _core.setRegistry(root,"MetaSheets",registry);
+
+                _core.createSet(root,name);
+                for(i=0;i<memberguids.length;i++) {
+                    memberpath = _core.getPath(_nodes[memberguids[i]]);
+                    _core.addMember(root,name,_nodes[memberguids[i]]);
+                    setMemberAttributesAndRegistry(name,memberguids[i]);
+                }
+            },
+            oldSheets = _import.metaSheets || {},
+            newSheets = _export.metaSheets || {},
+            oldSheetNames = Object.keys(oldSheets),
+            newSheetNames = Object.keys(newSheets),
+            i;
+
+        for(i=0;i<oldSheetNames.length;i++) {
+            if(newSheetNames.indexOf(oldSheetNames[i]) !== -1){
+                updateSheet(oldSheetNames[i]);
+            } else {
+                addSheet(oldSheetNames[i]);
+            }
+        }
     }
     function getLibraryRootInfo(node){
         return {
@@ -163,7 +276,7 @@ define(['util/assert'],function(ASSERT){
         return {
             attributes:getAttributesOfNode(node),
             base: _core.getBase(node) ? _core.getGuid(_core.getBase(node)) : null,
-            meta:pathsToGuids(_core.getOwnJsonMeta(node)),
+            meta:pathsToGuids(JSON.parse(JSON.stringify(_core.getOwnJsonMeta(node)) || {})),
             parent:_core.getParent(node) ? _core.getGuid(_core.getParent(node)) : null,
             pointers:getPointersOfNode(node),
             registry:getRegistryOfNode(node),
@@ -185,7 +298,6 @@ define(['util/assert'],function(ASSERT){
         if(jsonObject && typeof jsonObject === 'object'){
             var keys = Object.keys(jsonObject),
                 i, j, k,toDelete,tArray;
-
 
             for(i=0;i<keys.length;i++){
                 if(keys[i] === 'items') {
@@ -237,7 +349,7 @@ define(['util/assert'],function(ASSERT){
                     }
                 } else {
                     if(typeof jsonObject[keys[i]] === 'object'){
-                         jsonObject[keys[i]] = pathsToGuids(jsonObject[keys[i]]);
+                        jsonObject[keys[i]] = pathsToGuids(jsonObject[keys[i]]);
                     }
                 }
             }
@@ -453,6 +565,9 @@ define(['util/assert'],function(ASSERT){
                 //finally we need to update the meta rules of each node - again along the containment hierarchy
                 updateMetaRules(_import.root.guid,_import.containment);
 
+                //after everything is done we try to synchronize the metaSheet info
+                importMetaSheetInfo(_core.getRoot(originLibraryRoot));
+
                 callback(null,_log);
             });
         });
@@ -622,6 +737,7 @@ define(['util/assert'],function(ASSERT){
         updateChildrenMeta(guid);
         updatePointerMeta(guid);
         updateAspectMeta(guid);
+        updateConstraintMeta(guid);
     }
 
     function updateAttributeMeta(guid){
@@ -634,7 +750,6 @@ define(['util/assert'],function(ASSERT){
             _core.setAttributeMeta(node,keys[i],jsonMeta[keys[i]]);
         }
     }
-
     function updateChildrenMeta(guid){
         var jsonMeta = _import.nodes[guid].meta.children || {items:[],minItems:[],maxItems:[]},
             i;
@@ -645,7 +760,6 @@ define(['util/assert'],function(ASSERT){
             _core.setChildMeta(_nodes[guid],_nodes[jsonMeta.items[i]],jsonMeta.minItems[i],jsonMeta.maxItems[i]);
         }
     }
-
     function updatePointerMeta(guid){
         var jsonMeta = _import.nodes[guid].meta.pointers || {},
             keys = Object.keys(jsonMeta),
@@ -668,6 +782,15 @@ define(['util/assert'],function(ASSERT){
             for(j=0;j<jsonMeta[keys[i]].length;j++){
                 _core.setAspectMetaTarget(_nodes[guid],keys[i],_nodes[jsonMeta[keys[i]][j]]);
             }
+        }
+    }
+    function updateConstraintMeta(guid){
+        var jsonMeta = _import.nodes[guid].meta.constraints || {},
+            keys = Object.keys(jsonMeta),
+            i;
+
+        for(i=0;i<keys.length;i++){
+            _core.setConstraint(_nodes[guid],keys[i],jsonMeta[keys[i]]);
         }
     }
 

@@ -23,8 +23,7 @@ define([
     function core(storage,options){
         options = options || {};
         options.usetype = options.usertype || 'nodejs';
-
-        var corecon = new CoreDiff(new Constraint(new MetaCore(new Descriptor(new Guid(new Set(new NullPtr(new Type(new NullPtr(new CoreRel(new CoreTree(storage, options)))))))))));
+        var corecon = new CoreDiff(new MetaCore(new Constraint(new Descriptor(new Guid(new Set(new NullPtr(new Type(new NullPtr(new CoreRel(new CoreTree(storage, options)))))))))));
 
         if(options.usertype === 'tasync'){
             return corecon;
