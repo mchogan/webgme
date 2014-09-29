@@ -1,51 +1,21 @@
 /*globals angular, console */
 
-angular.module('gme.services', [])
-
-    .service('DataStoreServiceTest', function ($timeout, $q) {
-
-        this.connectToDatabase = function (context) {
-            console.log('connecting to database...');
-
-            var client = new WebGMEGlobal.classes.Client({
-                host: window.location.origin
-            });
-
-            client.connectToDatabaseAsync({}, function (err) {
-                if (err) {
-                    console.error(err);
-                    return;
-                }
-
-                client.getAvailableProjectsAsync(function (err, list) {
-                    if (err) {
-                        console.error(err);
-                        return;
-                    }
-
-                    console.log(list);
-                });
-            });
-        };
-    })
-    .service('DataStoreService', function ($timeout, $q) {
+(function () {
+    'use strict';
+    function DataStoreService($q) {
         var datastores = {};
 
-        this.connectToDatabase = function (context) {
+        this.connectToDatabase = function (databaseId, options) {
             var deferred = $q.defer(), client;
 
-            if (datastores.hasOwnProperty(context.db)) {
+            if (datastores.hasOwnProperty(databaseId)) {
                 // FIXME: this may or may not ready yet...
                 deferred.resolve();
             } else {
-                // TODO: replace CONFIG with context
-                client = new WebGMEGlobal.classes.Client({
-                    host: window.location.origin
-                });
+                client = new WebGMEGlobal.classes.Client(options);
 
                 // hold a reference to the client instance
-                datastores[context.db] = {client: client};
-
+                datastores[databaseId] = {client: client};
 
                 // TODO: add event listeners to client
 
@@ -58,92 +28,74 @@ angular.module('gme.services', [])
 
                     deferred.resolve();
                 });
-
             }
 
             return deferred.promise;
         };
 
-        this.getDatabaseConnection = function (context) {
-            if (datastores.hasOwnProperty(context.db) && typeof datastores[context.db] === 'object') {
-                return datastores[context.db];
+        this.getDatabaseConnection = function (databaseId) {
+            if (datastores.hasOwnProperty(databaseId) && typeof datastores[databaseId] === 'object') {
+                return datastores[databaseId];
             }
 
-            console.error(context + ' does not have an active database connection.');
+            console.error(databaseId + ' does not have an active database connection.');
         };
 
-        this.getProjects = function (context) {
-            var deferred = $q.defer();
+        this.watchConnection = function (databaseId) {
+            // TODO: handle events
+            // TODO: CONNECTED
+            // TODO: DISCONNECTED
 
-            // FIXME: deferred should not be used from closure
-            this.connectToDatabase(context)
-                .then(function () {
-                    datastores[context.db].client.getAvailableProjectsAsync(function (err, projectIds) {
-                        if (err) {
-                            deferred.reject(err);
-                            return;
-                        }
+            // TODO: NETWORKSTATUS_CHANGED
 
-                        deferred.resolve(projectIds);
-                    });
-                })
-                .catch(function (reason) {
-                    deferred.reject(reason);
-                });
-
-            return deferred.promise;
+            throw new Error('Not implemented yet.');
         };
 
-        this.selectProject = function (context) {
-            var deferred = $q.defer();
+        // TODO: on selected project changed, on initialize and on destroy (socket.io connected/disconnected)
+    }
 
-            // FIXME: deferred, context should not be used from closure
-            this.getProjects(context).then(function (projectIds) {
+    function ProjectService($q, DataStoreService) {
+        this.getProjects = function (databaseId) {
+            var dbConn = DataStoreService.getDatabaseConnection(databaseId),
+                deferred = new $q.defer();
 
-                if (projectIds.indexOf(context.projectId) > -1) {
-                    datastores[context.db].client.selectProjectAsync(context.projectId, function (err) {
-                        if (err) {
-                            deferred.reject(err);
-                            return;
-                        }
+            dbConn.projectService = dbConn.projectService || {};
 
-                        datastores[context.db].projectId =
-                            context.projectId;
-
-                        deferred.resolve();
-                    });
-                } else {
-                    deferred.reject(new Error('Project does not exist. ' + context.projectId));
+            dbConn.client.getAvailableProjectsAsync(function (err, projectIds) {
+                if (err) {
+                    deferred.reject(err);
+                    return;
                 }
-            })
-                .catch(function (reason) {
-                    deferred.reject(reason);
-                });
+
+                deferred.resolve(projectIds);
+            });
 
             return deferred.promise;
         };
 
+        this.selectProject = function (databaseId, projectId) {
+            var dbConn = DataStoreService.getDatabaseConnection(databaseId),
+                deferred = new $q.defer();
 
-        this.selectBranch = function (context) {
-            var deferred = $q.defer();
+            dbConn.projectService = dbConn.projectService || {};
 
-            // FIXME: deferred, context should not be used from closure
-            this.selectProject(context)
-                .then(function () {
-                    // FIXME: if branch does not exist the callback is not called,
-                    //        then after (probably a timeout) it is called with no error???
-                    datastores[context.db].client.selectBranchAsync(context.branchId,
-                        function (err) {
+            this.getProjects(databaseId)
+                .then(function (projectIds) {
+                    if (projectIds.indexOf(projectId) > -1) {
+                        dbConn.client.selectProjectAsync(projectId, function (err) {
                             if (err) {
                                 deferred.reject(err);
                                 return;
                             }
 
-                            datastores[context.db].branchId =
-                                context.branchId;
+                            dbConn.projectService.projectId = projectId;
 
-                            deferred.resolve();
+                            deferred.resolve(projectId);
                         });
+                    } else {
+                        deferred.reject(new Error('Project does not exist. ' + projectId + ' databaseId: ' +
+                                                  databaseId));
+                    }
                 })
                 .catch(function (reason) {
                     deferred.reject(reason);
@@ -151,77 +103,236 @@ angular.module('gme.services', [])
 
             return deferred.promise;
         };
-    })
 
-    .service('ProjectService', function ($timeout, $q, DataStoreService) {
+        this.watchProjects = function (databaseId) {
+            // TODO: register for project events
+            // TODO: SERVER_PROJECT_CREATED
+            // TODO: SERVER_PROJECT_DELETED
 
-        this.openProject = function (context) {
-            return DataStoreService.selectProject(context);
+            throw new Error('Not implemented yet.');
         };
 
-        this.selectBranch = function (context) {
-            return DataStoreService.selectBranch(context);
-        };
-    })
+        this.on = function (databaseId, eventName, fn) {
+            var dbConn,
+                i;
 
-    .service('BranchService', function ($timeout, $q, ProjectService, DataStoreService) {
-
-        this.selectBranch = function (context) {
-            return ProjectService.selectBranch(context);
-        };
-
-        this.on = function (context, eventName, fn) {
-            var dbConn;
-
-            console.assert(typeof context === 'object');
+            console.assert(typeof databaseId === 'string');
             console.assert(typeof eventName === 'string');
             console.assert(typeof fn === 'function');
 
-            dbConn = DataStoreService.getDatabaseConnection(context);
+            dbConn = DataStoreService.getDatabaseConnection(databaseId);
+            dbConn.projectService = dbConn.projectService || {};
+
+            dbConn.projectService.isInitialized = dbConn.projectService.isInitialized || false;
+
+            if (typeof dbConn.projectService.events === 'undefined') {
+                // this should not be an inline function
+
+                dbConn.client.addEventListener(dbConn.client.events.PROJECT_OPENED,
+                    function (dummy /* FIXME */, projectId) {
+
+                        if (dbConn.projectService.projectId !== projectId) {
+                            dbConn.projectService.projectId = projectId;
+
+                            console.log('There was a PROJECT_OPENED event', projectId);
+                            if (projectId) {
+                                // initialize
+                                if (dbConn.projectService &&
+                                    dbConn.projectService.events &&
+                                    dbConn.projectService.events.initialize) {
+
+                                    dbConn.projectService.isInitialized = true;
+
+                                    for (i = 0; i < dbConn.projectService.events.initialize.length; i += 1) {
+                                        dbConn.projectService.events.initialize[i](databaseId);
+                                    }
+                                }
+                            } else {
+                                // branchId is falsy, empty or null or undefined
+                                // destroy
+                                if (dbConn.projectService &&
+                                    dbConn.projectService.events &&
+                                    dbConn.projectService.events.destroy) {
+
+                                    dbConn.projectService.isInitialized = false;
+
+                                    for (i = 0; i < dbConn.projectService.events.destroy.length; i += 1) {
+                                        dbConn.projectService.events.destroy[i](databaseId);
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                dbConn.client.addEventListener(dbConn.client.events.PROJECT_CLOSED,
+                    function (dummy /* FIXME */) {
+                        console.log('There was a PROJECT_CLOSED event', dbConn.projectService.projectId);
+
+                        delete dbConn.projectService.projectId;
+
+                        // destroy
+                        if (dbConn.projectService &&
+                            dbConn.projectService.events &&
+                            dbConn.projectService.events.destroy) {
+
+                            dbConn.projectService.isInitialized = false;
+
+                            for (i = 0; i < dbConn.projectService.events.destroy.length; i += 1) {
+                                dbConn.projectService.events.destroy[i](databaseId);
+                            }
+                        }
+
+                    });
+            }
+
+            dbConn.projectService.events = dbConn.projectService.events || {};
+            dbConn.projectService.events[eventName] = dbConn.projectService.events[eventName] || [];
+            dbConn.projectService.events[eventName].push(fn);
+
+            if (dbConn.projectService.isInitialized) {
+                if (eventName === 'initialize') {
+                    fn(databaseId);
+                }
+            } else {
+                if (eventName === 'destroy') {
+                    fn(databaseId);
+                }
+            }
+        };
+    }
+
+    function BranchService($q, DataStoreService, ProjectService) {
+        'use strict';
+
+        this.selectBranch = function (databaseId, branchId) {
+            var dbConn = DataStoreService.getDatabaseConnection(databaseId),
+                deferred = new $q.defer();
+
+            dbConn.branchService = dbConn.branchService || {};
+
+            dbConn.client.selectBranchAsync(branchId,
+                function (err) {
+                    if (err) {
+                        deferred.reject(err);
+                        return;
+                    }
+
+                    dbConn.branchService.branchId = branchId;
+
+                    deferred.resolve(branchId);
+                });
+
+            return deferred.promise;
+        };
+
+        this.getSelectedBranch = function (databaseId) {
+            throw new Error('Not implemented yet.');
+        };
+
+        this.watchBranches = function (databaseId) {
+            // TODO: register for branch events
+            // TODO: SERVER_BRANCH_CREATED
+            // TODO: SERVER_BRANCH_UPDATED
+            // TODO: SERVER_BRANCH_DELETED
+
+            throw new Error('Not implemented yet.');
+        };
+
+        this.watchBranchState = function (databaseId) {
+            // TODO: register for branch state events
+            // TODO: SYNC
+            // TODO: FORKED
+            // TODO: OFFLINE
+
+            // TODO: BRANCHSTATUS_CHANGED
+
+            throw new Error('Not implemented yet.');
+        };
+
+        this.on = function (databaseId, eventName, fn) {
+            var dbConn,
+                i;
+
+            console.assert(typeof databaseId === 'string');
+            console.assert(typeof eventName === 'string');
+            console.assert(typeof fn === 'function');
+
+            dbConn = DataStoreService.getDatabaseConnection(databaseId);
             dbConn.branchService = dbConn.branchService || {};
 
             dbConn.branchService.isInitialized = dbConn.branchService.isInitialized || false;
 
             if (typeof dbConn.branchService.events === 'undefined') {
-                // TODO: register for project events
+                // register for project events
+                ProjectService.on(databaseId, 'initialize', function (dbId) {
+                    var dbConnEvent = DataStoreService.getDatabaseConnection(dbId),
+                        i;
 
-                // this should not be an inline function
-                (function (dbConnEvent, c) {
-                    var i;
+                    if (dbConnEvent.branchService &&
+                        dbConnEvent.branchService.events &&
+                        dbConnEvent.branchService.events.initialize) {
 
-                    dbConnEvent.client.addEventListener(dbConnEvent.client.events.BRANCH_CHANGED, function (projectId /* FIXME */, branchId) {
+                        dbConnEvent.branchService.isInitialized = true;
 
-                        dbConnEvent.branchId = branchId;
-                        console.log('There was a BRANCH_CHANGED event');
-                        if (branchId) {
-                            // initialize
-                            if (dbConnEvent.branchService &&
-                                dbConnEvent.branchService.events &&
-                                dbConnEvent.branchService.events.initialize) {
+                        for (i = 0; i < dbConnEvent.branchService.events.initialize.length; i += 1) {
+                            dbConnEvent.branchService.events.initialize[i](dbId);
+                        }
+                    }
+                });
 
-                                dbConnEvent.branchService.isInitialized = true;
+                ProjectService.on(databaseId, 'destroy', function (dbId) {
+                    var dbConnEvent = DataStoreService.getDatabaseConnection(dbId),
+                        i;
 
-                                for (i = 0; i < dbConnEvent.branchService.events.initialize.length; i += 1) {
-                                    dbConnEvent.branchService.events.initialize[i](c);
+                    if (dbConnEvent.branchService &&
+                        dbConnEvent.branchService.events &&
+                        dbConnEvent.branchService.events.destroy) {
+
+                        dbConnEvent.branchService.isInitialized = false;
+
+                        for (i = 0; i < dbConnEvent.nodeService.events.destroy.length; i += 1) {
+                            dbConnEvent.branchService.events.destroy[i](dbId);
+                        }
+                    }
+                });
+
+                dbConn.client.addEventListener(dbConn.client.events.BRANCH_CHANGED,
+                    function (projectId /* FIXME */, branchId) {
+
+                        if (dbConn.branchService.branchId !== branchId) {
+
+                            dbConn.branchService.branchId = branchId;
+
+                            console.log('There was a BRANCH_CHANGED event', branchId);
+                            if (branchId) {
+                                // initialize
+                                if (dbConn.branchService &&
+                                    dbConn.branchService.events &&
+                                    dbConn.branchService.events.initialize) {
+
+                                    dbConn.branchService.isInitialized = true;
+
+                                    for (i = 0; i < dbConn.branchService.events.initialize.length; i += 1) {
+                                        dbConn.branchService.events.initialize[i](databaseId);
+                                    }
                                 }
-                            }
-                        } else {
-                            // branchId is falsy, empty or null or undefined
-                            // destroy
-                            if (dbConnEvent.branchService &&
-                                dbConnEvent.branchService.events &&
-                                dbConnEvent.branchService.events.destroy) {
+                            } else {
+                                // branchId is falsy, empty or null or undefined
+                                // destroy
+                                if (dbConn.branchService &&
+                                    dbConn.branchService.events &&
+                                    dbConn.branchService.events.destroy) {
 
-                                dbConnEvent.branchService.isInitialized = false;
+                                    dbConn.branchService.isInitialized = false;
+                                    delete dbConn.branchService.branchId;
 
-                                for (i = 0; i < dbConnEvent.branchService.events.destroy.length; i += 1) {
-                                    dbConnEvent.branchService.events.destroy[i](c);
+                                    for (i = 0; i < dbConn.branchService.events.destroy.length; i += 1) {
+                                        dbConn.branchService.events.destroy[i](databaseId);
+                                    }
                                 }
                             }
                         }
                     });
-                })(dbConn, context);
-
             }
 
             dbConn.branchService.events = dbConn.branchService.events || {};
@@ -230,19 +341,21 @@ angular.module('gme.services', [])
 
             if (dbConn.branchService.isInitialized) {
                 if (eventName === 'initialize') {
-                    fn(context);
+                    fn(databaseId);
                 }
             } else {
                 if (eventName === 'destroy') {
-                    fn(context);
+                    fn(databaseId);
                 }
             }
 
             // TODO: register for branch change event OR BranchService onInitialize
         };
-    })
+    }
 
-    .service('NodeService', function ($timeout, $q, DataStoreService, BranchService) {
+    function NodeService($q, DataStoreService, BranchService) {
+        'use strict';
+
         var self = this,
             NodeObj,
             getIdFromNodeOrString;
@@ -295,7 +408,7 @@ angular.module('gme.services', [])
          */
         this.loadNode = function (context, id) {
             var deferred = $q.defer(),
-                dbConn = DataStoreService.getDatabaseConnection(context),
+                dbConn = DataStoreService.getDatabaseConnection(context.db),
                 territoryId,
                 territoryPattern = {},
                 nodes;
@@ -361,7 +474,7 @@ angular.module('gme.services', [])
          */
         this.createNode = function (context, parent, base, msg) {
             var deferred = $q.defer(),
-                dbConn = DataStoreService.getDatabaseConnection(context),
+                dbConn = DataStoreService.getDatabaseConnection(context.db),
                 parentId = getIdFromNodeOrString(parent),
                 baseId = getIdFromNodeOrString(base),
                 id;
@@ -386,7 +499,7 @@ angular.module('gme.services', [])
          * @returns {string} - id (path) of new node.
          */
         this.createChild = function (context, parameters, msg) {
-            var dbConn = DataStoreService.getDatabaseConnection(context);
+            var dbConn = DataStoreService.getDatabaseConnection(context.db);
             return dbConn.client.createChild(parameters, msg);
         };
 
@@ -400,13 +513,15 @@ angular.module('gme.services', [])
          * @param {string} [msg] - optional commit message.
          */
         this.destroyNode = function (context, nodeOrId, msg) {
-            var dbConn = DataStoreService.getDatabaseConnection(context),
+            var dbConn = DataStoreService.getDatabaseConnection(context.db),
                 id = getIdFromNodeOrString(nodeOrId),
                 nodeToDelete = dbConn.client.getNode(id);
             if (nodeToDelete) {
                 dbConn.client.delMoreNodes([id], msg);
             } else {
-                console.warn('Requested deletion of node that does not exist in context! (id, context) ', id, context);
+                console.warn('Requested deletion of node that does not exist in context! (id, context) ',
+                    id,
+                    context);
             }
         };
 
@@ -417,10 +532,10 @@ angular.module('gme.services', [])
          * @param {object} context - context region is part of.
          * @param {string} context.regionId - Region to clean-up.
          */
-        this.cleanUpRegion = function (context) {
+        this.cleanUpRegion = function (databaseId, regionId) {
             var key,
-                dbConn = DataStoreService.getDatabaseConnection(context),
-                nodes = dbConn.nodeService.regions[context.regionId].nodes;
+                dbConn = DataStoreService.getDatabaseConnection(databaseId),
+                nodes = dbConn.nodeService.regions[regionId].nodes;
             // Go through all nodes and remove the territories associated with each node.
             for (key in nodes) {
                 if (nodes.hasOwnProperty(key)) {
@@ -428,24 +543,40 @@ angular.module('gme.services', [])
                 }
             }
             // Remove the reference to the region (includes) nodes.
-            delete dbConn.nodeService.regions[context.regionId];
+            delete dbConn.nodeService.regions[regionId];
         };
 
-        /**
-         * Logs the data-base connection with its node-services and regions therein.
-         * @param context - The context to log.
-         */
-        this.logContext = function (context) {
-            var dbConn = DataStoreService.getDatabaseConnection(context);
-            console.log('logContext: ', context.regionId, dbConn);
+
+        this.cleanUpAllRegions = function (databaseId) {
+            var dbConn = DataStoreService.getDatabaseConnection(databaseId),
+                regionId;
+
+            if (dbConn.nodeService) {
+//                console.log(dbConn.nodeService.regions);
+                for (regionId in dbConn.nodeService.regions) {
+                    if (dbConn.nodeService.regions.hasOwnProperty(regionId)) {
+                        self.cleanUpRegion(databaseId, regionId);
+                    }
+                }
+//                console.log(dbConn.nodeService.regions);
+            }
         };
+
+//        /**
+//         * Logs the database connection with its node-services and regions therein.
+//         * @param context - The context to log.
+//         */
+//        this.logContext = function (context) {
+//            var dbConn = DataStoreService.getDatabaseConnection(context);
+//            console.log('logContext: ', context.regionId, dbConn);
+//        };
 
         NodeObj = function (context, id) {
             var thisNode = this;
             this.id = id;
             this.territories = [ ];
             this.context = context;
-            this.databaseConnection = DataStoreService.getDatabaseConnection(context);
+            this.databaseConnection = DataStoreService.getDatabaseConnection(context.db);
             // TODO: Should these be arrays of functions? The controller may want to add more methods.
             this._onUpdate = function (id) {
             };
@@ -601,7 +732,8 @@ angular.module('gme.services', [])
                     for (i = 0; i < events.length; i += 1) {
                         event = events[i];
                         if (event.etype === 'load') {
-                            if (dbConn.nodeService.regions[context.regionId].nodes.hasOwnProperty(event.eid) === false) {
+                            if (dbConn.nodeService.regions[context.regionId].nodes.hasOwnProperty(event.eid) ===
+                                false) {
                                 self.loadNode(context, event.eid).then(function (newNode) {
                                     fn(newNode);
                                     //console.log('Added new territory through onNewChildLoaded ', event.eid);
@@ -637,22 +769,24 @@ angular.module('gme.services', [])
             }
         };
 
-        this.on = function (context, eventName, fn) {
+        this.on = function (databaseId, eventName, fn) {
             var dbConn;
 
-            console.assert(typeof context === 'object');
+            console.assert(typeof databaseId === 'string');
             console.assert(typeof eventName === 'string');
             console.assert(typeof fn === 'function');
 
-            dbConn = DataStoreService.getDatabaseConnection(context);
+            dbConn = DataStoreService.getDatabaseConnection(databaseId);
             dbConn.nodeService = dbConn.nodeService || {};
 
             dbConn.nodeService.isInitialized = dbConn.nodeService.isInitialized || false;
 
             if (typeof dbConn.nodeService.events === 'undefined') {
-                BranchService.on(context, 'initialize', function (c) {
-                    var dbConnEvent = DataStoreService.getDatabaseConnection(c),
+                BranchService.on(databaseId, 'initialize', function (dbId) {
+                    var dbConnEvent = DataStoreService.getDatabaseConnection(dbId),
                         i;
+
+                    self.cleanUpAllRegions(dbId);
 
                     if (dbConnEvent.nodeService &&
                         dbConnEvent.nodeService.events &&
@@ -661,13 +795,13 @@ angular.module('gme.services', [])
                         dbConnEvent.nodeService.isInitialized = true;
 
                         for (i = 0; i < dbConnEvent.nodeService.events.initialize.length; i += 1) {
-                            dbConnEvent.nodeService.events.initialize[i](c);
+                            dbConnEvent.nodeService.events.initialize[i](dbId);
                         }
                     }
                 });
 
-                BranchService.on(context, 'destroy', function (c) {
-                    var dbConnEvent = DataStoreService.getDatabaseConnection(c),
+                BranchService.on(databaseId, 'destroy', function (dbId) {
+                    var dbConnEvent = DataStoreService.getDatabaseConnection(dbId),
                         i;
 
                     if (dbConnEvent.nodeService &&
@@ -677,7 +811,7 @@ angular.module('gme.services', [])
                         dbConnEvent.nodeService.isInitialized = false;
 
                         for (i = 0; i < dbConnEvent.nodeService.events.destroy.length; i += 1) {
-                            dbConnEvent.nodeService.events.destroy[i](c);
+                            dbConnEvent.nodeService.events.destroy[i](dbId);
                         }
                     }
                 });
@@ -686,20 +820,24 @@ angular.module('gme.services', [])
             dbConn.nodeService.events = dbConn.nodeService.events || {};
             dbConn.nodeService.events[eventName] = dbConn.nodeService.events[eventName] || [];
             dbConn.nodeService.events[eventName].push(fn);
-            // This might be hacky, but if an initialize event is registered before the database
-            // is opened the NodeService initialize event registered after the database has been
-            // opened will also be called.
-            if (dbConn.nodeService.isInitialized || dbConn.branchService.isInitialized) {
+
+            if (dbConn.nodeService.isInitialized) {
                 if (eventName === 'initialize') {
                     dbConn.nodeService.isInitialized = true;
-                    fn(context);
+                    fn(databaseId);
                 }
             } else {
                 if (eventName === 'destroy') {
-                    fn(context);
+                    dbConn.nodeService.isInitialized = false;
+                    fn(databaseId);
                 }
             }
-
-            // TODO: register for branch change event OR BranchService onInitialize
         };
-    });
+    }
+
+    angular.module('gme.services', [])
+        .service('DataStoreService', DataStoreService)
+        .service('ProjectService', ProjectService)
+        .service('BranchService', BranchService)
+        .service('NodeService', NodeService);
+})();
