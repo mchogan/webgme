@@ -883,9 +883,12 @@ define([
                 }
 
                 if(found && diffObj){
-                    if(diffObj.reg || diffObj.atr || diffObj.pointer || diffObj.set || diffObj.children || diffObj.meta){
-                        return true;
-                    }
+                  if(diffObj.removed !== undefined){
+                    return false;
+                  }
+                  if(diffObj.reg || diffObj.attr || diffObj.pointer || diffObj.set || diffObj.meta){
+                      return true;
+                  }
                 }
 
                 return false;
@@ -1159,7 +1162,7 @@ define([
                 return ordered;
             }
 
-            function getDiffTree(oldRootHash,newRootHash,callback){
+            function getEventTree(oldRootHash,newRootHash,callback){
                 var error = null,
                     sRoot = null,
                     tRoot = null,
@@ -1177,7 +1180,7 @@ define([
                         if(error){
                             return callback(error);
                         }
-                        _core.generateTreeDiff(sRoot,tRoot,function(err,diff){
+                        _core.generateLightTreeDiff(sRoot,tRoot,function(err,diff){
                             console.log('genDiffTree',new Date().getTime()-start);
                             console.log('diffTree',diff);
                             callback(err,diff);
@@ -1273,7 +1276,7 @@ define([
                 _previousRootHash = _rootHash;
                 _rootHash = newRootHash;
                 if(_previousRootHash){
-                    getDiffTree(_previousRootHash,_rootHash,function(err,diffTree){
+                    getEventTree(_previousRootHash,_rootHash,function(err,diffTree){
                         if(err){
                             _rootHash = null;
                             callback(err);
@@ -1416,7 +1419,7 @@ define([
                                     if(--wait === 0){
                                         callback(null,fullList);
                                     }
-                                })
+                                });
                             }
                         } else {
                             callback(null,{});
