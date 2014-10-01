@@ -3,7 +3,7 @@
  *
  * Author: Tamas Kecskes
  */
-define(['util/canon', 'core/tasync'], function (CANON, TASYNC) {
+define(['util/canon', 'core/tasync', 'util/assert'], function (CANON, TASYNC,ASSERT) {
   "use strict";
 
 
@@ -12,6 +12,7 @@ define(['util/canon', 'core/tasync'], function (CANON, TASYNC) {
       _yetToCompute = {},
       _DIFF = {},
       _needChecking = true,
+      _rounds = 0,
       EMPTYGUID = "00000000-0000-0000-0000-000000000000",
       EMPTYNODE = _innerCore.createNode({base:null,parent:null,guid:EMPTYGUID});
 
@@ -360,14 +361,15 @@ define(['util/canon', 'core/tasync'], function (CANON, TASYNC) {
     }
 
     function updateDiff(sourceRoot,targetRoot) {
+      console.log('kecso uD ',_core.getGuid(sourceRoot),_core.getGuid(targetRoot));
       var sChildrenHashes = _core.getChildrenHashes(sourceRoot),
         tChildrenHAshes = _core.getChildrenHashes(targetRoot),
         sRelids = Object.keys(sChildrenHashes),
         tRelids = Object.keys(tChildrenHAshes),
         diff = _core.nodeDiff(sourceRoot, targetRoot) || {},
-        oDiff = ovr_diff(sourceRoot, targetRoot),
-        sChildren = _core.loadChildren(sourceRoot),
-        tChildren = _core.loadChildren(targetRoot),
+        //oDiff = ovr_diff(sourceRoot, targetRoot),
+        /*sChildren = _core.loadChildren(sourceRoot),
+        tChildren = _core.loadChildren(targetRoot),*/
         getChild = function (childArray, relid) {
           for (var i = 0; i < childArray.length; i++) {
             if (_core.getRelid(childArray[i]) === relid) {
@@ -376,7 +378,10 @@ define(['util/canon', 'core/tasync'], function (CANON, TASYNC) {
           }
           return null;
         };
-      return TASYNC.call(function () {
+      return TASYNC.call(function (sChildren,tChildren) {
+        ASSERT(sChildren.length >=0 && tChildren.length >= 0);
+        console.log('kecso uD_ ',_core.getGuid(sourceRoot),sChildren.length,_core.getGuid(targetRoot),tChildren.length);
+
         var i, child, done,tDiff,guid;
         tDiff = diff.children ? diff.children.removed || [] : [];
         for (i = 0; i < tDiff.length; i++) {
@@ -403,21 +408,55 @@ define(['util/canon', 'core/tasync'], function (CANON, TASYNC) {
           if (child && _core.getHash(tChildren[i]) !== _core.getHash(child)) {
             done = TASYNC.call(function (cDiff, relid) {
               diff[relid] = cDiff;
+              return null;
             }, updateDiff(child, tChildren[i]), _core.getRelid(child), done);
           }
         }
         return TASYNC.call(function () {
           delete diff.children;
           normalize(diff);
+          console.log('kecso uD__ ',_core.getGuid(sourceRoot),_core.getGuid(targetRoot),diff);
           if (Object.keys(diff).length > 0) {
             diff.guid = _core.getGuid(targetRoot) === EMPTYGUID ? _core.getGuid(sourceRoot) : _core.getGuid(targetRoot);
           }
           return diff;
         }, done);
-      }, sChildren, tChildren);
+      }, _core.loadChildren(sourceRoot), _core.loadChildren(targetRoot));
+    }
+
+    function expandDiff(root,isDeleted) {
+      console.log('kecso expand ',_core.getGuid(root));
+      var diff = {
+        guid: _core.getGuid(root),
+        hash: _core.getHash(root),
+        removed: isDeleted === true
+      };
+      return TASYNC.call(function(children){
+        console.log('kecso expand_ ',_core.getGuid(root),children.length);
+        var guid;
+        for(var i=0;i<children.length;i++){
+          guid = _core.getGuid(children[i]);
+          diff[_core.getRelid(children[i])] = {
+            guid: guid,
+            hash: _core.getHash(children[i]),
+            removed: isDeleted === true
+          };
+          if(isDeleted){
+            _yetToCompute[guid] = _yetToCompute[guid] || {};
+            _yetToCompute[guid].from = children[i];
+            _yetToCompute[guid].fromExpanded = false;
+          } else {
+            _yetToCompute[guid] = _yetToCompute[guid] || {};
+            _yetToCompute[guid].to = children[i];
+            _yetToCompute[guid].toExpanded = false;
+          }
+        }
+        return diff;
+      },_core.loadChildren(root));
     }
 
     function insertIntoDiff(path,diff){
+      console.log('kecso insert');
       var pathArray = path.split('/'),
         relid = pathArray.pop(),
         sDiff = _DIFF,
@@ -430,43 +469,51 @@ define(['util/canon', 'core/tasync'], function (CANON, TASYNC) {
     }
 
     function checkRound() {
+      console.log('kecso check round started',_rounds++);
       var guids = Object.keys(_yetToCompute),
         done,ytc,
         i;
-      if (_needChecking !== true){
-        return done;
+      if (_needChecking !== true || guids.length < 1){
+        return _DIFF;
       }
       _needChecking = false;
       for(i=0;i<guids.length;i++){
+        console.log("kecso cr",guids[i]);
         ytc = _yetToCompute[guids[i]];
         if(ytc.from && ytc.to){
           //move
           _needChecking = true;
           delete _yetToCompute[guids[i]];
+          console.log("kecso cr move");
           done = TASYNC.call(function(mDiff,info){
             mDiff.movedFrom = _core.getPath(info.from);
             insertIntoDiff(_core.getPath(info.to),mDiff);
+            console.log("kecso cr move ",_DIFF);
             return null;
           },updateDiff(ytc.from,ytc.to),ytc);
         } else {
           if(ytc.from && ytc.fromExpanded === false){
             //expand from
+            ytc.fromExpanded = true;
             _needChecking = true;
             done = TASYNC.call(function(mDiff,info){
+              console.log("kecso cr efrom ",_DIFF);
               mDiff.hash = _core.getHash(info.from);
               mDiff.removed = true;
-              insertIntoDiff(_core.getPath(info.to),mDiff);
+              insertIntoDiff(_core.getPath(info.from),mDiff);
               return null;
-            },updateDiff(ytc.from,EMPTYNODE),ytc);
+            },expandDiff(ytc.from,true),ytc);
           } else if(ytc.to && ytc.toExpanded === false){
             //expand to
+            ytc.toExpanded = true;
             _needChecking = true;
             done = TASYNC.call(function(mDiff,info){
               mDiff.hash = _core.getHash(info.to);
               mDiff.removed = false;
               insertIntoDiff(_core.getPath(info.to),mDiff);
+              console.log("kecso cr eto ",_DIFF);
               return null;
-            },updateDiff(EMPTYNODE,ytc.to),ytc);
+            },expandDiff(ytc.to,false),ytc);
           }
         }
       }
@@ -495,13 +542,11 @@ define(['util/canon', 'core/tasync'], function (CANON, TASYNC) {
       _yetToCompute = {};
       _DIFF = {};
       _needChecking = true;
-      _DIFF = updateDiff(sRoot,tRoot);
-      return TASYNC.call(function(){
-        return TASYNC.call(function(){
-          console.log('kecso2',_DIFF);
-          return _DIFF;
-        },checkRound());
-      },_DIFF);
+      _rounds = 0;
+      return TASYNC.call(function(d){
+        _DIFF = d;
+        return checkRound();
+      },updateDiff(sRoot,tRoot));
     };
 
     _core.generateLightTreeDiff = function (sRoot,tRoot){

@@ -1180,7 +1180,7 @@ define([
                         if(error){
                             return callback(error);
                         }
-                        _core.generateLightTreeDiff(sRoot,tRoot,function(err,diff){
+                        _core./*generateLightTreeDiff*/generateTreeDiff(sRoot,tRoot,function(err,diff){
                             console.log('genDiffTree',new Date().getTime()-start);
                             console.log('diffTree',diff);
                             callback(err,diff);
