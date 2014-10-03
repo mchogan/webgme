@@ -2573,53 +2573,15 @@ define([
             function testMethod(testnumber){
                 switch(testnumber){
                     case 1:
-                        var objectPath = WebGMEGlobal.State.getActiveObject(),
-                            source,target,needed = 2,error = null,
-                            objectsLoaded = function(){
-                                if(error){
-                                    console.log('fuck',error);
-                                } else {
-                                    console.log(_core.nodeDiff(source,target));
-                                }
-                            };
-                        if(objectPath){
-                            _core.loadRoot(_previousRootHash,function(err,root){
-                                error = error || err;
-                                if(!err && root){
-                                    _core.loadByPath(root,objectPath,function(err,obj){
-                                        error = error || err;
-                                        if(!err && obj){
-                                            source = obj;
-                                            if(--needed === 0){
-                                                objectsLoaded();
-                                            }
-                                        }
-                                    });
-                                } else {
-                                    if(--needed === 0){
-                                        objectsLoaded();
-                                    }
-                                }
-                            });
-                            _core.loadRoot(_rootHash,function(err,root){
-                                error = error || err;
-                                if(!err && root){
-                                    _core.loadByPath(root,objectPath,function(err,obj){
-                                        error = error || err;
-                                        if(!err && obj){
-                                            target = obj;
-                                            if(--needed === 0){
-                                                objectsLoaded();
-                                            }
-                                        }
-                                    });
-                                } else {
-                                    if(--needed === 0){
-                                        objectsLoaded();
-                                    }
-                                }
-                            });
+                      _core.loadRoot(_previousRootHash,function(err,root){
+                        if(!err && root){
+                          _core.applyTreeDiff(root,_changeTree,function(err){
+                            console.log('kecso finished',err);
+                          });
+                        } else {
+                          console.log('kecso HIBAAAAA');
                         }
+                      });
                         break;
                     case 2:
                         //here we try to check every element in _nodes...
