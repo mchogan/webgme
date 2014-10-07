@@ -2576,7 +2576,11 @@ define([
                       _core.loadRoot(_previousRootHash,function(err,root){
                         if(!err && root){
                           _core.applyTreeDiff(root,_changeTree,function(err){
-                            console.log('kecso finished',err);
+                            console.log('apply finished...');
+                            _core.persist(root,function(){});
+                            _core.generateTreeDiff(root,_nodes[''].node,function(err,diff){
+                              console.log('recheck apply',err,diff);
+                            });
                           });
                         } else {
                           console.log('kecso HIBAAAAA');
