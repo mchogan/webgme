@@ -191,7 +191,6 @@ define([ "util/assert"], function (ASSERT) {
       }
       return [];
     };
-
     setcore.getMemberOwnRegistryNames = function (node, setName, memberPath) {
       ASSERT(typeof setName === 'string');
       var memberRelId = getMemberRelId(node, setName, memberPath);
@@ -201,7 +200,6 @@ define([ "util/assert"], function (ASSERT) {
       }
       return [];
     };
-
     setcore.getMemberRegistry = function (node, setName, memberPath, regName) {
       ASSERT(typeof setName === 'string' && typeof regName === 'string');
       var memberRelId = getMemberRelId(node, setName, memberPath);
@@ -228,6 +226,7 @@ define([ "util/assert"], function (ASSERT) {
         setModified(node);
       }
     };
+
     setcore.createSet = function (node, setName) {
       ASSERT(typeof setName === 'string');
       var setsNode = innerCore.getChild(node, SETS_ID),
