@@ -1170,7 +1170,7 @@ define([
                     loadRoot = function(hash,root){
                         _core.loadRoot(hash,function(err,r){
                             error = error || err;
-                            if(sRoot === null && hash === newRootHash){
+                            if(sRoot === null && hash === oldRootHash){
                               sRoot = r;
                             } else {
                               tRoot = r;
