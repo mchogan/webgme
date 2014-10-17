@@ -863,6 +863,8 @@ define([ "util/assert", "core/coretree", "core/tasync", "util/canon" ], function
 
         corerel.getChildrenHashes = getChildrenHashes;
 
+    corerel.overlayInsert = overlayInsert;
+
 		return corerel;
 	}
 
