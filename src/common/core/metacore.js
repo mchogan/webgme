@@ -254,6 +254,78 @@ define([ "util/assert", "core/core", "core/tasync", "util/jjv" ], function(ASSER
             return meta;
         };
 
+        core.getMetaInJson = function(node){
+          var meta = {children:{},attributes:{},pointers:{},aspects:{},constraints:{}},
+            tempNode,
+            names,paths,
+            pointer,
+            i,j;
+
+          //fill children part
+          tempNode = MetaChildrenNode(node);
+          paths = core.getMemberPaths(tempNode,"items");
+          for(i=0;i<paths.length;i++){
+            meta.children[paths[i]] = {
+              min : core.getMemberAttribute(tempNode,"items",paths[i],"min") || -1,
+              max : core.getMemberAttribute(tempNode,"items",paths[i],"max") || -1
+            };
+          }
+          meta.children.min = core.getAttribute(tempNode,"min");
+          meta.children.max = core.getAttribute(tempNode,"max");
+
+          //attributes
+          names = core.getValidAttributeNames(node);
+          for(i=0;i<names.length;i++){
+            meta.attributes[names[i]] = core.getAttribute(MetaNode(node),names[i]);
+          }
+
+          //pointers
+          names = core.getPointerNames(MetaNode(node));
+          for(i=0;i<names.length;i++){
+            tempNode = MetaPointerNode(node,names[i]);
+            pointer = {};
+
+            paths = core.getMemberPaths(tempNode,"items") || [];
+            pointer.min = core.getAttribute(tempNode,"min");
+            pointer.max = core.getAttribute(tempNode,"max");
+
+            for(j=0;j<paths.length;j++){
+              pointer[paths[j]] = {
+                min : core.getMemberAttribute(tempNode,"items",paths[j],"min") || -1,
+                max : core.getMemberAttribute(tempNode,"items",path[j],"max") || -1
+              };
+            }
+            meta.pointers[names[i]] = pointer;
+          }
+
+          //aspects
+          names = core.getValidAspectNames(node);
+
+          for(i=0;i<names.length;i++){
+            tempNode = MetaAspectNode(node,names[i]);
+            paths = core.getMemberPaths(tempNode,'items') || [];
+            for(j=0;j<paths.length;j++){
+              meta.aspects[names[i]][paths[j]] = true;
+            }
+          }
+
+          //constraints
+          names = core.getConstraintNames(node);
+          for(i=0;i<names.length;i++){
+            meta.constraints[names[i]] = core.getConstraint(node,names[i]);
+          }
+
+          return meta;
+        };
+        core.getOwnMetaInJson = function(node){
+          var base = core.getBase(node);
+          if(base){
+            return getObjectDiff(core.getMetaInJson(node),core.getMetaInJson(base));
+          } else {
+            return core.getMetaInJson(node);
+          }
+        };
+
         var isEmptyObject = function(object){
             if(Object.keys(object).length === 0){
                 return true;
