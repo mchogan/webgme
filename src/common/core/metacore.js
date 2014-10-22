@@ -292,7 +292,7 @@ define([ "util/assert", "core/core", "core/tasync", "util/jjv" ], function(ASSER
             for(j=0;j<paths.length;j++){
               pointer[paths[j]] = {
                 min : core.getMemberAttribute(tempNode,"items",paths[j],"min") || -1,
-                max : core.getMemberAttribute(tempNode,"items",path[j],"max") || -1
+                max : core.getMemberAttribute(tempNode,"items",paths[j],"max") || -1
               };
             }
             meta.pointers[names[i]] = pointer;
