@@ -3183,7 +3183,7 @@ define([
                     }
                   });
                 } else {
-                  callback(new Error('there is a conflict...'),{theirs:endingWhatDiff,mine:endingWhereDiff});
+                  callback(new Error('there is a conflict...'),_core.getConflictItems(endingWhereDiff,endingWhatDiff));
                 }
               };
 
