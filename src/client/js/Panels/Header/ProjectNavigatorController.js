@@ -1000,6 +1000,9 @@ define( [
       },
       scope: self.$scope
     });*/
+    self.$scope.showChildren = function(item){
+      console.log('kecso');
+    };
     self.$simpleDialog.open( {
           dialogTitle: 'Confirm merge',
           dialogContentTemplate: 'BeforeMergeTemplate.html',
@@ -1017,6 +1020,9 @@ define( [
                   dialogContentTemplate: 'ConflictDialogTemplate.html',
                   onOk:function(){
                     self.gmeClient.resolve(conflict.baseObject,conflict.mine,conflict.branch,conflict.mineCommit,conflict.theirsCommit,conflict.conflictItems,finalCall);
+                  },
+                  onCancel:function(){
+                    console.log('kecso');
                   },
                   scope: self.$scope
                 });
