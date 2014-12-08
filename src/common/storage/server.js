@@ -34,6 +34,7 @@ define([ "util/assert", "util/guid", "util/url", "socket.io", "worker/serverwork
       _objects = {},
       _projects = {},
     /*_references = {},*/
+            _databaseOpenCallbacks = [],
       _databaseOpened = false,
       ERROR_DEAD_GUID = 'the given object does not exists',
       _workerManager = null,
@@ -58,18 +59,27 @@ define([ "util/assert", "util/guid", "util/url", "socket.io", "worker/serverwork
       if (_databaseOpened) {
         callback();
       } else {
-        _databaseOpened = true;
-        _database.openDatabase(function (err) {
-          if (err) {
-            _databaseOpened = false;
-            //this error has to be put to console as well
-            console.log('Error in mongoDB connection initiation!!! - ', err);
-            options.log.error(err);
-            callback(err);
-          } else {
-            callback(null);
-          }
-        });
+                if (_databaseOpenCallbacks.length === 0) {
+                    _databaseOpenCallbacks = [callback];
+                    _database.openDatabase(function (err) {
+                        if (err) {
+                            _databaseOpened = false;
+                            //this error has to be put to console as well
+                            console.log('Error in mongoDB connection initiation!!! - ', err);
+                            options.log.error(err);
+                            while (_databaseOpenCallbacks.length) {
+                                _databaseOpenCallbacks.pop()(err);
+                            }
+                        } else {
+                            _databaseOpened = true;
+                            while (_databaseOpenCallbacks.length) {
+                                _databaseOpenCallbacks.pop()(null);
+                            }
+                        }
+                    });
+                } else {
+                    _databaseOpenCallbacks.push(callback);
+                }
       }
     }
 
@@ -129,7 +139,7 @@ define([ "util/assert", "util/guid", "util/url", "socket.io", "worker/serverwork
       _events[guid] = parameters;
       _eventHistory.unshift(guid);
       if (_eventHistory.length > 1000) {
-        _eventHistory.pop();
+                delete _events[_eventHistory.pop()];
       }
 
       for (i = 0; i < callbacks.length; i++) {
@@ -610,20 +620,26 @@ define([ "util/assert", "util/guid", "util/url", "socket.io", "worker/serverwork
         _socket = null;
       }
 
-      if (_databaseOpened) {
-        //close projects
-        for (var i in _projects) {
-          _projects[i].closeProject(null);
-        }
+            var cleanup = function () {
+                _objects = {};
+                _projects = {};
+                //_references = {};
+                _databaseOpened = false;
+            };
+            if (_databaseOpened || _databaseOpenCallbacks.length) {
+                checkDatabase(function (err) {
+                    //close projects
+                    for (var i in _projects) {
+                        _projects[i].closeProject(null);
+                    }
 
-        //close database
-        _database.closeDatabase(null);
+                    //close database
+                    _database.closeDatabase(null);
+                    cleanup();
+                });
+            } else {
+                cleanup();
       }
-
-      _objects = {};
-      _projects = {};
-      //_references = {};
-      _databaseOpened = false;
     }
 
     function getWorkerResult(resultId, callback) {
