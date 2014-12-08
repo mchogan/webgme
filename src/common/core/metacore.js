@@ -304,6 +304,7 @@ define([ "util/assert", "core/core", "core/tasync", "util/jjv" ], function(ASSER
           for(i=0;i<names.length;i++){
             tempNode = MetaAspectNode(node,names[i]);
             paths = core.getMemberPaths(tempNode,'items') || [];
+            meta.aspects[names[i]] = {};
             for(j=0;j<paths.length;j++){
               meta.aspects[names[i]][paths[j]] = true;
             }
