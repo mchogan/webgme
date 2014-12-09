@@ -531,7 +531,10 @@ define([
         ASSERT(_project);
         callback = callback || function () {
         };
-        var myCallback = null;
+        var myCallback = function(err){
+          myCallback = function(){};
+          callback(err);
+        };
         var redoerNeedsClean = true;
         var branchHashUpdated = function (err, newhash, forked) {
           var doUpdate = false;
@@ -577,12 +580,12 @@ define([
                 if(doUpdate){
                   _project.loadObject(newhash, function (err, commitObj) {
                     if (!err && commitObj) {
-                      loading(commitObj.root);
+                      loading(commitObj.root,myCallback);
                     } else {
                       setTimeout(function () {
                         _project.loadObject(newhash, function (err, commitObj) {
                           if (!err && commitObj) {
-                            loading(commitObj.root);
+                            loading(commitObj.root,myCallback);
                           } else {
                             console.log("second load try failed on commit!!!", err);
                           }
@@ -590,12 +593,6 @@ define([
                       }, 1000);
                     }
                   });
-                }
-
-                if (callback) {
-                  myCallback = callback;
-                  callback = null;
-                  myCallback();
                 }
 
                 //branch status update
@@ -674,19 +671,11 @@ define([
                 return _project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);*/
               }
             } else {
-              if (callback) {
-                myCallback = callback;
-                callback = null;
-                myCallback();
-              }
+              myCallback(null);
               return _project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);
             }
           } else {
-            if (callback) {
-              myCallback = callback;
-              callback = null;
-              myCallback();
-            }
+            myCallback(null);
           }
         };
 
