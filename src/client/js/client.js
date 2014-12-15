@@ -1388,7 +1388,7 @@ define([
             }
             _core./*generateLightTreeDiff*/generateTreeDiff(sRoot,tRoot,function(err,diff){
               console.log('genDiffTree',new Date().getTime()-start);
-              console.log('diffTree',diff);
+              console.log('diffTree',JSON.stringify(diff,null,2));
               callback(err,diff);
             });
           },
@@ -2896,7 +2896,7 @@ define([
             });
             break;
           case 2:
-            getFullProjectsInfoAsync(function(err,info){
+            /*getFullProjectsInfoAsync(function(err,info){
               if(err){
                 console.log('hibaaa',err);
               } else {
@@ -2906,7 +2906,16 @@ define([
                   console.log('common commit',err,commit);
                 });
               }
+            });*/
+            _core.loadRoot('#07e862295417e7140b46b3ad33c7985d37852ccd',function(err,sRoot){
+              _core.loadRoot('#8a188a9138afbd083965d7cb7a7952067221a5d3',function(err,tRoot){
+                _core.generateTreeDiff(sRoot,tRoot,function(err,diff){
+                  console.log(JSON.stringify(diff,null,2));
+                });
+              });
             });
+          /*#ad2d5574108ff98d36d1a0a0ffbfa2bec88df7f0 - targetcommit - #8a188a9138afbd083965d7cb7a7952067221a5d3
+            #42034ab3144916d2ac9855afbbd65318575e78e4 - sourcecommit - #07e862295417e7140b46b3ad33c7985d37852ccd -rootCommit*/
             break;
           case 3:
             //we try our first merge
