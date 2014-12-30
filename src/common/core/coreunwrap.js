@@ -72,6 +72,8 @@ define([ "util/assert", "core/tasync" ], function(ASSERT, TASYNC) {
       core.applyTreeDiff = TASYNC.unwrap(oldcore.applyTreeDiff);
     }
 
+		core.loadSubTree = TASYNC.unwrap(oldcore.loadSubTree);
+		core.loadTree = TASYNC.unwrap(oldcore.loadTree);
 		return core;
 	};
 
