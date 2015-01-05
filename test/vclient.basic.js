@@ -421,17 +421,20 @@ describe('Client#Basic#Project&Branch',function(){
   });
  });
 });
-describe('Client#Basic#Territory',function(done){
+describe('Client#Basic#Territory',function(){
  it('creating a territory and receiving events',function(done){
   TERR = CLNT.addUI({},function(events){
    var ids = [],allLoad = true,i;
    for(i=0;i<events.length;i++){
-    ids.push(events[i].eid);
-    if(events[i].etype !== 'load'){
+    if(events[i].eid !== null){
+     ids.push(events[i].eid);
+    }
+    if(events[i].etype !== 'load' && events[i].etype !== 'complete' && events[i].etype !== 'incomplete'){
      allLoad = false;
     }
    }
    if(ids.length !== 2 || allLoad === false || ids.indexOf('') === -1 || ids.indexOf('/1') === -1){
+    console.warn(events);
     CLNT.removeUI(TERR);
     return done(new Error('wrong events'));
    }

@@ -307,19 +307,4 @@ describe('Core#Serialization',function(){
   it('should close the database connection',function(done){
     storage.closeDatabase(done);
   });
-  it('should remove the test project',function(done){
-    storage.getProjectNames(function(err,names){
-      if(err){
-        return done(err);
-      }
-      if(names.indexOf(projectName) === -1){
-        return done(new Error('no such project'));
-      }
-
-      storage.deleteProject(projectName,done);
-    });
-  });
-  it('should close the database connection',function(done){
-    storage.closeDatabase(done);
-  });
 });
