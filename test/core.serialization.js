@@ -1,6 +1,7 @@
 /**
  * Created by tamas on 12/22/14.
  */
+require('./_globals.js');
 var WebGME = require('../webgme'),
   FS = require('fs'),
   storage = new WebGME.serverUserStorage({host:'127.0.0.1',port:27017,database:'multi'}),
@@ -120,6 +121,7 @@ describe('Core#Serialization',function(){
     });
   });
   it('exports the very same',function(done){
+    this.timeout(5000);
     iData = jsonData;
     eData = {};
     WebGME.serializer.export(core,root,function(err,exp){
@@ -281,6 +283,29 @@ describe('Core#Serialization',function(){
     for(i in guids){
       checkMembers(guids[i]);
     }
+  });
+  it('should close the project',function(done){
+    project.closeProject(function(err){
+      if(err){
+        return done(err);
+      }
+      done();
+    });
+  });
+  it('should remove the test project',function(done){
+    storage.getProjectNames(function(err,names){
+      if(err){
+        return done(err);
+      }
+      if(names.indexOf(projectName) === -1){
+        return done(new Error('no such project'));
+      }
+
+      storage.deleteProject(projectName,done);
+    });
+  });
+  it('should close the database connection',function(done){
+    storage.closeDatabase(done);
   });
   it('should remove the test project',function(done){
     storage.getProjectNames(function(err,names){

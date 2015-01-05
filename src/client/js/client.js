@@ -167,6 +167,7 @@ define([
         _selfCommits = {},
         AllPlugins, AllDecorators;
 
+
       if (!_configuration.host) {
         if (window) {
           _configuration.host = window.location.protocol + "//" + window.location.host;
@@ -246,7 +247,16 @@ define([
       }
 
       function newDatabase() {
-        return Storage({log: LogManager.create('client-storage'), user: getUserId(), host: _configuration.host});
+        var storageOptions ={log: LogManager.create('client-storage'), host: _configuration.host};
+        if(WebGMEGlobal.TESTING === true){
+          storageOptions.type = 'node';
+          storageOptions.host = 'http://localhost';
+          storageOptions.port = _configuration.port;
+          storageOptions.user = "TEST";
+        } else {
+          storageOptions.user = getUserId();
+        }
+        return Storage(storageOptions);
       }
 
       function changeBranchState(newstate) {

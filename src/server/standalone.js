@@ -45,7 +45,7 @@ define(['logManager',
 
     function StandAloneServer(CONFIG){
         // if the config is not set we use the global
-        CONFIG = CONFIG || webGMEGlobal.getConfig();
+        CONFIG = CONFIG || WebGMEGlobal.getConfig();
         //public functions
         function start(){
             if(CONFIG.httpsecure){
@@ -90,7 +90,11 @@ define(['logManager',
         }
         function stop(){
             __storage.close();
-            __httpServer.close();
+            try {
+                __httpServer.close();
+            } catch(e){
+                //ignore errors
+            }
         }
         //internal functions
         function globalAuthorization(sessionId,projectName,type,callback){
@@ -347,7 +351,7 @@ define(['logManager',
             __canCheckToken = true,
             __httpServer = null,
             __logoutUrl = CONFIG.logoutUrl || '/',
-            __baseDir = webGMEGlobal.baseDir,
+            __baseDir = WebGMEGlobal.baseDir,
             __clientBaseDir = CONFIG.clientAppDir || __baseDir+'/client',
             __requestCounter = 0,
             __reportedRequestCounter = 0,
@@ -571,7 +575,7 @@ define(['logManager',
             expressFileSending(res,Path.join(__clientBaseDir,req.path));
         });
 
-        __app.get(/^\/.*\.(js|html|gif|png|bmp|svg|json|map)$/,ensureAuthenticated,function(req,res){
+        __app.get(/^\/.*\.(js|_js|html|gif|png|bmp|svg|json|map)$/,ensureAuthenticated,function(req,res){
             //package.json
             if(req.path === '/package.json') {
                 expressFileSending(res,Path.join(__baseDir, '..', req.path));
