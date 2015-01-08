@@ -136,7 +136,8 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
                         'reconnection delay': 1,
                         'force new connection': true,
                         'reconnect': false,
-                        'query':"webGMESessionId="+options.webGMESessionId
+                        'query':"webGMESessionId="+options.webGMESessionId,
+                        'transports': ['websocket']
                     });
 
                     socket.on('connect', function () {
