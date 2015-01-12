@@ -5431,6 +5431,22 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 			}
 		};
 
+        var getChildHash = function(node,relid){
+            ASSERT(isValidNode(node));
+
+            node = getChild(node, relid);
+
+            if (isValidHash(node.data)) {
+                // TODO: this is a hack, we should avoid loading it multiple
+                // times
+                return node.data;
+            } else {
+                return typeof node.data === "object" && node.data !== null ? getHash(node) : null;
+            }
+        };
+
+
+
 		var __loadChild2 = function (node, newdata) {
 			node = normalize(node);
 
@@ -5587,7 +5603,9 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 			loadChild: loadChild,
 			loadByPath: loadByPath,
 
-			isValidNode: isValidNode
+			isValidNode: isValidNode,
+
+            getChildHash: getChildHash
 		};
 	};
 });
@@ -6397,6 +6415,17 @@ define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/can
 			}
 		}
 
+        function getChildrenHashes(node){
+            var keys = getChildrenRelids(node),
+                i,hashes = {};
+
+            for(i=0;i<keys.length;i++){
+                hashes[keys[i]] = coretree.getChildHash(node,keys[i]);
+            }
+
+            return hashes;
+        }
+
 		// copy everything from coretree
 		var corerel = {};
 		for( var key in coretree) {
@@ -6442,6 +6471,10 @@ define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/can
 		corerel.getCoreTree = function() {
 			return coretree;
 		};
+
+        corerel.getChildrenHashes = getChildrenHashes;
+
+    corerel.overlayInsert = overlayInsert;
 
 		return corerel;
 	}
@@ -6642,6 +6675,15 @@ define('core/setcore',[ "util/assert"], function (ASSERT) {
             }
             return [];
         };
+        setcore.getMemberOwnAttributeNames = function (node, setName, memberPath) {
+            ASSERT(typeof setName === 'string');
+            var memberRelId = getMemberRelId(node, setName, memberPath);
+            if (memberRelId) {
+                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+                return innerCore.getOwnAttributeNames(memberNode);
+            }
+            return [];
+        };
         setcore.getMemberAttribute = function(node,setName,memberPath,attrName){
             ASSERT(typeof setName === 'string' && typeof attrName === 'string');
             harmonizeMemberData(node,setName);
@@ -6679,6 +6721,15 @@ define('core/setcore',[ "util/assert"], function (ASSERT) {
             if(memberRelId){
                 var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node,SETS_ID),setName),memberRelId);
                 return innerCore.getRegistryNames(memberNode);
+            }
+            return [];
+        };
+        setcore.getMemberOwnRegistryNames = function (node, setName, memberPath) {
+            ASSERT(typeof setName === 'string');
+            var memberRelId = getMemberRelId(node, setName, memberPath);
+            if (memberRelId) {
+                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+                return innerCore.getOwnRegistryNames(memberNode);
             }
             return [];
         };
@@ -7069,6 +7120,19 @@ define('core/coreunwrap',[ "util/assert", "core/tasync" ], function(ASSERT, TASY
 
 		core.loadPointer = TASYNC.unwrap(oldcore.loadPointer);
 		core.loadCollection = TASYNC.unwrap(oldcore.loadCollection);
+
+    //core diff async functions
+    if(typeof oldcore.generateTreeDiff === 'function'){
+        core.generateTreeDiff = TASYNC.unwrap(oldcore.generateTreeDiff);
+    }
+
+    if(typeof  oldcore.generateLightTreeDiff === 'function'){
+      core.generateLightTreeDiff = TASYNC.unwrap(oldcore.generateLightTreeDiff);
+    }
+
+    if(typeof oldcore.applyTreeDiff === 'function'){
+      core.applyTreeDiff = TASYNC.unwrap(oldcore.applyTreeDiff);
+    }
 
 		core.loadSubTree = TASYNC.unwrap(oldcore.loadSubTree);
 		core.loadTree = TASYNC.unwrap(oldcore.loadTree);
@@ -9145,7 +9209,7 @@ define('core/metacore',[ "util/assert", "core/core", "core/tasync", "util/jjv", 
         };
 
         core.clearMetaRules = function(node){
-            core.deleteNode(MetaNode(node));
+            core.deleteNode(MetaNode(node),true);
         };
 
         core.setAttributeMeta = function(node,name,value){
@@ -9160,6 +9224,9 @@ define('core/metacore',[ "util/assert", "core/core", "core/tasync", "util/jjv", 
             return core.getAttribute(MetaNode(node),name);
         };
 
+      core.getValidChildrenPaths = function(node){
+        return core.getMemberPaths(MetaChildrenNode(node),'items');
+      };
         core.setChildMeta = function(node,child,min,max){
             core.addMember(MetaChildrenNode(node),'items',child);
             min = min || -1;
@@ -9258,6 +9325,2402 @@ define('core/metacore',[ "util/assert", "core/core", "core/tasync", "util/jjv", 
     return MetaCore;
 });
 
+/*
+ * Copyright (C) 2014 Vanderbilt University, All rights reserved.
+ *
+ * Author: Tamas Kecskes
+ */
+define('core/corediff',['util/canon', 'core/tasync', 'util/assert'], function (CANON, TASYNC, ASSERT) {
+  
+
+
+  function diffCore(_innerCore) {
+    var _core = {},
+      _yetToCompute = {},
+      _DIFF = {},
+      _needChecking = true,
+      _rounds = 0,
+      TODELETESTRING = "*to*delete*",
+    /*EMPTYGUID = "00000000-0000-0000-0000-000000000000",
+     EMPTYNODE = _innerCore.createNode({base: null, parent: null, guid: EMPTYGUID}),*/
+      toFrom = {}, //TODO should not be global
+      fromTo = {}, //TODO should not be global
+      _concat_dictionary,
+      _concat_result,
+      _diff_moves = {},
+      _conflict_items = [],
+      _conflict_parents = {},
+      _conflict_mine,
+      _conflict_theirs,
+      _concat_base,
+      _concat_extension,
+      _concat_base_removals,
+      _concat_moves,
+      _resolve_moves;
+
+    for (var i in _innerCore) {
+      _core[i] = _innerCore[i];
+    }
+
+    function normalize(obj) {
+      if (!obj) {
+        return obj;
+      }
+      var keys = Object.keys(obj),
+        i;
+      for (i = 0; i < keys.length; i++) {
+        /*if (Array.isArray(obj[keys[i]])) {
+          if (obj[keys[i]].length === 0) {
+            delete obj[keys[i]];
+          }*/
+        if(Array.isArray(obj[keys[i]])) {
+          //do nothing, leave the array as is
+        } else if(obj[keys[i]] === undefined) {
+          delete obj[keys[i]]; //there cannot be undefined in the object
+        } else if (typeof obj[keys[i]] === 'object'){
+          normalize(obj[keys[i]]);
+          if (obj[keys[i]] && Object.keys(obj[keys[i]]).length === 0) {
+            delete obj[keys[i]];
+          }
+        }
+      }
+      keys = Object.keys(obj);
+      if(keys.length === 1){
+        //it only has the GUID, so the node doesn't changed at all
+        delete obj.guid;
+      }
+    }
+
+    function attr_diff(source, target) {
+      var sNames = _core.getOwnAttributeNames(source),
+        tNames = _core.getOwnAttributeNames(target),
+        i,
+        diff = {};
+
+      for (i = 0; i < sNames.length; i++) {
+        if (tNames.indexOf(sNames[i]) === -1) {
+          diff[sNames[i]] = TODELETESTRING;
+        }
+      }
+
+      for (i = 0; i < tNames.length; i++) {
+        if (_core.getAttribute(source, tNames[i]) === undefined) {
+          diff[tNames[i]] = _core.getAttribute(target, tNames[i]);
+        } else {
+          if (CANON.stringify(_core.getAttribute(source, tNames[i])) !== CANON.stringify(_core.getAttribute(target, tNames[i]))) {
+            diff[tNames[i]] = _core.getAttribute(target, tNames[i]);
+          }
+        }
+      }
+
+      return diff;
+    }
+
+    function reg_diff(source, target) {
+      var sNames = _core.getOwnRegistryNames(source),
+        tNames = _core.getOwnRegistryNames(target),
+        i,
+        diff = {};
+
+      for (i = 0; i < sNames.length; i++) {
+        if (tNames.indexOf(sNames[i]) === -1) {
+          diff[sNames[i]] = TODELETESTRING;
+        }
+      }
+
+      for (i = 0; i < tNames.length; i++) {
+        if (_core.getRegistry(source, tNames[i]) === undefined) {
+          diff[tNames[i]] = _core.getRegistry(target, tNames[i]);
+        } else {
+          if (CANON.stringify(_core.getRegistry(source, tNames[i])) !== CANON.stringify(_core.getRegistry(target, tNames[i]))) {
+            diff[tNames[i]] = _core.getRegistry(target, tNames[i]);
+          }
+        }
+      }
+
+      return diff;
+    }
+
+    function children_diff(source, target) {
+      var sRelids = _core.getChildrenRelids(source),
+        tRelids = _core.getChildrenRelids(target),
+        tHashes = _core.getChildrenHashes(target),
+        sHashes = _core.getChildrenHashes(source),
+        i,
+        diff = {added: [], removed: []};
+
+      for (i = 0; i < sRelids.length; i++) {
+        if (tRelids.indexOf(sRelids[i]) === -1) {
+          diff.removed.push({relid: sRelids[i], hash: sHashes[sRelids[i]]});
+        }
+      }
+
+      for (i = 0; i < tRelids.length; i++) {
+        if (sRelids.indexOf(tRelids[i]) === -1) {
+          diff.added.push({relid: tRelids[i], hash: tHashes[tRelids[i]]});
+        }
+      }
+
+      return diff;
+
+    }
+
+    function pointer_diff(source, target) {
+      var getPointerData = function(node){
+        var data = {},
+        names = _core.getPointerNames(node),
+        i;
+        for(i=0;i<names.length;i++){
+          data[names[i]] = _core.getPointerPath(node,names[i]);
+        }
+        return data;
+      }, 
+      sPointer = getPointerData(source), 
+      tPointer = getPointerData(target);
+
+      if(CANON.stringify(sPointer) !== CANON.stringify(tPointer)){
+        return {source: sPointer,target:tPointer};
+      }
+      return {};
+    }
+
+    function set_diff(source,target){
+      var getSetData = function(node){
+        var data = {},
+        names,targets,keys,i,j,k;
+
+        names = _core.getSetNames(node);
+        for(i=0;i<names.length;i++){
+          data[names[i]] = {};
+          targets = _core.getMemberPaths(node,names[i]);
+          for(j=0;j<targets.length;j++){
+            data[names[i]][targets[j]] = {attr:{},reg:{}};
+            keys = _core.getMemberOwnAttributeNames(node,names[i],targets[j]);
+            for(k=0;k<keys.length;k++){
+              data[names[i]][targets[j]].attr[keys[i]] = _core.getMemberAttribute(node,names[i],targets[j],keys[i]);
+            }
+            keys = _core.getMemberRegistryNames(node,names[i],targets[j]);
+            for(k=0;k<keys.length;k++){
+              data[names[i]][targets[j]].reg[keys[k]] = _core.getMemberRegistry(node,names[i],targets[j],keys[k]);
+            }
+          }
+        }
+
+        return data;
+
+      },
+      sSet = getSetData(source),
+      tSet = getSetData(target);
+
+      if(CANON.stringify(sSet) !== CANON.stringify(tSet)){
+        return {source:sSet,target:tSet};
+      }
+      return {};
+    }
+    function _set_diff(source, target) {
+      var sNames = _core.getSetNames(source),
+        tNames = _core.getSetNames(target),
+        sMembers, tMembers, i, j, memberDiff, sData, tData,
+        diff = {},
+        getMemberData = function (node, setName, memberPath) {
+          var keys,
+            data = {attr: {}, reg: {}},
+            i;
+
+          keys = _core.getMemberOwnAttributeNames(node, setName, memberPath);
+          for (i = 0; i < keys.length; i++) {
+            data.attr[keys[i]] = _core.getMemberAttribute(node, setName, memberPath, keys[i]);
+          }
+
+          keys = _core.getMemberOwnRegistryNames(node, setName, memberPath);
+          for (i = 0; i < keys.length; i++) {
+            data.attr[keys[i]] = _core.getMemberRegistry(node, setName, memberPath, keys[i]);
+          }
+
+          return data;
+        };
+
+      for (i = 0; i < sNames.length; i++) {
+        if (tNames.indexOf(sNames[i]) === -1) {
+          diff[sNames[i]] = TODELETESTRING;
+        }
+      }
+
+      for (i = 0; i < tNames.length; i++) {
+        if (sNames.indexOf(tNames[i]) === -1) {
+          sMembers = [];
+        } else {
+          sMembers = _core.getMemberPaths(source, tNames[i]);
+        }
+        tMembers = _core.getMemberPaths(target, tNames[i]);
+        memberDiff = {};
+        for (j = 0; j < sMembers.length; j++) {
+          if (tMembers.indexOf(sMembers[j]) === -1) {
+            memberDiff[sMembers[j]] = TODELETESTRING;
+          }
+        }
+
+        for (j = 0; j < tMembers.length; j++) {
+          sData = sMembers.indexOf(tMembers[j]) === -1 ? {} : getMemberData(source, tNames[i], tMembers[j]);
+          tData = getMemberData(target, tNames[i], tMembers[j]);
+          if (CANON.stringify(sData) !== CANON.stringify(tData)) {
+            memberDiff[tMembers[j]] = getMemberData(target, tNames[i], tMembers[j]);
+          }
+        }
+        diff[tNames[i]] = memberDiff;
+      }
+
+      return diff;
+    }
+    function ovr_diff(source,target){
+      var getOvrData = function(node){
+        var paths,names,i,j,
+        ovr = _core.getProperty(node, 'ovr') || {},
+        data = {},
+        base = _core.getPath(node);
+
+        paths = Object.keys(ovr);
+        for(i=0;i<paths.length;i++){
+          if(paths[i].indexOf('_') === -1){
+            data[paths[i]] = {};
+            names = Object.keys(ovr[paths[i]]);
+            for(j=0;j<names.length;j++){
+              if(ovr[paths[i]][names[j]] === "/_nullptr"){
+                data[paths[i]][names[j]] = null;
+              }else if(names[j].slice(-4) !== '-inv' && ovr[paths[i]][names[j]].indexOf('_') === -1){
+                data[paths[i]][names[j]] = _core.joinPaths(base,ovr[paths[i]][names[j]]);
+              }
+            }
+          }
+        }
+        return data;
+      },
+      sOvr = getOvrData(source),
+      tOvr = getOvrData(target);
+
+      if(CANON.stringify(sOvr) !== CANON.stringify(tOvr)){
+        return {source:sOvr,target:tOvr};
+      }
+      return {};
+    }
+
+    function _ovr_diff(source, target) {
+      // structure: path:{pointername:"targetpath"}
+      // diff structure: path:{pointername:{target:path,type:updated/removed/added}}
+      var i, j, paths, pNames,
+        diff = {},
+        basePath = _core.getPath(source),
+        sOvr = _core.getProperty(source, 'ovr') || {},
+        tOvr = _core.getProperty(target, 'ovr') || {};
+
+      //removals
+      paths = Object.keys(sOvr);
+      for (i = 0; i < paths.length; i++) {
+        if (paths[i].indexOf("_") === -1) {
+          //we do not care about technical relations - sets are handled elsewhere
+          pNames = Object.keys(sOvr[paths[i]]);
+          for (j = 0; j < pNames.length; j++) {
+            if (pNames[j].slice(-4) !== "-inv") {
+              //we only care about direct pointer changes and to real nodes
+              if (sOvr[paths[i]][pNames[j]].indexOf("_") === -1) {
+                if (!(tOvr[paths[i]] && tOvr[paths[i]][pNames[j]])) {
+                  diff[paths[i]] = diff[paths[i]] || {};
+                  diff[paths[i]][pNames[j]] = {target: null, type: "removed"};
+                }
+              }
+
+            }
+          }
+        }
+
+      }
+
+      //updates and additions
+      paths = Object.keys(tOvr);
+      for (i = 0; i < paths.length; i++) {
+        if (paths[i].indexOf("_") === -1) {
+          //we do not care about technical relations - sets are handled elsewhere
+          pNames = Object.keys(tOvr[paths[i]]);
+          for (j = 0; j < pNames.length; j++) {
+            if (pNames[j].slice(-4) !== "-inv") {
+              //we only care about direct pointer changes and to real nodes
+              if (tOvr[paths[i]][pNames[j]].indexOf("_") === -1) {
+                if (!(sOvr[paths[i]] && sOvr[paths[i]][pNames[j]])) {
+                  diff[paths[i]] = diff[paths[i]] || {};
+                  diff[paths[i]][pNames[j]] = {target: _core.joinPaths(basePath, tOvr[paths[i]][pNames[j]]), type: "added"};
+                } else if (sOvr[paths[i]][pNames[j]] !== tOvr[paths[i]][pNames[j]]) {
+                  diff[paths[i]] = diff[paths[i]] || {};
+                  diff[paths[i]][pNames[j]] = {target: _core.joinPaths(basePath, tOvr[paths[i]][pNames[j]]), type: "updated"};
+                }
+              }
+            }
+          }
+        }
+
+      }
+
+      return diff;
+    }
+
+    function meta_diff(source, target) {
+      var sMeta = _core.getOwnJsonMeta(source),
+      tMeta = _core.getOwnJsonMeta(target);
+      if (CANON.stringify(sMeta) !== CANON.stringify(tMeta)) {
+        return {source: sMeta, target: tMeta};
+      }
+      return {};
+    }
+
+    function combineMoveIntoMetaDiff(diff){
+      var keys = Object.keys(diff),
+      i;
+      for(i=0;i<keys.length;i++){
+        if(_diff_moves[keys[i]]){
+          diff[_diff_moves[keys[i]]] = diff[keys[i]];
+          delete diff[keys[i]];
+        } else if(typeof diff[keys[i]] === 'object'){
+          combineMoveIntoMetaDiff(diff[keys[i]]);
+        }
+      }
+    }
+    function combineMoveIntoPointerDiff(diff){
+      var keys = Object.keys(diff),
+      i;
+      for(i=0;i<keys.length;i++){
+        if(_diff_moves[diff[keys[i]]]){
+         diff[keys[i]] = _diff_moves[diff[keys[i]]];
+        }
+      }
+    }
+
+    function finalizeDiff(){
+      finalizeMetaDiff(_DIFF);
+      finalizePointerDiff(_DIFF);
+      finalizeSetDiff(_DIFF);
+      normalize(_DIFF);
+    } 
+    function finalizeMetaDiff(diff){
+      //at this point _DIFF is ready and the _diff_moves is complete...
+      var relids = getDiffChildrenRelids(diff),
+      i,sMeta,tMeta;
+      if(diff.meta){
+        sMeta = diff.meta.source || {};
+        tMeta = diff.meta.target || {};
+        combineMoveIntoMetaDiff(sMeta);
+        diff.meta = diffObjects(sMeta,tMeta);  
+      }
+      for(i=0;i<relids.length;i++){
+        finalizeMetaDiff(diff[relids[i]]);
+      }
+    }
+    function finalizePointerDiff(diff){
+      var relids = getDiffChildrenRelids(diff),
+      i,sPointer,tPointer;
+      if(diff.pointer){
+        sPointer = diff.pointer.source || {};
+        tPointer = diff.pointer.target || {};
+        /*if(diff.movedFrom && !sPointer.base && tPointer.base){
+          delete tPointer.base;
+        }*/
+        combineMoveIntoPointerDiff(sPointer);
+        diff.pointer = diffObjects(sPointer,tPointer);
+      }
+      for(i=0;i<relids.length;i++){
+        finalizePointerDiff(diff[relids[i]]);
+      } 
+    }
+    function finalizeSetDiff(diff){
+      var relids = getDiffChildrenRelids(diff),
+      i,sSet,tSet;
+      if(diff.set){
+        sSet = diff.set.source || {};
+        tSet = diff.set.target || {};
+        combineMoveIntoMetaDiff(sSet);
+        diff.set = diffObjects(sSet,tSet);
+      }
+      for(i=0;i<relids.length;i++){
+        finalizeSetDiff(diff[relids[i]]);
+      }
+    }
+
+    function isEmptyDiff(diff) {
+      if (diff.removed && diff.removed.length > 0) {
+        return false;
+      }
+      if (diff.added && (diff.added.length > 0 || Object.keys(diff.added).length > 0)) {
+        return false;
+      }
+      if (diff.updated && Object.keys(diff.updated).length > 0) {
+        return false;
+      }
+      return true;
+    }
+
+    function isEmptyNodeDiff(diff) {
+      if (
+        Object.keys(diff.children || {}).length > 0 ||
+        Object.keys(diff.attr || {}).length > 0 ||
+        Object.keys(diff.reg || {}).length > 0 ||
+        Object.keys(diff.pointer || {}).length > 0 ||
+        Object.keys(diff.set || {}).length > 0 ||
+        diff.meta
+        ) {
+        return false;
+      }
+      return true;
+    }
+
+    function getPathOfDiff(diff, path) {
+      var pathArray = (path || "").split('/'),
+        i;
+      pathArray.shift();
+      for (i = 0; i < pathArray.length; i++) {
+        diff[pathArray[i]] = diff[pathArray[i]] || {};
+        diff = diff[pathArray[i]];
+      }
+
+      return diff;
+    }
+
+    function extendDiffWithOvr(diff,oDiff){
+      var i,paths,names, j, tDiff;
+      //first extend sources
+      paths = Object.keys(oDiff.source || {});
+      for(i=0;i<paths.length;i++){
+        tDiff = getPathOfDiff(diff, paths[i]);
+        if(!tDiff.removed === true){
+          tDiff.pointer = tDiff.pointer || {source:{},target:{}};
+          names = Object.keys(oDiff.source[paths[i]]);
+          for(j=0;j<names.length;j++){
+            tDiff.pointer.source[names[j]] = oDiff.source[paths[i]][names[j]];
+          }
+        }
+      }
+      //then targets
+      paths = Object.keys(oDiff.target || {});
+      for(i=0;i<paths.length;i++){
+        tDiff = getPathOfDiff(diff, paths[i]);
+        if(!tDiff.removed === true){
+          tDiff.pointer = tDiff.pointer || {source:{},target:{}};
+          names = Object.keys(oDiff.target[paths[i]]);
+          for(j=0;j<names.length;j++){
+            tDiff.pointer.target[names[j]] = oDiff.target[paths[i]][names[j]];
+          }
+        }
+      }
+    }
+    function _extendDiffWithOvr(diff, oDiff) {
+      var i, j, keys = Object.keys(oDiff || {}),
+        names, tDiff, oDiffObj;
+      for (i = 0; i < keys.length; i++) {
+        tDiff = getPathOfDiff(diff, keys[i]);
+        if (tDiff.removed !== true) {
+          names = Object.keys(oDiff[keys[i]]);
+          for (j = 0; j < names.length; j++) {
+            oDiffObj = oDiff[keys[i]][names[j]];
+            if (oDiffObj.type === 'added' || oDiffObj.type === 'updated') {
+              tDiff.pointer = tDiff.pointer || {};
+              tDiff.pointer[names[j]] = oDiffObj.target;
+            } else if (!tDiff.pointer || !tDiff.pointer[names[j]]) {
+              tDiff.pointer = tDiff.pointer || {};
+              tDiff.pointer[names[j]] = TODELETESTRING;
+            }
+          }
+        }
+      }
+    }
+
+    function updateDiff(sourceRoot, targetRoot) {
+      var sChildrenHashes = _core.getChildrenHashes(sourceRoot),
+        tChildrenHAshes = _core.getChildrenHashes(targetRoot),
+        sRelids = Object.keys(sChildrenHashes),
+        tRelids = Object.keys(tChildrenHAshes),
+        diff = _core.nodeDiff(sourceRoot, targetRoot) || {},
+        oDiff = ovr_diff(sourceRoot, targetRoot),
+        getChild = function (childArray, relid) {
+          for (var i = 0; i < childArray.length; i++) {
+            if (_core.getRelid(childArray[i]) === relid) {
+              return childArray[i];
+            }
+          }
+          return null;
+        };
+      return TASYNC.call(function (sChildren, tChildren) {
+        ASSERT(sChildren.length >= 0 && tChildren.length >= 0);
+
+        var i, child, done, tDiff, guid, base;
+
+        tDiff = diff.children ? diff.children.removed || [] : [];
+        for (i = 0; i < tDiff.length; i++) {
+          diff.childrenListChanged = true;
+          child = getChild(sChildren, tDiff[i].relid);
+          if(child){
+            guid = _core.getGuid(child);
+            diff[tDiff[i].relid] = {guid: guid, removed: true, hash: _core.getHash(child)};
+            _yetToCompute[guid] = _yetToCompute[guid] || {};
+            _yetToCompute[guid].from = child;
+            _yetToCompute[guid].fromExpanded = false;
+          }
+        }
+
+        tDiff = diff.children ? diff.children.added || [] : [];
+        for (i = 0; i < tDiff.length; i++) {
+          diff.childrenListChanged = true;
+          child = getChild(tChildren, tDiff[i].relid);
+          if(child){
+            guid = _core.getGuid(child);
+            base =_core.getBase(child);
+            if(base){
+              base = _core.getPath(base);
+            }
+            diff[tDiff[i].relid] = {guid: guid, removed: false, hash: _core.getHash(child), pointer:{source:{},target:{base:base}}};
+            _yetToCompute[guid] = _yetToCompute[guid] || {};
+            _yetToCompute[guid].to = child;
+            _yetToCompute[guid].toExpanded = false;
+          }
+        }
+
+        for (i = 0; i < tChildren.length; i++) {
+          child = getChild(sChildren, _core.getRelid(tChildren[i]));
+          if (child && _core.getHash(tChildren[i]) !== _core.getHash(child)) {
+            done = TASYNC.call(function (cDiff, relid, d) {
+              diff[relid] = cDiff;
+              return null;
+            }, updateDiff(child, tChildren[i]), _core.getRelid(child), done);
+          }
+        }
+        return TASYNC.call(function () {
+          delete diff.children;
+          extendDiffWithOvr(diff, oDiff);
+          normalize(diff);
+          if (Object.keys(diff).length > 0) {
+            diff.guid = _core.getGuid(targetRoot);
+            diff.hash = _core.getHash(targetRoot);
+            diff.oGuids = gatherObstructiveGuids(targetRoot);
+            return TASYNC.call(function (finalDiff) {
+              return finalDiff;
+            }, fillMissingGuid(targetRoot, '', diff));
+          } else {
+            return diff;
+          }
+
+        }, done);
+      }, _core.loadChildren(sourceRoot), _core.loadChildren(targetRoot));
+    }
+
+    function gatherObstructiveGuids(node){
+      var result = {},
+        putParents = function(n){
+          while(n){
+            result[_core.getGuid(n)] = true;
+            n = _core.getParent(n);
+          }
+        };
+      while(node){
+        putParents(node);
+        node = _core.getBase(node);
+      }
+      return result;
+    }
+    function fillMissingGuid(root, path, diff) {
+      var relids = getDiffChildrenRelids(diff),
+        i,
+        done;
+
+      for (i = 0; i < relids.length; i++) {
+        done = TASYNC.call(function (cDiff, relid) {
+          diff[relid] = cDiff;
+          return null;
+        }, fillMissingGuid(root, path + '/' + relids[i], diff[relids[i]]), relids[i]);
+      }
+      return TASYNC.call(function () {
+        if (diff.guid) {
+          return diff;
+        } else {
+          return TASYNC.call(function (child) {
+            diff.guid = _core.getGuid(child);
+            diff.hash = _core.getHash(child);
+            diff.oGuids = gatherObstructiveGuids(child);
+            return diff;
+          }, _core.loadByPath(root, path));
+        }
+      }, done);
+    }
+
+    function expandDiff(root, isDeleted) {
+      var diff = {
+        guid: _core.getGuid(root),
+        hash: _core.getHash(root),
+        removed: isDeleted === true
+      };
+      return TASYNC.call(function (children) {
+        var guid;
+        for (var i = 0; i < children.length; i++) {
+          guid = _core.getGuid(children[i]);
+          diff[_core.getRelid(children[i])] = {
+            guid: guid,
+            hash: _core.getHash(children[i]),
+            removed: isDeleted === true
+          };
+
+          if (isDeleted) {
+            _yetToCompute[guid] = _yetToCompute[guid] || {};
+            _yetToCompute[guid].from = children[i];
+            _yetToCompute[guid].fromExpanded = false;
+          } else {
+            _yetToCompute[guid] = _yetToCompute[guid] || {};
+            _yetToCompute[guid].to = children[i];
+            _yetToCompute[guid].toExpanded = false;
+          }
+        }
+        return diff;
+      }, _core.loadChildren(root));
+    }
+
+    function insertIntoDiff(path, diff) {
+      var pathArray = path.split('/'),
+        relid = pathArray.pop(),
+        sDiff = _DIFF,
+        i;
+      pathArray.shift();
+      for (i = 0; i < pathArray.length; i++) {
+        sDiff = sDiff[pathArray[i]];
+      }
+      //sDiff[relid] = diff;
+      sDiff[relid] = mergeObjects(sDiff[relid], diff);
+    }
+
+    function diffObjects(source,target) {
+      var diff = {},
+        sKeys = Object.keys(source),
+        tKeys = Object.keys(target),
+        tDiff,i;
+      for (i = 0; i < sKeys.length; i++) {
+        if(tKeys.indexOf(sKeys[i]) === -1){
+          diff[sKeys[i]] = TODELETESTRING;
+        }
+      }
+      for (i = 0; i < tKeys.length; i++) {
+        if (sKeys.indexOf(tKeys[i]) === -1) {
+          diff[tKeys[i]] = target[tKeys[i]];
+        } else {
+          if (typeof target[tKeys[i]] === typeof source[tKeys[i]] &&
+            typeof target[tKeys[i]] === 'object' &&
+            (target[tKeys[i]] !== null && source[tKeys[i]] !== null)) {
+            tDiff = diffObjects(source[tKeys[i]], target[tKeys[i]]);
+            if(Object.keys(tDiff).length > 0){
+              diff[tKeys[i]] = tDiff;
+            }
+          } else if(source[tKeys[i]] !== target[tKeys[i]]) {
+            diff[tKeys[i]] = target[tKeys[i]];
+          }
+        }
+      }
+      return diff;
+    }
+
+    function mergeObjects(source, target) {
+      var merged = {},
+        sKeys = Object.keys(source),
+        tKeys = Object.keys(target),
+        i;
+      for (i = 0; i < sKeys.length; i++) {
+        merged[sKeys[i]] = source[sKeys[i]];
+      }
+      for (i = 0; i < tKeys.length; i++) {
+        if (sKeys.indexOf(tKeys[i]) === -1) {
+          merged[tKeys[i]] = target[tKeys[i]];
+        } else {
+          if (typeof target[tKeys[i]] === typeof source[tKeys[i]] && typeof target[tKeys[i]] === 'object' && !(target instanceof Array)) {
+            merged[tKeys[i]] = mergeObjects(source[tKeys[i]], target[tKeys[i]]);
+          } else {
+            merged[tKeys[i]] = target[tKeys[i]];
+          }
+        }
+      }
+
+      return merged;
+    }
+
+    function removePathFromDiff(diff,path){
+      var relId,i;
+      if(path === ''){
+        diff = null;
+      } else {
+        path = path.split('/');
+        path.shift();
+        relId = path.pop();
+        for(i=0;i<path.length;i++){
+          diff = diff[path[i]];
+        }
+        delete diff[relId];
+      }
+    }
+    function shrinkDiff(rootDiff){
+      var _shrink = function(diff){
+        if(diff){
+          var keys = getDiffChildrenRelids(diff),
+            i;
+          if(typeof diff.movedFrom === 'string'){
+            removePathFromDiff(rootDiff,diff.movedFrom);
+          }
+
+          if(diff.removed !== false || typeof diff.movedFrom === 'string'){
+            delete diff.hash;
+          }
+
+          if(diff.removed === true){
+            for(i=0;i<keys.length;i++){
+              delete diff[keys[i]];
+            }
+          } else {
+
+            for(i=0;i<keys.length;i++){
+              _shrink(diff[keys[i]]);
+            }
+          }
+        }
+      };
+      _shrink(rootDiff,false);
+    }
+    function checkRound() {
+      var guids = Object.keys(_yetToCompute),
+        done, ytc,
+        i;
+      if (_needChecking !== true || guids.length < 1) {
+        shrinkDiff(_DIFF);
+        finalizeDiff();
+        return _DIFF;
+      }
+      _needChecking = false;
+      for (i = 0; i < guids.length; i++) {
+        ytc = _yetToCompute[guids[i]];
+        if (ytc.from && ytc.to) {
+          //move
+          _needChecking = true;
+          delete _yetToCompute[guids[i]];
+          done = TASYNC.call(function (mDiff, info) {
+            mDiff.guid = _core.getGuid(info.from);
+            mDiff.movedFrom = _core.getPath(info.from);
+            mDiff.ooGuids = gatherObstructiveGuids(info.from);
+            _diff_moves[_core.getPath(info.from)] = _core.getPath(info.to);
+            insertAtPath(_DIFF,_core.getPath(info.to),mDiff);
+            return null;
+          }, updateDiff(ytc.from, ytc.to), ytc);
+        } else {
+          if (ytc.from && ytc.fromExpanded === false) {
+            //expand from
+            ytc.fromExpanded = true;
+            _needChecking = true;
+            done = TASYNC.call(function (mDiff, info) {
+              mDiff.hash = _core.getHash(info.from);
+              mDiff.removed = true;
+              insertIntoDiff(_core.getPath(info.from), mDiff);
+              return null;
+            }, expandDiff(ytc.from, true), ytc);
+          } else if (ytc.to && ytc.toExpanded === false) {
+            //expand to
+            ytc.toExpanded = true;
+            _needChecking = true;
+            done = TASYNC.call(function (mDiff, info) {
+              if(!mDiff.hash){
+                mDiff.hash = _core.getHash(info.to);
+              }
+              mDiff.removed = false;
+              insertIntoDiff(_core.getPath(info.to), mDiff);
+              return null;
+            }, expandDiff(ytc.to, false), ytc);
+          }
+        }
+      }
+      return TASYNC.call(function () {
+        return checkRound();
+      }, done);
+    }
+
+    _core.nodeDiff = function (source, target) {
+      var diff = {
+        children: children_diff(source, target),
+        attr: attr_diff(source, target),
+        reg: reg_diff(source, target),
+        pointer: pointer_diff(source, target),
+        set: set_diff(source, target),
+        meta: meta_diff(source, target)
+      };
+
+      normalize(diff);
+      return isEmptyNodeDiff(diff) ? null : diff;
+    };
+
+    _core.generateTreeDiff = function (sRoot, tRoot) {
+      _yetToCompute = {};
+      _DIFF = {};
+      _diff_moves = {};
+      _needChecking = true;
+      _rounds = 0;
+      return TASYNC.call(function (d) {
+        _DIFF = d;
+        return checkRound();
+      }, updateDiff(sRoot, tRoot));
+    };
+
+    _core.generateLightTreeDiff = function (sRoot, tRoot) {
+      return updateDiff(sRoot, tRoot);
+    };
+
+    function getDiffChildrenRelids(diff) {
+      var keys = Object.keys(diff),
+        i,
+        filteredKeys = [],
+        forbiddenWords = {
+          guid: true,
+          hash: true,
+          attr: true,
+          reg: true,
+          pointer: true,
+          set: true,
+          meta: true,
+          removed: true,
+          movedFrom: true,
+          childrenListChanged: true,
+          oGuids: true,
+          ooGuids: true,
+          min: true,
+          max: true
+        };
+      for (i = 0; i < keys.length; i++) {
+        if (!forbiddenWords[keys[i]]) {
+          filteredKeys.push(keys[i]);
+        }
+      }
+      return filteredKeys;
+    }
+
+    function getMoveSources(diff, path, toFrom, fromTo) {
+      var relids = getDiffChildrenRelids(diff),
+        i, paths = [];
+
+      for (i = 0; i < relids.length; i++) {
+        getMoveSources(diff[relids[i]], path + '/' + relids[i], toFrom, fromTo);
+      }
+
+      if (typeof diff.movedFrom === 'string') {
+        toFrom[path] = diff.movedFrom;
+        fromTo[diff.movedFrom] = path;
+      }
+    }
+
+    function getAncestor(node,path){
+      var ownPath = _core.getPath(node),
+        ancestorPath='',
+        i;
+      path=path.split('/');
+      ownPath=ownPath.split('/');
+      ownPath.shift();
+      path.shift();
+      for(i=0;i<ownPath.length;i++){
+        if(ownPath[i] === path[i]){
+          ancestorPath= ancestorPath+'/'+ownPath[i];
+        } else {
+          break;
+        }
+      }
+      ownPath = _core.getPath(node);
+      while(ownPath !== ancestorPath){
+        node = _core.getParent(node);
+        ownPath = _core.getPath(node);
+      }
+      return node;
+    }
+    function setBaseOfNewNode(node,relid,basePath){
+      //TODO this is a kind of low level hack so maybe there should be another way to do this
+      var ancestor = getAncestor(node,basePath),
+        sourcePath = _core.getPath(node).substr(_core.getPath(ancestor).length),
+        targetPath = basePath.substr(_core.getPath(ancestor).length);
+      sourcePath = sourcePath+'/'+relid;
+      _innerCore.overlayInsert(_core.getChild(ancestor,'ovr'),sourcePath,'base',targetPath);
+    }
+    function makeInitialContainmentChanges(node,diff){
+      var relids = getDiffChildrenRelids(diff),
+        i,done,child,moved;
+
+      for(i=0;i<relids.length;i++){
+        moved = false;
+        if(diff[relids[i]].movedFrom){
+          //moved node
+          moved = true;
+          child = _core.loadByPath(_core.getRoot(node),diff[relids[i]].movedFrom);
+        } else if(diff[relids[i]].removed === false){
+          //added node
+          //first we hack the pointer, then we create the node
+          if(diff[relids[i]].pointer && diff[relids[i]].pointer.base){
+            //we can set base if the node has one, otherwise it is 'inheritance internal' node
+            setBaseOfNewNode(node,relids[i],diff[relids[i]].pointer.base);
+          }
+          if(diff[relids[i]].hash){
+            _core.setProperty(node,relids[i],diff[relids[i]].hash);
+            child = _core.loadChild(node,relids[i]);
+          } else {
+            child = _core.getChild(node,relids[i]);
+            _core.setHashed(child,true);
+          }
+        } else {
+          //simple node
+          child = _core.loadChild(node,relids[i]);
+        }
+
+        done = TASYNC.call(function(n,di,p,m,d){
+          if(m === true){
+            n = _core.moveNode(n,p);
+          }
+          return makeInitialContainmentChanges(n,di);
+        },child,diff[relids[i]],node,moved,done);
+      }
+
+      TASYNC.call(function(d){
+        return null;
+      },done);
+    }
+    function createNewNodes(node, diff) {
+      var relids = getDiffChildrenRelids(diff),
+        i,
+        done;
+
+      for (i = 0; i < relids.length; i++) {
+        if (diff[relids[i]].removed === false && !diff[relids[i]].movedFrom) {
+          //we have to create the child with the exact hash and then recursively call the function for it
+          /*if(!(node.data[relids[i]] && node.data[relids[i]] === diff[relids[i]].hash)){
+            //if it is a child of a new node we probably do not have to create it again...
+            if(diff[relids[i]].hash){
+              _core.setProperty(node,relids[i],diff[relids[i]].hash);
+            } else {
+              //create an empty child
+              var child = _core.getChild(node,relids[i]);
+              _core.setHashed(child,true);
+            }
+          }*/
+          if(diff[relids[i]].hash){
+            _core.setProperty(node,relids[i],diff[relids[i]].hash);
+          } else {
+            var child = _core.getChild(node,relids[i]);
+            _core.setHashed(child,true);
+          }
+          if(diff[relids[i]].pointer && diff[relids[i]].pointer.base){
+            //we can set base if the node has one, otherwise it is 'inheritance internal' node
+            setBaseOfNewNode(node,relids[i],diff[relids[i]].pointer.base);
+          }
+        }
+
+        done = TASYNC.call(function (a, b, c) {
+          return createNewNodes(a, b);
+        }, _core.loadChild(node, relids[i]), diff[relids[i]], done);
+
+      }
+
+      return TASYNC.call(function (d) {
+        return null;
+      },done);
+    }
+
+    function getMovedNode(root, from, to) {
+      ASSERT(typeof from === 'string' && typeof to === 'string' && to !== '');
+      var parentPath = to.substring(0, to.lastIndexOf('/')),
+        parent = _core.loadByPath(root, fromTo[parentPath] || parentPath),
+        old = _core.loadByPath(root, from);
+
+      //clear the directories
+      delete fromTo[from];
+      delete toFrom[to];
+
+      return TASYNC.call(function (p, o) {
+        return _core.moveNode(o, p);
+      }, parent, old);
+
+    }
+
+    function applyNodeChange(root, path, nodeDiff) {
+      //check for move
+      var node;
+      node = _core.loadByPath(root, path);
+
+      TASYNC.call(function (n) {
+        var done,
+          relids = getDiffChildrenRelids(nodeDiff),
+          i;
+        if (nodeDiff.removed === true) {
+          _core.deleteNode(n);
+          return;
+        }
+        applyAttributeChanges(n, nodeDiff.attr || {});
+        applyRegistryChanges(n, nodeDiff.reg || {});
+        done = applyPointerChanges(n, nodeDiff.pointer || {});
+        done = TASYNC.call(applySetChanges,n, nodeDiff.set || {},done);
+        if(nodeDiff.meta){
+          delete nodeDiff.meta.empty;
+          done = TASYNC.call(applyMetaChanges,n, nodeDiff.meta,done);
+        }
+        for (i = 0; i < relids.length; i++) {
+          done = TASYNC.call(function (d, d2) {
+            return null;
+          }, applyNodeChange(root, path + '/' + relids[i], nodeDiff[relids[i]]), done);
+        }
+        TASYNC.call(function (d) {
+          return done;
+        }, done);
+      }, node);
+    }
+
+    function applyAttributeChanges(node, attrDiff) {
+      var i, keys;
+      keys = Object.keys(attrDiff);
+      for (i = 0; i < keys.length; i++) {
+        if (attrDiff[keys[i]] === TODELETESTRING) {
+          _core.delAttribute(node, keys[i]);
+        } else {
+          _core.setAttribute(node, keys[i], attrDiff[keys[i]]);
+        }
+      }
+    }
+
+    function applyRegistryChanges(node, regDiff) {
+      var i, keys;
+      keys = Object.keys(regDiff);
+      for (i = 0; i < keys.length; i++) {
+        if (regDiff[keys[i]] === TODELETESTRING) {
+          _core.delRegistry(node, keys[i]);
+        } else {
+          _core.setRegistry(node, keys[i], regDiff[keys[i]]);
+        }
+      }
+    }
+
+    function setPointer(node, name, target) {
+      var targetNode;
+      if(target === null){
+        targetNode = null;
+      } else {
+        if(fromTo[target]){
+          target = fromTo[target];
+        }
+        targetNode = _core.loadByPath(_core.getRoot(node),target);
+      }
+      return TASYNC.call(function (t) {
+        //TODO watch if handling of base changes!!!
+        _core.setPointer(node, name, t);
+        return;
+      }, targetNode);
+    }
+
+    function applyPointerChanges(node, pointerDiff) {
+      var done,
+        keys = Object.keys(pointerDiff),
+        i;
+      for (i = 0; i < keys.length; i++) {
+        if (pointerDiff[keys[i]] === TODELETESTRING) {
+          _core.deletePointer(node, keys[i]);
+        } else {
+          done = setPointer(node, keys[i], pointerDiff[keys[i]]);
+        }
+      }
+
+      return TASYNC.call(function (d) {
+        return null;
+      }, done);
+
+    }
+
+    function addMember(node, name, target, data) {
+      var memberAttrSetting = function (diff) {
+          var keys = _core.getMemberOwnAttributeNames(node, name, target),
+            i;
+          for (i = 0; i < keys.length; i++) {
+            _core.delMemberAttribute(node, name, target, keys[i]);
+          }
+
+          keys = Object.keys(diff);
+          for (i = 0; i < keys.length; i++) {
+            _core.setMemberAttribute(node, name, target, keys[i], diff[keys[i]]);
+          }
+        },
+        memberRegSetting = function (diff) {
+          var keys = _core.getMemberOwnRegistryNames(node, name, target),
+            i;
+          for (i = 0; i < keys.length; i++) {
+            _core.delMemberRegistry(node, name, target, keys[i]);
+          }
+
+          keys = Object.keys(diff);
+          for (i = 0; i < keys.length; i++) {
+            _core.setMemberRegistry(node, name, target, keys[i], diff[keys[i]]);
+          }
+        };
+      return TASYNC.call(function (t) {
+        _core.addMember(node, name, t);
+        memberAttrSetting(data.attr || {});
+        memberRegSetting(data.reg || {});
+        return;
+      }, _core.loadByPath(_core.getRoot(node), target));
+    }
+
+    function applySetChanges(node, setDiff) {
+      var done,
+        setNames = Object.keys(setDiff),
+        elements, i, j;
+      for (i = 0; i < setNames.length; i++) {
+        if (setDiff[setNames[i]] === TODELETESTRING) {
+          _core.deleteSet(node, setNames[i]);
+        } else {
+          elements = Object.keys(setDiff[setNames[i]]);
+          for (j = 0; j < elements.length; j++) {
+            if (setDiff[setNames[i]][elements[j]] === TODELETESTRING) {
+              _core.delMember(node, setNames[i], elements[j]);
+            } else {
+              done = addMember(node, setNames[i], elements[j], setDiff[setNames[i]][elements[j]]);
+            }
+          }
+        }
+      }
+
+      return TASYNC.call(function (d) {
+        return null;
+      }, done);
+
+    }
+
+    function applyMetaAttributes(node,metaAttrDiff){
+      var i,keys,newValue;
+      if(metaAttrDiff === TODELETESTRING){
+        //we should delete all MetaAttributes
+        keys = _core.getValidAttributeNames(node);
+        for(i=0;i<keys.length;i++){
+          _core.delAttributeMeta(node,keys[i]);
+        }
+      } else {
+        keys = Object.keys(metaAttrDiff);
+        for(i=0;i<keys.length;i++){
+          if(metaAttrDiff[keys[i]] === TODELETESTRING){
+            _core.delAttributeMeta(node,keys[i]);
+          } else {
+            newValue = jsonConcat(_core.getAttributeMeta(node,keys[i]) || {},metaAttrDiff[keys[i]]);
+            _core.setAttributeMeta(node,keys[i],newValue);
+          }
+        }
+      }
+    }
+
+    function applyMetaConstraints(node,metaConDiff){
+      var keys,i;
+      if(metaConDiff === TODELETESTRING){
+        //remove all constraints
+        keys = _core.getConstraintNames(node);
+        for(i=0;i<keys.length;i++){
+          _core.delConstraint(node,keys[i]);
+        }
+      } else {
+        keys = Object.keys(metaConDiff);
+        for(i=0;i<keys.length;i++){
+          if(metaConDiff[keys[i]] === TODELETESTRING){
+            _core.delConstraint(node,keys[i]);
+          } else {
+            _core.setConstraint(node,keys[i],jsonConcat(_core.getConstraint(node,keys[i]) || {},metaConDiff[keys[i]]));
+          }
+        }
+      }
+    }
+
+    function applyMetaChildren(node,metaChildrenDiff){
+      var keys, i,done,
+        setChild = function(target,data,d){
+          _core.setChildMeta(node,target,data.min,data.max);
+        };
+      if(metaChildrenDiff === TODELETESTRING){
+        //remove all valid child
+        keys = _core.getValidChildrenPaths(node);
+        for(i=0;i<keys.length;i++){
+          _core.delChildMeta(node,keys[i]);
+        }
+      } else {
+        _core.setChildrenMetaLimits(node, metaChildrenDiff.min, metaChildrenDiff.max);
+        delete metaChildrenDiff.max; //TODO we do not need it anymore, but maybe there is a better way
+        delete metaChildrenDiff.min;
+        keys = Object.keys(metaChildrenDiff);
+        for(i=0;i<keys.length;i++){
+          if(metaChildrenDiff[keys[i]] === TODELETESTRING){
+            _core.delChildMeta(node,keys[i]);
+          } else {
+            done = TASYNC.call(setChild,_core.loadByPath(_core.getRoot(node),keys[i]),metaChildrenDiff[keys[i]],done);
+          }
+        }
+      }
+
+      TASYNC.call(function(d){
+        return null;
+      },done);
+    }
+
+    function applyMetaPointers(node,metaPointerDiff){
+      var names,targets, i, j,done,
+        setPointer = function(name,target,data,d){
+          _core.setPointerMetaTarget(node,name,target,data.min,data.max);
+        };
+      if(metaPointerDiff === TODELETESTRING){
+        //remove all pointers,sets and their targets
+        names = _core.getValidPointerNames(node);
+        for(i=0;i<names.length;i++){
+          _core.delPointerMeta(node,names[i]);
+        }
+
+        names = _core.getValidSetNames(node);
+        for(i=0;i<names.length;i++){
+          _core.delPointerMeta(node,names[i]);
+        }
+        return;
+      }
+
+      names = Object.keys(metaPointerDiff);
+      for(i=0;i<names.length;i++){
+        if(metaPointerDiff[names[i]] === TODELETESTRING){
+          _core.delPointerMeta(node,names[i]);
+        } else {
+          _core.setPointerMetaLimits(node,names[i],metaPointerDiff[names[i]].min,metaPointerDiff[names[i]].max);
+          delete metaPointerDiff[names[i]].max; //TODO we do not need it anymore, but maybe there is a better way
+          delete metaPointerDiff[names[i]].min;
+          targets = Object.keys(metaPointerDiff[names[i]]);
+          for(j=0;j<targets.length;j++){
+            if(metaPointerDiff[names[i]][targets[j]] === TODELETESTRING){
+              _core.delPointerMetaTarget(node,names[i],targets[j]);
+            } else {
+              done = TASYNC.call(setPointer,names[i],_core.loadByPath(_core.getRoot(node),targets[j]),metaPointerDiff[names[i]][targets[j]],done);
+            }
+          }
+        }
+      }
+
+      TASYNC.call(function(d){
+        return null;
+      },done);
+    }
+
+    function applyMetaAspects(node,metaAspectsDiff){
+      var names,targets, i, j,done,
+        setAspect = function(name,target,d){
+          _core.setAspectMetaTarget(node,name,target);
+        };
+      if(metaAspectsDiff === TODELETESTRING){
+        //remove all aspects
+        names = _core.getValidAspectNames(node);
+        for(i=0;i<names.length;i++){
+          _core.delAspectMeta(node,names[i]);
+        }
+        return;
+      }
+
+      names = Object.keys(metaAspectsDiff);
+      for(i=0;i<names.length;i++){
+        if(metaAspectsDiff[names[i]] === TODELETESTRING){
+          _core.delAspectMeta(node,names[i]);
+        } else {
+          targets = Object.keys(metaAspectsDiff[names[i]]);
+          for(j=0;j<targets.length;j++){
+            if(metaAspectsDiff[names[i]][targets[j]] === TODELETESTRING){
+              _core.delAspectMetaTarget(node,names[i],targets[j]);
+            } else {
+              done = TASYNC.call(setAspect,names[i],_core.loadByPath(_core.getRoot(node),targets[j]),done);
+            }
+          }
+        }
+      }
+
+      TASYNC.call(function(d){
+        return null;
+      },done);
+    }
+
+    function applyMetaChanges(node, metaDiff) {
+      var done;
+      applyMetaAttributes(node,metaDiff.attributes || TODELETESTRING);
+      applyMetaConstraints(node,metaDiff.constraints || TODELETESTRING);
+      done = applyMetaChildren(node,metaDiff.children || TODELETESTRING);
+      done = TASYNC.call(applyMetaPointers,node,metaDiff.pointers || TODELETESTRING,done);
+      done = TASYNC.call(applyMetaAspects,node,metaDiff.aspects || TODELETESTRING,done);
+
+      TASYNC.call(function(d){
+        return null;
+      },done);
+    }
+
+    _core.applyTreeDiff = function (root, diff) {
+      var done;
+
+      toFrom = {};
+      fromTo = {};
+      getMoveSources(diff, '', toFrom, fromTo);
+
+      done = makeInitialContainmentChanges(root,diff);
+      return TASYNC.call(function (d) {
+        return applyNodeChange(root, '', diff);
+      }, done);
+    };
+
+
+    //concat diffs is needed to make 3-way merge
+    function getDiffTreeDictionray(treeDiff){
+      var dictionary = {pathToGuid:{},guidToPath:{}},
+        addElement = function(path,diff){
+          var keys = getDiffChildrenRelids(diff),
+            i;
+          for(i=0;i<keys.length;i++){
+            addElement(path+'/'+keys[i],diff[keys[i]]);
+          }
+          if(diff.guid){
+            dictionary.pathToGuid[path] = diff.guid;
+            if(!dictionary.guidToPath[diff.guid] || diff.movedFrom){
+              dictionary.guidToPath[diff.guid] = path;
+            }
+          }
+        };
+
+      addElement('',treeDiff);
+      return dictionary;
+    }
+
+    function _getNodeByGuid(diff,guid){
+      var path = _concat_dictionary.guidToPath[guid],
+        object = diff,
+        i;
+      if(typeof path === 'string'){
+        if(path === ''){
+          return diff;
+        }
+
+        path = path.split('/');
+        path.shift();
+        for(i=0;i<path.length;i++){
+          object = object[path[i]];
+        }
+        return object;
+      } else {
+        return null;
+      }
+    }
+    function getNodeByGuid(diff,guid){
+      var relids, i,temp;
+      if(diff.guid === guid){
+        return diff;
+      }
+
+      relids = getDiffChildrenRelids(diff);
+      for(i=0;i<relids.length;i++){
+        temp = getNodeByGuid(diff[relids[i]],guid);
+        if(temp){
+          return temp;
+        }
+      }
+      return null;
+    }
+    function insertAtPath(diff,path,object){
+      ASSERT(typeof path === 'string');
+      var i,base,relid,nodepath;
+      if(path === ''){
+        _concat_result = JSON.parse(JSON.stringify(object));
+        return;
+      }
+      nodepath = path.match(/\/\/.*\/\//) || [];
+      nodepath = nodepath[0] || "there is no nodepath in the path";
+      path = path.replace(nodepath,"/*nodepath*/");
+      nodepath = nodepath.replace(/\/\//g,"/");
+      nodepath = nodepath.slice(0,-1);
+      path = path.split('/');
+      path.shift();
+      if(path.indexOf("*nodepath*") !== -1){
+        path[path.indexOf("*nodepath*")] = nodepath;
+      }
+      relid = path.pop();
+      base = diff;
+      for(i=0;i<path.length;i++){
+        base[path[i]] = base[path[i]] || {};
+        base = base[path[i]];
+      }
+      base[relid] = JSON.parse(JSON.stringify(object));
+      return;
+    }
+    function changeMovedPaths(singleNode){
+      var keys,i;
+      keys = Object.keys(singleNode);
+      for(i=0;i<keys.length;i++){
+        if(_concat_moves.fromTo[keys[i]]){
+          singleNode[_concat_moves.fromTo[keys[i]]] = singleNode[keys[i]];
+          delete singleNode[keys[i]];
+          if(typeof singleNode[_concat_moves.fromTo[keys[i]]] === 'object' && singleNode[_concat_moves.fromTo[keys[i]]] !== null){
+            changeMovedPaths(singleNode[_concat_moves.fromTo[keys[i]]]);
+          }
+        } else {
+          if(typeof singleNode[keys[i]] === 'string' && keys[i] !== 'movedFrom' && _concat_moves.fromTo[singleNode[keys[i]]]){
+            singleNode[keys[i]] = _concat_moves.fromTo[keys[i]];
+          }
+
+          if(typeof singleNode[keys[i]] === 'object' && singleNode[keys[i]] !== null){
+            changeMovedPaths(singleNode[keys[i]]);
+          }
+        }
+
+      }
+      if(typeof singleNode === 'object' && singleNode !== null){
+        keys = Object.keys(singleNode);
+        for(i=0;i<keys.length;i++){
+          if(_concat_moves.fromTo[keys[i]]){
+            singleNode[_concat_moves.fromTo[keys[i]]] = singleNode[keys[i]];
+            delete singleNode[keys[i]];
+          }
+        }
+      } else if(typeof singleNode === 'string') {
+
+      }
+
+    }
+    function getSingleNode(node){
+      //removes the children from the node
+      var result = JSON.parse(JSON.stringify(node)),
+        keys = getDiffChildrenRelids(result),
+        i;
+      for(i=0;i<keys.length;i++){
+        delete result[keys[i]];
+      }
+      //changeMovedPaths(result);
+      return result;
+    }
+    function jsonConcat(base,extension){
+      var baseKeys = Object.keys(base),
+        extKeys = Object.keys(extension),
+        concat = JSON.parse(JSON.stringify(base)),
+        i;
+      for(i=0;i<extKeys.length;i++){
+        if(baseKeys.indexOf(extKeys[i]) === -1){
+          concat[extKeys[i]] = JSON.parse(JSON.stringify(extension[extKeys[i]]));
+        } else {
+          if(typeof base[extKeys[i]] === 'object' && typeof extension[extKeys[i]] === 'object'){
+            concat[extKeys[i]] = jsonConcat(base[extKeys[i]],extension[extKeys[i]]);
+          } else { //either from value to object or object from value we go with the extension
+            concat[extKeys[i]] = JSON.parse(JSON.stringify(extension[extKeys[i]]));
+          }
+        }
+      }
+      return concat;
+    }
+
+
+
+    function getConflictByGuid(conflict,guid){
+      var relids,i,result;
+      if(conflict.guid === guid){
+        return conflict;
+      }
+      relids = getDiffChildrenRelids(conflict);
+      for(i=0;i<relids.length;i++){
+        result = getConflictByGuid(conflict[relids[i]],guid);
+        if(result){
+          return result;
+        }
+      }
+      return null;
+    }
+    function getPathByGuid(conflict,guid,path){
+      var relids,i,result;
+      if(conflict.guid === guid){
+        return path;
+      }
+      relids = getDiffChildrenRelids(conflict);
+      for(i=0;i<relids.length;i++){
+        result = getPathByGuid(conflict[relids[i]],guid,path+'/'+relids[i]);
+        if(result){
+          return result;
+        }
+      }
+      return null;
+    }
+    function removedParentGuid(diff,path){
+      var i;
+      path = (path || "").split('/');
+      path.shift();
+      for (i = 0; i < path.length; i++) {
+        if(diff.removed === true){
+          return diff.guid;
+        }
+        if(diff[path[i]]){
+          diff = diff[path[i]]
+        } else {
+          return null;
+        }
+      }
+      return diff.removed === true ? diff.guid : null;
+    }
+
+    function getGuidsOfDiff(diff){
+      var relids = getDiffChildrenRelids(diff),
+        i,
+        result = [diff.guid];
+      for(i=0;i<relids.length;i++){
+        result = result.concat(getGuidsOfDiff(diff[relids[i]]));
+      }
+      return result;
+    }
+
+    function applyToPath(diff,path,value){
+      var i,finalPath,keys;
+      path = (path || "").split('/');
+      path.shift();
+      finalPath = path.pop();
+      for(i=0;i<path.length;i++){
+        if(!diff[path[i]]){
+          diff[path[i]] = {};
+        }
+        diff = diff[path[i]];
+      }
+
+      if(typeof value === 'object'){
+        keys = Object.keys(value);
+        for(i=0;i<keys.length;i++){
+          diff[finalPath][keys[i]] = value[keys[i]];
+        }
+      } else {
+        diff[finalPath] = value;
+      }
+    }
+    /*function applyResolutionItem(diff,item){
+
+      //let's start with the easy ones
+      if(item.mine.path === item.theirs.path){
+        //we just simply apply it over our own diff
+        applyToPath(diff,item.theirs.path,item.theirs.value);
+      } else {
+        var currentPath = getPathByGuid(diff,item.guid,'');
+        if(item.mine.path.indexOf(currentPath) === 0){
+          //not yet moved so we move right now
+          insertAtPath(diff,item.theirs.path,getNodeByGuid(diff,item.guid));
+          //and remove from its original path
+          insertAtPath(diff,currentPath,{});
+          //with the move there is no data to apply...
+        } else {
+          //the move have already been made, so it is enough if we apply
+          applyToPath(diff,item.theirs.path,item.theirs.value);
+        }
+      }
+
+    }
+    _core.applyResolution = function(mine,conflicts){
+      var i;
+      for(i=0;i<conflicts.length;i++){
+        if(conflicts[i].selected === 'theirs'){
+          applyResolutionItem(mine,conflicts[i]);
+        }
+      }
+      return mine;
+    };*/
+
+    //now we try a different approach, which maybe more simple
+    function getCommonPathForConcat(path){
+      if(_concat_moves.getExtensionSourceFromDestination[path]){
+        path = _concat_moves.getExtensionSourceFromDestination[path];
+      }
+      if(_concat_moves.getBaseDestinationFromSource[path]){
+        path = _concat_moves.getBaseDestinationFromSource[path];
+      }
+      return path;
+    }
+    function getConcatBaseRemovals(diff){
+      var relids = getDiffChildrenRelids(diff),
+        i;
+      if(diff.removed !== true){
+        if(diff.movedFrom){
+          if(_concat_base_removals[diff.guid] !== undefined){
+            delete _concat_base_removals[diff.guid];
+          } else {
+            _concat_base_removals[diff.guid] = false;
+          }
+        }
+        for(i=0;i<relids.length;i++){
+          getConcatBaseRemovals(diff[relids[i]]);
+        }
+      } else {
+        if(_concat_base_removals[diff.guid] === false){
+          delete _concat_base_removals[diff.guid];
+        } else {
+          _concat_base_removals[diff.guid] = true;
+        }
+      }
+    }
+    function getObstructiveGuids(diffNode){
+      var result = [],
+        keys,i;
+      keys = Object.keys(diffNode.oGuids || {});
+      for(i=0;i<keys.length;i++){
+        if(_concat_base_removals[keys[i]]){
+          result.push(keys[i]);
+        }
+      }
+      keys = Object.keys(diffNode.ooGuids || {});
+      for(i=0;i<keys.length;i++){
+        if(_concat_base_removals[keys[i]]){
+          result.push(keys[i]);
+        }
+      }
+      return result;
+    }
+    function getWhomIObstructGuids(guid){
+      //this function is needed when the extension contains a deletion where the base did not delete the node
+      var guids = [],
+        checkNode = function(diffNode){
+          var relids,i;
+          if((diffNode.oGuids && diffNode.oGuids[guid]) || (diffNode.ooGuids && diffNode.ooGuids[guid])){
+            guids.push(diffNode.guid);
+          }
+
+          relids = getDiffChildrenRelids(diffNode);
+          for(i=0;i<relids.length;i++){
+            checkNode(diffNode[relids[i]]);
+          }
+        };
+      checkNode(_concat_base);
+      return guids;
+    }
+    function gatherFullNodeConflicts(diffNode,mine,path,opposingPath){
+      var conflict,
+        opposingConflict,
+        keys, i,
+        createSingleKeyValuePairConflicts = function(pathBase,data){
+        var keys, i;
+        keys = Object.keys(data);
+        for(i=0;i<keys.length;i++){
+          conflict[pathBase+'/'+keys[i]] = conflict[pathBase+'/'+keys[i]] || {value:data[keys[i]],conflictingPaths:{}};
+          conflict[pathBase+'/'+keys[i]].conflictingPaths[opposingPath] = true;
+          opposingConflict.conflictingPaths[pathBase+'/'+keys[i]] = true;
+        }
+      };
+
+      //setting the conflicts
+      if(mine === true){
+        conflict = _conflict_mine;
+        opposingConflict = _conflict_theirs[opposingPath];
+      } else {
+        conflict = _conflict_theirs;
+        opposingConflict = _conflict_mine[opposingPath];
+      }
+      ASSERT(opposingConflict);
+      //if the node was moved we should make a conflict for the whole node as well
+      if(diffNode.movedFrom){
+        conflict[path] = conflict[path] || {value:path,conflictingPaths:{}};
+        conflict[path].conflictingPaths[opposingPath] = true;
+        opposingConflict.conflictingPaths[path] = true;
+      }
+      createSingleKeyValuePairConflicts(path+'/attr',diffNode.attr || {});
+      createSingleKeyValuePairConflicts(path+'/reg',diffNode.reg || {});
+      createSingleKeyValuePairConflicts(path+'/pointer',diffNode.pointer || {});
+
+      if(diffNode.set){
+        if(diffNode.set === TODELETESTRING){
+          conflict[path+'/set'] = conflict[path+'/set'] || {value:TODELETESTRING,conflictingPaths:{}};
+          conflict[path+'/set'].conflictingPaths[opposingPath] = true;
+          opposingConflict.conflictingPaths[path+'/set'] = true;
+        } else {
+          keys = Object.keys(diffNode.set);
+          for(i=0;i<keys.length;i++){
+            if(diffNode.set[keys[i]] === TODELETESTRING){
+              conflict[path+'/set/'+keys[i]] = conflict[path+'/set/'+keys[i]] || {value:TODELETESTRING,conflictingPaths:{}};
+              conflict[path+'/set/'+keys[i]].conflictingPaths[opposingPath] = true;
+              opposingConflict.conflictingPaths[path+'/set/'+keys[i]] = true;
+            } else {
+              gatherFullSetConflicts(diffNode.set[keys[i]],mine,path+'/set/'+keys[i],opposingPath);
+            }
+          }
+        }
+      }
+
+      if(diffNode.meta){
+        gatherFullMetaConflicts(diffNode.meta,mine,path+'/meta',opposingPath);
+      }
+
+      //if the opposing item is theirs, we have to recursively go down in our changes
+      if(mine){
+        keys = getDiffChildrenRelids(diffNode);
+        for(i=0;i<keys.length;i++){
+          gatherFullNodeConflicts(diffNode[keys[i]],true,path+'/'+keys[i],opposingPath);
+        }
+      }
+
+    }
+    function gatherFullSetConflicts(diffSet,mine,path,opposingPath){
+      var relids = getDiffChildrenRelids(diffSet),
+        i,keys, j,conflict,opposingConflict;
+
+      //setting the conflicts
+      if(mine === true){
+        conflict = _conflict_mine;
+        opposingConflict = _conflict_theirs[opposingPath];
+      } else {
+        conflict = _conflict_theirs;
+        opposingConflict = _conflict_mine[opposingPath];
+      }
+      for(i=0;i<relids.length;i++){
+        if(diffSet[relids[i]] === TODELETESTRING){
+          //single conflict as the element was removed
+          conflict[path+'/'+relids[i]+'/'] = conflict[path+'/'+relids[i]+'/'] || {value:TODELETESTRING,conflictingPaths:{}};
+          conflict[path+'/'+relids[i]+'/'].conflictingPaths[opposingPath] = true;
+          opposingConflict.conflictingPaths[path+'/'+relids[i]+'/'] = true;
+        } else {
+          keys = Object.keys(diffSet[relids[i]].attr || {});
+          for(j=0;j<keys.length;j++){
+            conflict[path+'/'+relids[i]+'//attr/'+keys[j]] = conflict[path+'/'+relids[i]+'//attr/'+keys[j]] || {value:diffSet[relids[i]].attr[keys[j]],conflictingPaths:{}};
+            conflict[path+'/'+relids[i]+'//attr/'+keys[j]].conflictingPaths[opposingPath] = true;
+            opposingConflict.conflictingPaths[path+'/'+relids[i]+'//attr/'+keys[j]] = true;
+          }
+          keys = Object.keys(diffSet[relids[i]].reg || {});
+          for(j=0;j<keys.length;j++){
+            conflict[path+'/'+relids[i]+'//reg/'+keys[j]] = conflict[path+'/'+relids[i]+'//reg/'+keys[j]] || {value:diffSet[relids[i]].reg[keys[j]],conflictingPaths:{}};
+            conflict[path+'/'+relids[i]+'//reg/'+keys[j]].conflictingPaths[opposingPath] = true;
+            opposingConflict.conflictingPaths[path+'/'+relids[i]+'//reg/'+keys[j]] = true;
+          }
+        }
+      }
+    }
+    function concatSingleKeyValuePairs(path,base,extension){
+      var keys, i,temp;
+      keys = Object.keys(extension);
+      for(i=0;i<keys.length;i++){
+        temp = extension[keys[i]];
+        if(typeof temp === 'string' && temp !== TODELETESTRING){
+          temp = getCommonPathForConcat(temp);
+        }
+        if(base[keys[i]] && CANON.stringify(base[keys[i]]) !== CANON.stringify(temp)){
+          //conflict
+          _conflict_mine[path+'/'+keys[i]] = {value:base[keys[i]],conflictingPaths:{}};
+          _conflict_theirs[path+'/'+keys[i]] = {value:extension[keys[i]],conflictingPaths:{}};
+          _conflict_mine[path+'/'+keys[i]].conflictingPaths[path+'/'+keys[i]] = true;
+          _conflict_theirs[path+'/'+keys[i]].conflictingPaths[path+'/'+keys[i]] = true;
+        } else {
+          base[keys[i]] = extension[keys[i]];
+        }
+      }
+    }
+    function concatSet(path,base,extension){
+      var names = Object.keys(extension),
+        members, i, j,memberPath;
+
+      for(i=0;i<names.length;i++){
+        if(base[names[i]]){
+          if(base[names[i]] === TODELETESTRING){
+            if(extension[names[i]] !== TODELETESTRING){
+              //whole set conflict
+              _conflict_mine[path+'/'+names[i]]={value:TODELETESTRING,conflictingPaths:{}};
+              gatherFullSetConflicts(extension[names[i]],false,path+'/'+names[i],path+'/'+names[i]);
+            }
+          } else {
+            if(extension[names[i]] === TODELETESTRING){
+              //whole set conflict
+              _conflict_theirs[path+'/'+names[i]]={value:TODELETESTRING,conflictingPaths:{}};
+              gatherFullSetConflicts(base[names[i]],true,path+'/'+names[i],path+'/'+names[i]);
+            } else {
+              //now we can only have member or sub-member conflicts...
+              members = getDiffChildrenRelids(extension[names[i]]);
+              for(j=0;j<members.length;j++){
+                memberPath = getCommonPathForConcat(members[j]);
+                if(base[names[i]][memberPath]){
+                  if(base[names[i]][memberPath] === TODELETESTRING){
+                    if(extension[names[i]][members[j]] !== TODELETESTRING){
+                      //whole member conflict
+                      _conflict_mine[path+'/'+names[i]+'/'+memberPath+'//'] = {value:TODELETESTRING,conflictingPaths:{}};
+                      gatherFullNodeConflicts(extension[names[i]][members[j]],false,path+'/'+names[i]+'/'+memberPath+'//',path+'/'+names[i]+'/'+memberPath+'//');
+                    }
+                  } else {
+                    if(extension[names[i]][members[j]] === TODELETESTRING){
+                      //whole member conflict
+                      _conflict_theirs[path+'/'+names[i]+'/'+memberPath+'//'] = {value:TODELETESTRING,conflictingPaths:{}};
+                      gatherFullNodeConflicts(base[names[i]][memberPath],true,path+'/'+names[i]+'/'+memberPath+'//',path+'/'+names[i]+'/'+memberPath+'//');
+                    } else {
+                      if(extension[names[i]][members[j]].attr){
+                        if(base[names[i]][memberPath].attr){
+                          concatSingleKeyValuePairs(path+'/'+names[i]+'/'+memberPath+'/'+'/attr',base[names[i]][memberPath].attr,extension[names[i]][members[j]].attr);
+                        } else {
+                          base[names[i]][memberPath].attr = extension[names[i]][members[j]].attr;
+                        }
+                      }
+                      if(extension[names[i]][members[j]].reg){
+                        if(base[names[i]][memberPath].reg){
+                          concatSingleKeyValuePairs(path+'/'+names[i]+'/'+memberPath+'/'+'/reg',base[names[i]][memberPath].reg,extension[names[i]][members[j]].reg);
+                        } else {
+                          base[names[i]][memberPath].reg = extension[names[i]][members[j]].reg;
+                        }
+                      }
+
+                    }
+                  }
+                } else {
+                  //concat
+                  base[names[i]][memberPath] = extension[names[i]][members[j]];
+                }
+              }
+            }
+          }
+        } else {
+          //simple concatenation
+          //TODO the path for members should be replaced here as well...
+          base[names[i]] = extension[names[i]];
+        }
+      }
+    }
+    function gatherFullMetaConflicts(diffMeta,mine,path,opposingPath){
+      var conflict,opposingConflict,
+        relids, i, j, keys, tPath;
+
+      if(mine){
+        conflict = _conflict_mine;
+        opposingConflict = _conflict_theirs[opposingPath];
+      } else {
+        conflict = _conflict_theirs;
+        opposingConflict = _conflict_mine[opposingPath];
+      }
+
+      if(diffMeta === TODELETESTRING){
+        conflict[path] = conflict[path] || {value:TODELETESTRING,conflictingPaths:{}};
+        conflict[path].conflictingPaths[opposingPath] = true;
+        opposingConflict.conflictingPaths[path] = true;
+        return; //there is no other conflict
+      }
+
+      //children
+      if(diffMeta.children){
+        if(diffMeta.children === TODELETESTRING){
+          conflict[path+'/children'] = conflict[path+'/children'] || {value:TODELETESTRING,conflictingPaths:{}};
+          conflict[path+'/children'].conflictingPaths[opposingPath] = true;
+          opposingConflict.conflictingPaths[path+'/children'] = true;
+        } else {
+          if(diffMeta.children.max){
+            conflict[path+'/children/max'] = conflict[path+'/children/max'] || {value:diffMeta.children.max,conflictingPaths:{}};
+            conflict[path+'/children/max'].conflictingPaths[opposingPath] = true;
+            opposingConflict.conflictingPaths[path+'/children/max'] = true;
+          }
+          if(diffMeta.children.min){
+            conflict[path+'/children/min'] = conflict[path+'/children/min'] || {value:diffMeta.children.min,conflictingPaths:{}};
+            conflict[path+'/children/min'].conflictingPaths[opposingPath] = true;
+            opposingConflict.conflictingPaths[path+'/children/min'] = true;
+          }
+          relids = getDiffChildrenRelids(diffMeta.children);
+          for(i=0;i<relids.length;i++){
+            conflict[path+'/children/'+relids[i]] = conflict[path+'/children/'+relids[i]] || {value:diffMeta.children[relids[i]],conflictingPaths:{}};
+            conflict[path+'/children/'+relids[i]].conflictingPaths[opposingPath] = true;
+            opposingConflict.conflictingPaths[path+'/children/'+relids[i]] = true;
+          }
+        }
+      }
+      //attributes
+      if(diffMeta.attributes){
+        if(diffMeta.attributes === TODELETESTRING){
+          conflict[path+'/attributes'] = conflict[path+'/attributes'] || {value:TODELETESTRING,conflictingPaths:{}};
+          conflict[path+'/attributes'].conflictingPaths[opposingPath] = true;
+          opposingConflict.conflictingPaths[path+'/attributes'] = true;
+        } else {
+          keys = Object.keys(diffMeta.attributes);
+          for(i=0;i<keys.length;i++){
+            conflict[path+'/attributes/'+keys[i]] = conflict[path+'/attributes/'+keys[i]] || {value:diffMeta.attributes[keys[i]],conflictingPaths:{}};
+            conflict[path+'/attributes'].conflictingPaths[opposingPath] = true;
+            opposingConflict.conflictingPaths[path+'/attributes'] = true;
+          }
+        }
+      }
+      //pointers
+      if(diffMeta.pointers){
+        if(diffMeta.pointers === TODELETESTRING){
+          conflict[path+'/pointers'] = conflict[path+'/pointers'] || {value:TODELETESTRING,conflictingPaths:{}};
+          conflict[path+'/pointers'].conflictingPaths[opposingPath] = true;
+          opposingConflict.conflictingPaths[path+'/pointers'] = true;
+        } else {
+          keys = Object.keys(diffMeta.pointers);
+          for(i=0;i<keys.length;i++){
+            if(diffMeta.pointers[keys[i]] === TODELETESTRING){
+              conflict[path+'/pointers/'+keys[i]] = conflict[path+'/pointers/'+keys[i]] || {value:TODELETESTRING,conflictingPaths:{}};
+              conflict[path+'/pointers/'+keys[i]].conflictingPaths[opposingPath] = true;
+              opposingConflict.conflictingPaths[path+'/pointers/'+keys[i]] = true;
+            } else {
+              if(diffMeta.pointers[keys[i]].max){
+                conflict[path+'/pointers/'+keys[i]+'/max'] = conflict[path+'/pointers/'+keys[i]+'/max'] || {value:diffMeta.pointers[keys[i]].max,conflictingPaths:{}};
+                conflict[path+'/pointers/'+keys[i]+'/max'].conflictingPaths[opposingPath] = true;
+                opposingConflict.conflictingPaths[path+'/pointers/'+keys[i]+'/max'] = true;
+              }
+              if(diffMeta.pointers[keys[i]].min){
+                conflict[path+'/pointers/'+keys[i]+'/min'] = conflict[path+'/pointers/'+keys[i]+'/min'] || {value:diffMeta.pointers[keys[i]].min,conflictingPaths:{}};
+                conflict[path+'/pointers/'+keys[i]+'/min'].conflictingPaths[opposingPath] = true;
+                opposingConflict.conflictingPaths[path+'/pointers/'+keys[i]+'/min'] = true;
+              }
+              relids = getDiffChildrenRelids(diffMeta.pointers[keys[i]]);
+              for(j=0;j<relids.length;j++){
+                tPath = getCommonPathForConcat(relids[j]);
+                conflict[path+'/pointers/'+keys[i]+'/'+tPath+'//'] = conflict[path+'/pointers/'+keys[i]+'/'+tPath+'//'] || {value:diffMeta.pointers[keys[i]][relids[j]],conflictingPaths:{}};
+                conflict[path+'/pointers/'+keys[i]+'/'+tPath+'//'].conflictingPaths[opposingPath] = true;
+                opposingConflict.conflictingPaths[path+'/pointers/'+keys[i]+'/'+tPath+'//'] = true;
+              }
+            }
+          }
+        }
+      }
+      //aspects
+      //TODO
+    }
+    function concatMeta(path,base,extension){
+      var keys, i,tPath, j,paths,t2Path,
+          mergeMetaItems = function(bPath,bData,eData){
+            var bKeys,tKeys, i,tPath,t2Path;
+            //delete checks
+            if(bData === TODELETESTRING || eData === TODELETESTRING){
+              if(CANON.stringify(bData) !== CANON.stringify(eData)){
+                _conflict_mine[bPath] = _conflict_mine[bPath] || {value:bData,conflictingPaths:{}};
+                _conflict_mine[bPath].conflictingPaths[bPath] = true;
+                _conflict_theirs[bPath] = _conflict_theirs[bPath] || {value:eData,conflictingPaths:{}};
+                _conflict_theirs[bPath].conflictingPaths[bPath] = true;
+              }
+            } else {
+              //max
+              if(eData.max){
+                if(bData.max && bData.max !== eData.max){
+                  tPath = bPath+'/max';
+                  _conflict_mine[tPath] = _conflict_mine[tPath] || {value:bData.max,conflictingPaths:{}};
+                  _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                  _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:eData.max,conflictingPaths:{}};
+                  _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                } else {
+                  bData.max = eData.max;
+                }
+              }
+              //min
+              if(eData.min) {
+                if (bData.min && bData.min !== eData.min) {
+                  tPath = bPath + '/min';
+                  _conflict_mine[tPath] = _conflict_mine[tPath] || {value: bData.min, conflictingPaths: {}};
+                  _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                  _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value: eData.min, conflictingPaths: {}};
+                  _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                } else {
+                  bData.max = eData.min;
+                }
+              }
+              //targets
+              bKeys = getDiffChildrenRelids(bData);
+              tKeys = getDiffChildrenRelids(eData);
+              for(i=0;i<tKeys.length;i++){
+                tPath = getCommonPathForConcat(tKeys[i]);
+                if(bKeys.indexOf(tPath) !== -1 && CANON.stringify(bData[tPath]) !== CANON.stringify(eData[tKeys[i]])){
+                  t2Path = tPath;
+                  tPath = bPath+'/'+tPath+'//';
+                  _conflict_mine[tPath] = _conflict_mine[tPath] || {value:bData[t2Path],conflictingPaths:{}};
+                  _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                  _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:eData[tKeys[i]],conflictingPaths:{}};
+                  _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                } else {
+                  bData[tPath] = eData[tKeys[i]];
+                }
+              }
+            }
+          };
+      if(CANON.stringify(base) !== CANON.stringify(extension)){
+        if(base === TODELETESTRING){
+          _conflict_mine[path] = _conflict_mine[path] || {value:TODELETESTRING,conflictingPaths:{}};
+          gatherFullMetaConflicts(extension,false,path,path);
+        } else {
+          if(extension === TODELETESTRING){
+            _conflict_theirs[path] = _conflict_theirs[path] || {value:TODELETESTRING,conflictingPaths:{}};
+            gatherFullMetaConflicts(base,true,path,path);
+          } else {
+            //now check for sub-meta conflicts
+
+            //children
+            if(extension.children){
+              if(base.children){
+                mergeMetaItems(path+'/children',base.children,extension.children);
+              } else {
+                //we just simply merge the extension's
+                base.children = extension.children;
+              }
+            }
+            //pointers
+            if(extension.pointers){
+              if(base.pointers){
+                //complete deletion
+                if(base.pointers === TODELETESTRING || extension.pointers === TODELETESTRING){
+                  if(CANON.stringify(base.pointers) !== CANON.stringify(extension.pointers)){
+                    tPath = path+'/pointers';
+                    _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.pointers,conflictingPaths:{}};
+                    _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                    _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.pointers,conflictingPaths:{}};
+                    _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                  }
+                } else {
+                  keys = Object.keys(extension.pointers);
+                  for(i=0;i<keys.length;i++){
+                    if(base.pointers[keys[i]]){
+                      mergeMetaItems(path+'/pointers/'+keys[i],base.pointers[keys[i]],extension.pointers[keys[i]]);
+                    } else {
+                      base.pointers[keys[i]] = extension.pointers[keys[i]];
+                    }
+                  }
+                }
+              } else {
+                base.pointers = extension.pointers;
+              }
+            }
+            //attributes
+            if(extension.attributes){
+              if(base.attributes){
+                if(extension.attributes === TODELETESTRING || base.attributes == TODELETESTRING){
+                  if(CANON.stringify(base.attributes) !== CANON.stringify(extension.attributes)){
+                    tPath = path+'/attributes';
+                    _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.attributes,conflictingPaths:{}};
+                    _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                    _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.attributes,conflictingPaths:{}};
+                    _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                  }
+                } else {
+                  keys = Object.keys(extension.attributes);
+                  for(i=0;i<keys.length;i++){
+                    if(base.attributes[keys[i]]){
+                      if(extension.attributes[keys[i]] === TODELETESTRING || base.attributes[keys[i]] == TODELETESTRING){
+                        if(CANON.stringify(base.attributes[keys[i]]) !== CANON.stringify(extension.attributes[keys[i]])){
+                          tPath = path+'/attributes/'+[keys[i]];
+                          _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.attributes[keys[i]],conflictingPaths:{}};
+                          _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                          _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.attributes[keys[i]],conflictingPaths:{}};
+                          _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                        }
+                      } else {
+                        concatSingleKeyValuePairs(path+'/attributes/'+keys[i],base.attributes[keys[i]],extension.attributes[keys[i]]);
+                      }
+                    } else {
+                      base.attributes[keys[i]] = extension.attributes[keys[i]];
+                    }
+                  }
+
+                }
+              } else {
+                base.attributes = extension.attributes;
+              }
+            }
+
+            //aspects
+            if(extension.aspects){
+              if(base.aspects){
+                if(extension.aspects === TODELETESTRING || base.aspects == TODELETESTRING){
+                  if(CANON.stringify(base.aspects) !== CANON.stringify(extension.aspects)){
+                    tPath = path+'/aspects';
+                    _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.aspects,conflictingPaths:{}};
+                    _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                    _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.aspects,conflictingPaths:{}};
+                    _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                  }
+                } else {
+                  keys = Object.keys(extension.aspects);
+                  for(i=0;i<keys.length;i++){
+                    if(base.aspects[keys[i]]){
+                      if(extension.aspects[keys[i]] === TODELETESTRING || base.aspects[keys[i]] == TODELETESTRING){
+                        if(CANON.stringify(base.aspects[keys[i]]) !== CANON.stringify(extension.aspects[keys[i]])){
+                          tPath = path+'/aspects/'+keys[i];
+                          _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.aspects[keys[i]],conflictingPaths:{}};
+                          _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                          _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.aspects[keys[i]],conflictingPaths:{}};
+                          _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                        }
+                      } else {
+                        paths = Object.keys(extension.aspects[keys[i]]);
+                        for(j=0;j<paths.length;j++){
+                          tPath = getCommonPathForConcat(paths[j]);
+                          if(base.aspects[keys[i]][tPath]){
+                            if(CANON.stringify(base.aspects[keys[i]][tPath]) !== CANON.stringify(extension.aspects[keys[i]][paths[j]])){
+                              t2Path = tPath;
+                              tPath = path+'/aspects/'+keys[i]+'/'+tPath+'//';
+                              _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.aspects[keys[i]][t2Path],conflictingPaths:{}};
+                              _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                              _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.aspects[keys[i]][paths[j]],conflictingPaths:{}};
+                              _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                            }
+                          } else {
+                            base.aspects[keys[i]][tPath] = extension.aspects[keys[i]][paths[j]];
+                          }
+                        }
+                      }
+                    } else {
+                      base.aspects[keys[i]] = extension.aspects[keys[i]];
+                    }
+                  }
+                }
+              } else {
+                base.aspects = extension.aspects;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    function tryToConcatNodeChange(extNode,path){
+      var guid = extNode.guid,
+        oGuids =  getObstructiveGuids(extNode),
+        baseNode = getNodeByGuid(_concat_base,guid),
+        basePath = getPathByGuid(_concat_base,guid,''),
+        i,tPath,
+        relids = getDiffChildrenRelids(extNode);
+
+
+      if(extNode.removed === true){
+        if(baseNode && baseNode.removed !== true){
+          tPath = basePath+'/removed';
+          _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:true,conflictingPaths:{}};
+          oGuids = getWhomIObstructGuids(guid);
+          ASSERT(oGuids.length > 0);
+          for(i=0;i<oGuids.length;i++){
+            baseNode = getNodeByGuid(_concat_base,oGuids[i]);
+            basePath = getPathByGuid(_concat_base,oGuids[i],'');
+            gatherFullNodeConflicts(baseNode,true,basePath,tPath);
+          }
+        } else {
+          //we simply concat the deletion
+          insertAtPath(_concat_base,path,extNode);
+        }
+      } else {
+        if(oGuids.length > 0){
+            for(i=0;i<oGuids.length;i++){
+              baseNode = getNodeByGuid(_concat_base,oGuids[i]);
+              basePath = getPathByGuid(_concat_base,oGuids[i],'');
+              _conflict_mine[basePath+'/removed'] = _conflict_mine[basePath+'/removed'] || {value:true,conflictingPaths:{}};
+              gatherFullNodeConflicts(extNode,false,path,basePath+'/removed');
+            }
+        } else if(baseNode){
+          //here we are able to check the sub-node conflicts
+          //check double moves - we do not care if they moved under the same parent
+          if(extNode.movedFrom){
+            if(baseNode.movedFrom && path !== basePath){
+              _conflict_mine[basePath] = _conflict_mine[basePath] || {value:"move",conflictingPaths:{}};
+              _conflict_theirs[path] = _conflict_theirs[path] || {value:"move",conflictingPaths:{}};
+              _conflict_mine[basePath].conflictingPaths[path]=true;
+              _conflict_theirs[path].conflictingPaths[basePath] = true;
+              //we keep the node where it is, but synchronize the paths
+              path = basePath;
+            } else if(path !== basePath){
+              //first we move the base object to its new path
+              //we copy the moved from information right here
+              baseNode.movedFrom = extNode.movedFrom;
+              insertAtPath(_concat_base,path,baseNode);
+              removePathFromDiff(_concat_base,basePath);
+              baseNode = getNodeByGuid(_concat_base,guid);
+              basePath = getPathByGuid(_concat_base,guid,'');
+              ASSERT(path === basePath);
+            }
+          }
+
+          ASSERT(basePath === path || baseNode.movedFrom === path);
+          path = basePath; //the base was moved
+
+
+          //and now the sub-node conflicts
+          if(extNode.attr){
+            if(baseNode.attr){
+              concatSingleKeyValuePairs(path+'/attr',baseNode.attr,extNode.attr);
+            } else {
+              insertAtPath(_concat_base,path+'/attr',extNode.attr);
+            }
+          }
+          if(extNode.reg){
+            if(baseNode.reg){
+              concatSingleKeyValuePairs(path+'/reg',baseNode.reg,extNode.reg);
+            } else {
+              insertAtPath(_concat_base,path+'/reg',extNode.reg);
+            }
+          }
+          if(extNode.pointer){
+            if(baseNode.pointer){
+              concatSingleKeyValuePairs(path+'/pointer',baseNode.pointer,extNode.pointer);
+            } else {
+              insertAtPath(_concat_base,path+'/pointer',extNode.pointer);
+            }
+          }
+          if(extNode.set){
+            if(baseNode.set){
+              concatSet(path+'/set',baseNode.set,extNode.set);
+            } else {
+              insertAtPath(_concat_base,path+'/set',extNode.set);
+            }
+          }
+          if(extNode.meta){
+            if(baseNode.meta){
+              concatMeta(path+'/meta',baseNode.meta,extNode.meta);
+            } else {
+              insertAtPath(_concat_base,path+'/meta',extNode.meta);
+            }
+          }
+        } else {
+          //there is no basenode so we can concat the whole node
+          insertAtPath(_concat_base,path,getSingleNode(extNode));
+        }
+      }
+
+      //here comes the recursion
+      for(i=0;i<relids.length;i++){
+        tryToConcatNodeChange(extNode[relids[i]],path+'/'+relids[i]);
+      }
+
+    }
+
+    function generateConflictItems(){
+      var items = [],
+        keys, i, j,conflicts;
+      keys = Object.keys(_conflict_mine);
+
+      for(i=0;i<keys.length;i++){
+        conflicts = Object.keys(_conflict_mine[keys[i]].conflictingPaths || {});
+        ASSERT(conflicts.length > 0);
+        for(j=0;j<conflicts.length;j++){
+          items.push({
+            selected:"mine",
+            mine:{
+              path: keys[i],
+              info: keys[i].replace(/\//g," / "),
+              value: _conflict_mine[keys[i]].value
+            },
+            theirs:{
+              path:conflicts[j],
+              info:conflicts[j].replace(/\//g," / "),
+              value:_conflict_theirs[conflicts[j]].value
+            }
+          });
+        }
+      }
+      return items;
+    }
+    function harmonizeConflictPaths(diff){
+      var relids = getDiffChildrenRelids(diff),
+        keys, i,members,j;
+
+      keys = Object.keys(diff.pointer || {});
+      for(i=0;i<keys.length;i++){
+        diff.pointer[keys[i]] = getCommonPathForConcat(diff.pointer[keys[i]]);
+      }
+      keys = Object.keys(diff.set || {});
+      for(i=0;i<keys.length;i++){
+        members = Object.keys(diff.set[keys[i]] || {});
+        for(j=0;j<members.length;j++){
+          if(members[j] !== getCommonPathForConcat(members[j])){
+            diff.set[keys[i]][getCommonPathForConcat(members[j])] = diff.set[keys[i]][members[j]];
+            delete diff.set[keys[i]][members[j]];
+          }
+        }
+      }
+
+      //TODO we have to do the meta as well
+      for(i=0;i<relids.length;i++){
+        harmonizeConflictPaths(diff[relids[i]]);
+      }
+    }
+
+    _core.tryToConcatChanges = function(base,extension){
+      var result = {};
+      _conflict_items = [];
+      _conflict_mine = {};
+      _conflict_theirs = {};
+      _concat_base = base;
+      _concat_extension = extension;
+      _concat_base_removals = {};
+      _concat_moves = {
+        getBaseSourceFromDestination : {},
+        getBaseDestinationFromSource : {},
+        getExtensionSourceFromDestination : {},
+        getExtensionDestinationFromSource : {}
+      };
+      getMoveSources(base,'',_concat_moves.getBaseSourceFromDestination,_concat_moves.getBaseDestinationFromSource);
+      getMoveSources(extension,'',_concat_moves.getExtensionSourceFromDestination,_concat_moves.getExtensionDestinationFromSource);
+      getConcatBaseRemovals(base);
+      tryToConcatNodeChange(_concat_extension,'');
+
+      result.items = generateConflictItems();
+      result.mine = _conflict_mine;
+      result.theirs = _conflict_theirs;
+      result.merge = _concat_base;
+      harmonizeConflictPaths(result.merge);
+      return result;
+    };
+
+    function depthOfPath(path){
+      ASSERT(typeof path === "string");
+      return path.split('/').length;
+    }
+    function resolveMoves(resolveObject){
+      var i,moves = {},filteredItems=[],path,
+        moveBaseOfPath = function(path){
+          var keys = Object.keys(moves),
+            i,maxDepth = -1,base=null;
+          for(i=0;i<keys.length;i++){
+            if(path.indexOf(keys[i]) === 1 && depthOfPath(keys[i])>maxDepth){
+              base = keys[i];
+              maxDepth = depthOfPath(keys[i]);
+            }
+          }
+          return base;
+        };
+      for(i=0;i<resolveObject.items.length;i++){
+        if(resolveObject.items[i].selected === "theirs" && resolveObject.items[i].theirs.value === "move"){
+          moves[resolveObject.items[i].mine.path] = resolveObject.items[i].theirs.path;
+          //and we also make the move
+          insertAtPath(resolveObject.merge,resolveObject.items[i].theirs.path,getPathOfDiff(resolveObject.merge,resolveObject.items[i].mine.path));
+          removePathFromDiff(resolveObject.merge,resolveObject.items[i].mine.path);
+        } else {
+          filteredItems.push(resolveObject.items[i]);
+        }
+      }
+      resolveObject.items = filteredItems;
+
+      //in a second run we modify all sub-path of the moves paths
+      for(i=0;i<resolveObject.items.length;i++){
+        if(resolveObject.items[i].selected === "theirs"){
+          path = moveBaseOfPath(resolveObject.items[i].theirs.path);
+          if(path){
+            resolveObject.items[i].theirs.path = resolveObject.items[i].theirs.path.replace(path,moves[path]);
+          }
+          path = moveBaseOfPath(resolveObject.items[i].mine.path);
+          if(path){
+            resolveObject.items[i].mine.path = resolveObject.items[i].mine.path.replace(path,moves[path]);
+          }
+        }
+      }
+    }
+
+    /*function resolveConflictItem(diff,conflictItem){
+
+      //let's start with the easy ones :)
+
+      //if the two path is equal, the we can simply replace the base value
+      if(conflictItem.mine.path === conflictItem.theirs.path){
+        insertAtPath(diff,conflictItem.theirs.path,conflictItem.theirs.value);
+      }
+    }*/
+
+    _core.applyResolution = function(conflictObject){
+      //we apply conflict items to the merge and return it as a diff
+      var i;
+      resolveMoves(conflictObject);
+      for(i=0;i<conflictObject.items.length;i++){
+        if(conflictObject.items[i].selected !== "mine"){
+          removePathFromDiff(conflictObject.merge,conflictObject.items[i].mine.path);
+          insertAtPath(conflictObject.merge,conflictObject.items[i].theirs.path,conflictObject.items[i].theirs.value);
+        }
+      }
+
+      return conflictObject.merge;
+    };
+
+
+    //we remove some low level functions as they should not be used on high level
+    delete _core.overlayInsert;
+
+    return _core;
+  }
+
+  return diffCore;
+});
+
 /**
  * Created by tkecskes on 12/11/2014.
  */
@@ -9313,8 +11776,20 @@ define('core/coretreeloader',[ "util/assert", "core/core", "core/tasync" ], func
  * Author: Tamas Kecskes
  */
 
-define('core/core',["core/corerel",'core/setcore','core/guidcore','core/nullpointercore','core/coreunwrap', 'core/descriptorcore', 'core/coretype', 'core/constraintcore', 'core/coretree', 'core/metacore', 'core/coretreeloader'],
-			function (CoreRel, Set, Guid, NullPtr, UnWrap, Descriptor, Type, Constraint, CoreTree, MetaCore, TreeLoader)
+define('core/core',[
+'core/corerel',
+'core/setcore',
+'core/guidcore',
+'core/nullpointercore',
+'core/coreunwrap',
+'core/descriptorcore',
+'core/coretype',
+'core/constraintcore',
+'core/coretree',
+'core/metacore',
+'core/corediff',
+'core/coretreeloader'],
+function (CoreRel, Set, Guid, NullPtr, UnWrap, Descriptor, Type, Constraint, CoreTree, MetaCore, Diff, TreeLoader)
 {
     
 
@@ -9322,7 +11797,7 @@ define('core/core',["core/corerel",'core/setcore','core/guidcore','core/nullpoin
         options = options || {};
         options.usetype = options.usertype || 'nodejs';
 
-        var coreCon = new TreeLoader(new MetaCore(new Constraint(new Descriptor(new Guid(new Set(new NullPtr(new Type(new NullPtr(new CoreRel(new CoreTree(storage, options)))))))))));
+        var coreCon = new TreeLoader(new Diff(new MetaCore(new Constraint(new Descriptor(new Guid(new Set(new NullPtr(new Type(new NullPtr(new CoreRel(new CoreTree(storage, options))))))))))));
 
         if(options.usertype === 'tasync'){
             return coreCon;
@@ -9341,560 +11816,565 @@ define('core/core',["core/corerel",'core/setcore','core/guidcore','core/nullpoin
  */
 
 define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) {
-    
+  
 
-    function Database (options) {
-        ASSERT(typeof options === "object");
+  function Database(options) {
+    ASSERT(typeof options === "object");
 
-        options.type = options.type || "browser";
-        options.timeout = options.timeout || 100000;
+    options.type = options.type || "browser";
+    options.timeout = options.timeout || 100000;
 
-        var _hostAddress = null;
-        if(options.type === "browser") {
-            _hostAddress = options.host || window.location.protocol + '//' + window.location.host;
+    var _hostAddress = null;
+    if (options.type === "browser") {
+      _hostAddress = options.host || window.location.protocol + '//' + window.location.host;
+    } else {
+      _hostAddress = options.host + (options.port ? ':' + options.port : "");
+    }
+
+
+    var socketConnected = false,
+      socket = null,
+      status = null,
+      reconnect = false,
+      getDbStatusCallbacks = {},
+      callbacks = {},
+      getBranchHashCallbacks = {},
+      IO = null,
+      projects = {},
+      references = {},
+      ERROR_DISCONNECTED = 'The socket.io is disconnected',
+      ERROR_TIMEOUT = "no valid response arrived in time",
+      STATUS_NETWORK_DISCONNECTED = "socket.io is disconnected";
+
+    function clearDbCallbacks() {
+      var myCallbacks = [];
+      for (var i in getDbStatusCallbacks) {
+        myCallbacks.push(getDbStatusCallbacks[i]);
+        clearTimeout(getDbStatusCallbacks[i].to);
+      }
+      getDbStatusCallbacks = {};
+      for (i = 0; i < myCallbacks.length; i++) {
+        myCallbacks[i].cb(null, status);
+      }
+    }
+
+    function clearCallbacks() {
+      var myCallbacks = [];
+      for (var i in callbacks) {
+        myCallbacks.push(callbacks[i]);
+        clearTimeout(callbacks[i].to);
+      }
+      callbacks = {};
+      for (i = 0; i < myCallbacks.length; i++) {
+        myCallbacks[i].cb(ERROR_DISCONNECTED);
+      }
+    }
+
+    function reSendGetBranches() {
+      //this function should be called after reconnecting
+      for (var i in getBranchHashCallbacks) {
+        projects[getBranchHashCallbacks[i].project].getBranchHash(i, getBranchHashCallbacks[i].oldhash, getBranchHashCallbacks[i].cb);
+      }
+    }
+
+    function callbackTimeout(guid) {
+      var cb = null, oldhash = "";
+      if (callbacks[guid]) {
+        cb = callbacks[guid].cb;
+        delete callbacks[guid];
+        cb(new Error(ERROR_TIMEOUT));
+      } else if (getDbStatusCallbacks[guid]) {
+        cb = getDbStatusCallbacks[guid].cb;
+        delete getDbStatusCallbacks[guid];
+        cb(null, status);
+      } else if (getBranchHashCallbacks[guid]) {
+        cb = getBranchHashCallbacks[guid].cb;
+        oldhash = getBranchHashCallbacks[guid].oldhash;
+        delete getBranchHashCallbacks[guid];
+        cb(new Error(ERROR_TIMEOUT), null, null);
+      }
+    }
+
+    function registerProject(id, name) {
+      if (!references[name]) {
+        references[name] = [];
+      }
+      if (references[name].indexOf(id) === -1) {
+        references[name].push(id);
+      }
+    }
+
+    function unRegisterProject(id, name) {
+      if (references[name]) {
+        var index = references[name].indexOf(id);
+        if (index > -1) {
+          references[name].splice(index, 1);
+          if (references[name].length === 0) {
+            delete references[name];
+            return true;
+          } else {
+            return false;
+          }
         } else {
-            _hostAddress = options.host + (options.port ? ':'+options.port : "");
+          return false;
         }
+      } else {
+        return false;
+      }
+    }
 
+    function openDatabase(callback) {
+      ASSERT(typeof callback === "function");
 
-        var socketConnected = false,
-            socket = null,
-            status = null,
-            reconnect = false,
-            getDbStatusCallbacks = {},
-            callbacks = {},
-            getBranchHashCallbacks = {},
-            IO = null,
-            projects = {},
-            references = {},
-            ERROR_DISCONNECTED = 'The socket.io is disconnected',
-            ERROR_TIMEOUT = "no valid response arrived in time",
-            STATUS_NETWORK_DISCONNECTED = "socket.io is disconnected";
-
-        function clearDbCallbacks () {
-            var myCallbacks = [];
-            for ( var i in getDbStatusCallbacks) {
-                myCallbacks.push(getDbStatusCallbacks[i]);
-                clearTimeout(getDbStatusCallbacks[i].to);
-            }
-            getDbStatusCallbacks = {};
-            for (i = 0; i < myCallbacks.length; i++) {
-                myCallbacks[i].cb(null, status);
-            }
+      if (socket) {
+        if (socketConnected) {
+          callback(null);
+        } else {
+          //we should try to reconnect
+          callback(null);
+          socket.socket.reconnect();
         }
+      } else {
+        var guid = GUID(), firstConnection = true;
+        callbacks[guid] = {
+          cb: callback,
+          to: setTimeout(callbackTimeout, options.timeout, guid)
+        };
 
-        function clearCallbacks () {
-            var myCallbacks = [];
-            for ( var i in callbacks) {
-                myCallbacks.push(callbacks[i]);
-                clearTimeout(callbacks[i].to);
+        var IOReady = function () {
+          socket = IO.connect(_hostAddress, {
+            'connect timeout': 10,
+            'reconnection delay': 1,
+            'force new connection': true,
+            'reconnect': false,
+            'query': "webGMESessionId=" + options.webGMESessionId
+          });
+
+          socket.on('connect', function () {
+            socketConnected = true;
+            if (firstConnection) {
+              firstConnection = false;
+              socket.emit('openDatabase', function (err) {
+                if (!err) {
+                  socket.emit('getDatabaseStatus', null, function (err, newstatus) {
+                    if (!err && newstatus) {
+                      status = newstatus;
+                    }
+                    if (callbacks[guid]) {
+                      clearTimeout(callbacks[guid].to);
+                      delete callbacks[guid];
+                      callback(err);
+                    }
+                  });
+                } else {
+                  socket.emit('disconnect');
+                  socket = null;
+                  if (callbacks[guid]) {
+                    clearTimeout(callbacks[guid].to);
+                    delete callbacks[guid];
+                    callback(err);
+                  }
+                }
+              });
+            } else {
+              socket.emit('getDatabaseStatus', status, function (err, newstatus) {
+                if (!err && newstatus) {
+                  status = newstatus;
+                  clearDbCallbacks();
+                  reSendGetBranches();
+                }
+              });
             }
-            callbacks = {};
-            for (i = 0; i < myCallbacks.length; i++) {
-                myCallbacks[i].cb(ERROR_DISCONNECTED);
-            }
+          });
+
+          socket.on('disconnect', function () {
+            status = STATUS_NETWORK_DISCONNECTED;
+            socketConnected = false;
+            clearDbCallbacks();
+            clearCallbacks();
+            //socket.socket.reconnect();
+          });
+        };
+
+        if (options.type === 'browser') {
+          require([ _hostAddress + "/socket.io/socket.io.js" ], function () {
+            IO = io;
+            IOReady();
+          });
+        } else {
+          /*IO = require("socket.io-client");
+           IOReady();*/
+          require([ 'socket.io-client' ], function (io) {
+            IO = io;
+            IOReady();
+          });
         }
+      }
+    }
 
-        function reSendGetBranches () {
-            //this function should be called after reconnecting
-            for ( var i in getBranchHashCallbacks) {
-                projects[getBranchHashCallbacks[i].project].getBranchHash(i, getBranchHashCallbacks[i].oldhash, getBranchHashCallbacks[i].cb);
+    function closeDatabase(callback) {
+      callback = callback || function () {
+      };
+      if (socketConnected) {
+        var guid = GUID();
+        callbacks[guid] = {
+          cb: callback,
+          to: setTimeout(callbackTimeout, options.timeout, guid)
+        };
+        socket.emit('closeDatabase', function (err) {
+          if (callbacks[guid]) {
+            clearTimeout(callbacks[guid].to);
+            delete callbacks[guid];
+            callback(err);
+          }
+        });
+      } else {
+        callback(new Error(ERROR_DISCONNECTED));
+      }
+    }
+
+    function fsyncDatabase(callback) {
+      ASSERT(typeof callback === 'function');
+      if (socketConnected) {
+        var guid = GUID();
+        callbacks[guid] = {
+          cb: callback,
+          to: setTimeout(callbackTimeout, options.timeout, guid)
+        };
+        socket.emit('fsyncDatabase', function (err) {
+          if (callbacks[guid]) {
+            clearTimeout(callbacks[guid].to);
+            delete callbacks[guid];
+            callback(err);
+          }
+        });
+      } else {
+        callback(new Error(ERROR_DISCONNECTED));
+      }
+    }
+
+    function getDatabaseStatus(oldstatus, callback) {
+      ASSERT(typeof callback === 'function');
+      if (status !== oldstatus) {
+        callback(null, status);
+      } else {
+        var guid = GUID();
+        getDbStatusCallbacks[guid] = {
+          cb: callback,
+          to: setTimeout(callbackTimeout, options.timeout, guid)
+        };
+        if (status !== STATUS_NETWORK_DISCONNECTED) {
+          socket.emit('getDatabaseStatus', oldstatus, function (err, newstatus) {
+            if (!err && newstatus) {
+              status = newstatus;
             }
-        }
-
-        function callbackTimeout (guid) {
-            var cb = null, oldhash = "";
             if (callbacks[guid]) {
-                cb = callbacks[guid].cb;
+              clearTimeout(getDbStatusCallbacks[guid].to);
+              delete getDbStatusCallbacks[guid];
+              callback(err, newstatus);
+              //TODO why this common error check is missing and what was redo meant???
+              /*commonErrorCheck(err, function (err2, needRedo) {
+               if (needRedo) {
+               getDatabaseStatus(oldstatus, callback);
+               } else {
+               callback(err2, newstatus);
+               }
+               });*/
+            }
+          });
+        }
+      }
+    }
+
+    function getProjectNames(callback) {
+      ASSERT(typeof callback === 'function');
+      if (socketConnected) {
+        var guid = GUID();
+        callbacks[guid] = {
+          cb: callback,
+          to: setTimeout(callbackTimeout, options.timeout, guid)
+        };
+        socket.emit('getProjectNames', function (err, names) {
+          if (callbacks[guid]) {
+            clearTimeout(callbacks[guid].to);
+            delete callbacks[guid];
+            callback(err, names);
+          }
+        });
+      } else {
+        callback(new Error(ERROR_DISCONNECTED));
+      }
+    }
+
+    function getAllowedProjectNames(callback) {
+      ASSERT(typeof callback === 'function');
+      if (socketConnected) {
+        var guid = GUID();
+        callbacks[guid] = {
+          cb: callback,
+          to: setTimeout(callbackTimeout, options.timeout, guid)
+        };
+        socket.emit('getAllowedProjectNames', function (err, names) {
+          if (callbacks[guid]) {
+            clearTimeout(callbacks[guid].to);
+            delete callbacks[guid];
+            callback(err, names);
+          }
+        });
+      } else {
+        callback(new Error(ERROR_DISCONNECTED));
+      }
+    }
+
+    function getAuthorizationInfo(name, callback) {
+      ASSERT(typeof callback === 'function');
+      if (socketConnected) {
+        var guid = GUID();
+        callbacks[guid] = {
+          cb: callback,
+          to: setTimeout(callbackTimeout, options.timeout, guid)
+        };
+        socket.emit('getAuthorizationInfo', name, function (err, authInfo) {
+          if (callbacks[guid]) {
+            clearTimeout(callbacks[guid].to);
+            delete callbacks[guid];
+            callback(err, authInfo);
+          }
+        });
+      } else {
+        callback(new Error(ERROR_DISCONNECTED));
+      }
+    }
+
+    function deleteProject(project, callback) {
+      ASSERT(typeof callback === 'function');
+      if (socketConnected) {
+        var guid = GUID();
+        callbacks[guid] = {
+          cb: callback,
+          to: setTimeout(callbackTimeout, options.timeout, guid)
+        };
+        socket.emit('deleteProject', project, function (err) {
+          if (callbacks[guid]) {
+            clearTimeout(callbacks[guid].to);
+            delete callbacks[guid];
+            callback(err);
+          }
+        });
+      } else {
+        callback(new Error(ERROR_DISCONNECTED));
+      }
+    }
+
+    function getNextServerEvent(latestGuid, callback) {
+      if (socketConnected) {
+        var guid = GUID();
+        callbacks[guid] = {
+          cb: callback,
+          to: setTimeout(callbackTimeout, options.timeout, guid)
+        };
+        socket.emit('getNextServerEvent', latestGuid, function (err, newGuid, eventParams) {
+          if (callbacks[guid]) {
+            clearTimeout(callbacks[guid].to);
+            delete callbacks[guid];
+            callback(err, newGuid, eventParams);
+          }
+        });
+      }
+    }
+
+    function openProject(project, callback) {
+      ASSERT(typeof callback === 'function');
+      var ownId = GUID();
+      if (projects[project]) {
+        registerProject(ownId, project);
+        callback(null, projects[project]);
+      } else {
+        if (socketConnected) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
+          socket.emit('openProject', project, function (err) {
+            if (!err) {
+              registerProject(ownId, project);
+              if (callbacks[guid]) {
+                clearTimeout(callbacks[guid].to);
                 delete callbacks[guid];
-                cb(new Error(ERROR_TIMEOUT));
-            } else if (getDbStatusCallbacks[guid]) {
-                cb = getDbStatusCallbacks[guid].cb;
-                delete getDbStatusCallbacks[guid];
-                cb(null, status);
-            } else if (getBranchHashCallbacks[guid]) {
-                cb = getBranchHashCallbacks[guid].cb;
-                oldhash = getBranchHashCallbacks[guid].oldhash;
-                delete getBranchHashCallbacks[guid];
-                cb(new Error(ERROR_TIMEOUT), null, null);
-            }
-        }
-
-        function registerProject (id, name) {
-            if (!references[name]) {
-                references[name] = [];
-            }
-            if (references[name].indexOf(id) === -1) {
-                references[name].push(id);
-            }
-        }
-
-        function unRegisterProject (id, name) {
-            if (references[name]) {
-                var index = references[name].indexOf(id);
-                if (index > -1) {
-                    references[name].splice(index, 1);
-                    if (references[name].length === 0) {
-                        delete references[name];
-                        return true;
-                    } else {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
-
-        function openDatabase (callback) {
-            ASSERT(typeof callback === "function");
-
-            if (socket) {
-                if (socketConnected) {
-                    callback(null);
-                } else {
-                    //we should try to reconnect
-                    callback(null);
-                    socket.socket.reconnect();
-                }
-            } else {
-                var guid = GUID(), firstConnection = true;
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
+                projects[project] = {
+                  fsyncDatabase: fsync,
+                  getDatabaseStatus: getDatabaseStatus,
+                  closeProject: closeProject,
+                  loadObject: loadObject,
+                  insertObject: insertObject,
+                  getInfo: getInfo,
+                  setInfo: setInfo,
+                  findHash: findHash,
+                  dumpObjects: dumpObjects,
+                  getBranchNames: getBranchNames,
+                  getBranchHash: getBranchHash,
+                  setBranchHash: setBranchHash,
+                  getCommits: getCommits,
+                  makeCommit: makeCommit,
+                  getCommonAncestorCommit: getCommonAncestorCommit,
+                  ID_NAME: "_id"
                 };
-
-                var IOReady = function () {
-                    socket = IO.connect(_hostAddress,{
-                        'connect timeout': 10,
-                        'reconnection delay': 1,
-                        'force new connection': true,
-                        'reconnect': false,
-                        'query':"webGMESessionId="+options.webGMESessionId
-                    });
-
-                    socket.on('connect', function () {
-                        socketConnected = true;
-                        if (firstConnection) {
-                            firstConnection = false;
-                            socket.emit('openDatabase', function (err) {
-                                if (!err) {
-                                    socket.emit('getDatabaseStatus', null, function (err, newstatus) {
-                                        if (!err && newstatus) {
-                                            status = newstatus;
-                                        }
-                                        if (callbacks[guid]) {
-                                            clearTimeout(callbacks[guid].to);
-                                            delete callbacks[guid];
-                                            callback(err);
-                                        }
-                                    });
-                                } else {
-                                    socket.emit('disconnect');
-                                    socket = null;
-                                    if (callbacks[guid]) {
-                                        clearTimeout(callbacks[guid].to);
-                                        delete callbacks[guid];
-                                        callback(err);
-                                    }
-                                }
-                            });
-                        } else {
-                            socket.emit('getDatabaseStatus', status, function (err, newstatus) {
-                                if (!err && newstatus) {
-                                    status = newstatus;
-                                    clearDbCallbacks();
-                                    reSendGetBranches();
-                                }
-                            });
-                        }
-                    });
-
-                    socket.on('disconnect', function () {
-                        status = STATUS_NETWORK_DISCONNECTED;
-                        socketConnected = false;
-                        clearDbCallbacks();
-                        clearCallbacks();
-                        //socket.socket.reconnect();
-                    });
-                };
-
-                if (options.type === 'browser') {
-                    require([ _hostAddress + "/socket.io/socket.io.js" ], function () {
-                        IO = io;
-                        IOReady();
-                    });
-                } else {
-                    /*IO = require("socket.io-client");
-                     IOReady();*/
-                    require([ 'socket.io-client' ], function (io) {
-                        IO = io;
-                        IOReady();
-                    });
-                }
-            }
-        }
-
-        function closeDatabase (callback) {
-            callback = callback || function () {
-            };
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
-                };
-                socket.emit('closeDatabase', function (err) {
-                    if(callbacks[guid]){
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function fsyncDatabase (callback) {
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
-                };
-                socket.emit('fsyncDatabase', function (err) {
-                    if(callbacks[guid]){
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function getDatabaseStatus (oldstatus, callback) {
-            ASSERT(typeof callback === 'function');
-            if (status !== oldstatus) {
-                callback(null, status);
-            } else {
-                var guid = GUID();
-                getDbStatusCallbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
-                };
-                if (status !== STATUS_NETWORK_DISCONNECTED) {
-                    socket.emit('getDatabaseStatus', oldstatus, function (err, newstatus) {
-                        if (!err && newstatus) {
-                            status = newstatus;
-                        }
-                        if (callbacks[guid]) {
-                            clearTimeout(getDbStatusCallbacks[guid].to);
-                            delete getDbStatusCallbacks[guid];
-                            callback(err,newstatus);
-                            //TODO why this common error check is missing and what was redo meant???
-                            /*commonErrorCheck(err, function (err2, needRedo) {
-                                if (needRedo) {
-                                    getDatabaseStatus(oldstatus, callback);
-                                } else {
-                                    callback(err2, newstatus);
-                                }
-                            });*/
-                        }
-                    });
-                }
-            }
-        }
-
-        function getProjectNames (callback) {
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
-                };
-                socket.emit('getProjectNames', function (err, names) {
-                    if(callbacks[guid]){
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err, names);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function getAllowedProjectNames (callback){
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
-                };
-                socket.emit('getAllowedProjectNames', function (err, names) {
-                    if(callbacks[guid]){
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err, names);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-        function getAuthorizationInfo (name,callback){
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
-                };
-                socket.emit('getAuthorizationInfo', name, function (err, authInfo) {
-                    if(callbacks[guid]){
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err, authInfo);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function deleteProject (project, callback) {
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
-                };
-                socket.emit('deleteProject', project, function (err) {
-                    if(callbacks[guid]){
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function getNextServerEvent(latestGuid,callback){
-            if(socketConnected){
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout,options.timeout, guid)
-                };
-                socket.emit('getNextServerEvent',latestGuid,function(err,newGuid,eventParams){
-                    if(callbacks[guid]){
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err,newGuid,eventParams);
-                    }
-                });
-            }
-        }
-        function openProject (project, callback) {
-            ASSERT(typeof callback === 'function');
-            var ownId = GUID();
-            if (projects[project]) {
-                registerProject(ownId, project);
                 callback(null, projects[project]);
+              }
             } else {
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
-                    };
-                    socket.emit('openProject', project, function (err) {
-                        if (!err) {
-                            registerProject(ownId, project);
-                            if (callbacks[guid]) {
-                                clearTimeout(callbacks[guid].to);
-                                delete callbacks[guid];
-                                projects[project] = {
-                                    fsyncDatabase: fsync,
-                                    getDatabaseStatus: getDatabaseStatus,
-                                    closeProject: closeProject,
-                                    loadObject: loadObject,
-                                    insertObject: insertObject,
-                                    getInfo: getInfo,
-                                    setInfo: setInfo,
-                                    findHash: findHash,
-                                    dumpObjects: dumpObjects,
-                                    getBranchNames: getBranchNames,
-                                    getBranchHash: getBranchHash,
-                                    setBranchHash: setBranchHash,
-                                    getCommits: getCommits,
-                                    makeCommit: makeCommit,
-                                    ID_NAME: "_id"
-                                };
-                                callback(null, projects[project]);
-                            }
-                        } else {
-                            callback(err, null);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
+              callback(err, null);
             }
+          });
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
+        }
+      }
 
-            //functions
+      //functions
             function fsync(callback){
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
-                    };
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
                     flushSaveBucket();
-                    socket.emit('fsyncDatabase', function (err) {
-                        if(callbacks[guid]){
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
+          socket.emit('fsyncDatabase', function (err) {
+            if(callbacks[guid]){
+              clearTimeout(callbacks[guid].to);
+              delete callbacks[guid];
+              callback(err);
+            }
+          });
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
+        }
+      }
+
+      function getDatabaseStatus(oldstatus, callback) {
+        ASSERT(typeof callback === 'function');
+        if (status !== oldstatus) {
+          callback(null, status);
+        } else {
+          var guid = GUID();
+          getDbStatusCallbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
+          if (socketConnected) {
+            socket.emit('getDatabaseStatus', oldstatus, function (err, newstatus) {
+              if (getDbStatusCallbacks[guid]) {
+                clearTimeout(getDbStatusCallbacks[guid].to);
+                delete getDbStatusCallbacks[guid];
+                if (!err && newstatus) {
+                  status = newstatus;
                 }
-            }
+                callback(err, newstatus);
+              }
+            });
+          }
+        }
+      }
 
-            function getDatabaseStatus (oldstatus, callback) {
-                ASSERT(typeof callback === 'function');
-                if (status !== oldstatus) {
-                    callback(null, status);
-                } else {
-                    var guid = GUID();
-                    getDbStatusCallbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
-                    };
-                    if (socketConnected) {
-                        socket.emit('getDatabaseStatus', oldstatus, function (err, newstatus) {
-                            if (getDbStatusCallbacks[guid]) {
-                                clearTimeout(getDbStatusCallbacks[guid].to);
-                                delete getDbStatusCallbacks[guid];
-                                if (!err && newstatus) {
-                                    status = newstatus;
-                                }
-                                callback(err, newstatus);
-                            }
-                        });
-                    }
-                }
+      function closeProject(callback) {
+        callback = callback || function () {
+        };
+        if (unRegisterProject(ownId, project)) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
+          socket.emit('closeProject', project, function (err) {
+            if (callbacks[guid]) {
+              clearTimeout(callbacks[guid].to);
+              delete callbacks[guid];
+              callback(err);
             }
+          });
+        } else {
+          callback(null);
+        }
+      }
 
-            function closeProject (callback) {
-                callback = callback || function () {
-                };
-                if (unRegisterProject(ownId, project)) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
-                    };
-                    socket.emit('closeProject', project, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(null);
-                }
-            }
+      function _loadObject(hash, callback) {
+        socket.emit('loadObject', project, hash, callback);
+      }
 
-            function _loadObject(hash,callback){
-                socket.emit('loadObject',project,hash,callback);
-            }
-            function loadObject (hash, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    if(loadBucketSize === 0){
-                        ++loadBucketSize;
-                        loadBucket.push({hash:hash,cb:callback});
-                        loadBucketTimer = setTimeout(function(){
-                            var myBucket = loadBucket;
-                            loadBucket = [];
-                            loadBucketTimer = null;
-                            loadBucketSize = 0;
-                            loadObjects(myBucket);
-                        },10);
-                    } else if (loadBucketSize === 99){
-                        loadBucket.push({hash:hash,cb:callback});
-                        var myBucket = loadBucket;
-                        loadBucket = [];
-                        clearTimeout(loadBucketTimer);
-                        loadBucketTimer = null;
-                        loadBucketSize = 0;
-                        loadObjects(myBucket);
-                    } else {
-                        loadBucket.push({hash:hash,cb:callback});
-                        ++loadBucketSize;
-                    }
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
+      function loadObject(hash, callback) {
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          if (loadBucketSize === 0) {
+            ++loadBucketSize;
+            loadBucket.push({hash: hash, cb: callback});
+            loadBucketTimer = setTimeout(function () {
+              var myBucket = loadBucket;
+              loadBucket = [];
+              loadBucketTimer = null;
+              loadBucketSize = 0;
+              loadObjects(myBucket);
+            }, 10);
+          } else if (loadBucketSize === 99) {
+            loadBucket.push({hash: hash, cb: callback});
+            var myBucket = loadBucket;
+            loadBucket = [];
+            clearTimeout(loadBucketTimer);
+            loadBucketTimer = null;
+            loadBucketSize = 0;
+            loadObjects(myBucket);
+          } else {
+            loadBucket.push({hash: hash, cb: callback});
+            ++loadBucketSize;
+          }
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
+        }
+      }
 
-            var loadBucket = [],
-                loadBucketSize = 0,
-                loadBucketTimer;
-            function loadObjects (hashedObjects){
-                var hashes = {},i;
-                for(i=0;i<hashedObjects.length;i++){
-                    hashes[hashedObjects[i].hash] = true;
-                }
-                hashes = Object.keys(hashes);
-                socket.emit('loadObjects',project,hashes,function(err,results){
-                    for(i=0;i<hashedObjects.length;i++){
-                        hashedObjects[i].cb(err,results[hashedObjects[i].hash]);
-                    }
-                });
+      var loadBucket = [],
+        loadBucketSize = 0,
+        loadBucketTimer;
 
-            }
+      function loadObjects(hashedObjects) {
+        var hashes = {}, i;
+        for (i = 0; i < hashedObjects.length; i++) {
+          hashes[hashedObjects[i].hash] = true;
+        }
+        hashes = Object.keys(hashes);
+        socket.emit('loadObjects', project, hashes, function (err, results) {
+          for (i = 0; i < hashedObjects.length; i++) {
+            hashedObjects[i].cb(err, results[hashedObjects[i].hash]);
+          }
+        });
 
-            function insertObject (object, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    if(saveBucketSize === 0){
-                        ++saveBucketSize;
-                        saveBucket.push({object:object,cb:callback});
-                        saveBucketTimer = setTimeout(function(){
-                           flushSaveBucket();
-                        },10);
-                    } else if (saveBucketSize === 99){
-                        saveBucket.push({object:object,cb:callback});
-                        flushSaveBucket();
-                    } else {
-                        ++saveBucketSize;
-                        saveBucket.push({object:object,cb:callback});
-                    }
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
+      }
 
-            var saveBucket = [],
-                saveBucketSize = 0,
-                saveBucketTimer;
+      function insertObject(object, callback) {
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          if (saveBucketSize === 0) {
+            ++saveBucketSize;
+            saveBucket.push({object: object, cb: callback});
+            saveBucketTimer = setTimeout(function () {
+              flushSaveBucket();
+            }, 10);
+          } else if (saveBucketSize === 99) {
+            saveBucket.push({object: object, cb: callback});
+              flushSaveBucket();
+          } else {
+            ++saveBucketSize;
+            saveBucket.push({object: object, cb: callback});
+          }
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
+        }
+      }
+
+      var saveBucket = [],
+        saveBucketSize = 0,
+        saveBucketTimer;
 
             function flushSaveBucket(){
                 var myBucket = saveBucket;
@@ -9911,36 +12391,37 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 }
             }
 
-            function insertObjects (objects) {
-                var storeObjects = [],i;
-                for(i=0;i<objects.length;i++){
-                    storeObjects.push(objects[i].object);
-                }
-                socket.emit('insertObjects',project,storeObjects,function(err){
-                    for(i=0;i<objects.length;i++){
-                        objects[i].cb(err);
-                    }
-                });
+      function insertObjects(objects) {
+        var storeObjects = [], i;
+        for (i = 0; i < objects.length; i++) {
+          storeObjects.push(objects[i].object);
+        }
+        socket.emit('insertObjects', project, storeObjects, function (err) {
+          for (i = 0; i < objects.length; i++) {
+            objects[i].cb(err);
+          }
+        });
+      }
+
+      function _insertObject(object, callback) {
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
+          socket.emit('insertObject', project, object, function (err) {
+            if (callbacks[guid]) {
+              clearTimeout(callbacks[guid].to);
+              delete callbacks[guid];
+              callback(err);
             }
-            function _insertObject (object, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
-                    };
-                    socket.emit('insertObject', project, object, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
+          });
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
+        }
+      }
             function getInfo(callback){
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
@@ -9980,251 +12461,276 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 }
             }
 
-            function findHash (beginning, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
-                    };
-                    socket.emit('findHash', project, beginning, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
+      function findHash(beginning, callback) {
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
+          socket.emit('findHash', project, beginning, function (err) {
+            if (callbacks[guid]) {
+              clearTimeout(callbacks[guid].to);
+              delete callbacks[guid];
+              callback(err);
             }
+          });
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
+        }
+      }
 
-            function dumpObjects (callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
-                    };
-                    socket.emit('dumpObjects', project, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
+      function dumpObjects(callback) {
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
+          socket.emit('dumpObjects', project, function (err) {
+            if (callbacks[guid]) {
+              clearTimeout(callbacks[guid].to);
+              delete callbacks[guid];
+              callback(err);
             }
+          });
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
+        }
+      }
 
-            function getBranchNames (callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
-                    };
-                    socket.emit('getBranchNames', project, function (err, names) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err, names);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
+      function getBranchNames(callback) {
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
+          socket.emit('getBranchNames', project, function (err, names) {
+            if (callbacks[guid]) {
+              clearTimeout(callbacks[guid].to);
+              delete callbacks[guid];
+              callback(err, names);
             }
+          });
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
+        }
+      }
 
-            function getBranchHash (branch, oldhash, callback) {
-                ASSERT(typeof callback === 'function');
-                var guid = GUID();
-                if (getBranchHashCallbacks[branch]) {
-                    //internal hack for recalling
-                    guid = branch;
-                    branch = getBranchHashCallbacks[guid].branch;
-                } else {
-                    getBranchHashCallbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid),
-                        branch: branch,
-                        oldhash: oldhash,
-                        project: project
-                    };
-                }
+      function getBranchHash(branch, oldhash, callback) {
+        ASSERT(typeof callback === 'function');
+        var guid = GUID();
+        if (getBranchHashCallbacks[branch]) {
+          //internal hack for recalling
+          guid = branch;
+          branch = getBranchHashCallbacks[guid].branch;
+        } else {
+          getBranchHashCallbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid),
+            branch: branch,
+            oldhash: oldhash,
+            project: project
+          };
+        }
 
-                if (socketConnected) {
-                    socket.emit('getBranchHash', project, branch, oldhash, function (err, newhash, forkedhash) {
-                        if (getBranchHashCallbacks[guid]) {
-                            clearTimeout(getBranchHashCallbacks[guid].to);
-                            delete getBranchHashCallbacks[guid];
-                            callback(err, newhash, forkedhash);
-                        }
-                    });
-                }
-
+        if (socketConnected) {
+          socket.emit('getBranchHash', project, branch, oldhash, function (err, newhash, forkedhash) {
+            if (getBranchHashCallbacks[guid]) {
+              clearTimeout(getBranchHashCallbacks[guid].to);
+              delete getBranchHashCallbacks[guid];
+              callback(err, newhash, forkedhash);
             }
+          });
+        }
 
-            function setBranchHash (branch, oldhash, newhash, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
-                    };
+      }
+
+      function setBranchHash(branch, oldhash, newhash, callback) {
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
                     flushSaveBucket();
-                    socket.emit('setBranchHash', project, branch, oldhash, newhash, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
+          socket.emit('setBranchHash', project, branch, oldhash, newhash, function (err) {
+            if (callbacks[guid]) {
+              clearTimeout(callbacks[guid].to);
+              delete callbacks[guid];
+              callback(err);
             }
+          });
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
+        }
+      }
 
-            function getCommits (before, number, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
-                    };
-                    socket.emit('getCommits', project, before, number, function (err, commits) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err, commits);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
+      function getCommits(before, number, callback) {
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
+          socket.emit('getCommits', project, before, number, function (err, commits) {
+            if (callbacks[guid]) {
+              clearTimeout(callbacks[guid].to);
+              delete callbacks[guid];
+              callback(err, commits);
             }
+          });
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
+        }
+      }
 
-            function makeCommit (parents, roothash, msg, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
-                    };
-                    socket.emit('makeCommit', project, parents, roothash, msg, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
+      function makeCommit(parents, roothash, msg, callback) {
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
+          socket.emit('makeCommit', project, parents, roothash, msg, function (err) {
+            if (callbacks[guid]) {
+              clearTimeout(callbacks[guid].to);
+              delete callbacks[guid];
+              callback(err);
             }
+          });
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
         }
+      }
 
-        function simpleRequest (parameters,callback){
-            ASSERT(typeof callback === 'function');
-            if(socketConnected){
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout,100*options.timeout, guid)
-                };
-                socket.emit('simpleRequest',parameters,function(err,resId){
-                    if(callbacks[guid]){
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err,resId);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
+      function getCommonAncestorCommit(commitA, commitB, callback) {
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
+          socket.emit('getCommonAncestorCommit', project, commitA, commitB, function (err, commit) {
+            if (callbacks[guid]) {
+              clearTimeout(callbacks[guid].to);
+              delete callbacks[guid];
+              callback(err, commit);
             }
+          });
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
         }
-        function simpleResult (resultId,callback){
-            ASSERT(typeof callback === 'function');
-            if(socketConnected){
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout,100*options.timeout, guid)
-                };
-                socket.emit('simpleResult',resultId,function(err,result){
-                    if(callbacks[guid]){
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err,result);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-        function simpleQuery (workerId,parameters,callback){
-            ASSERT(typeof callback === 'function');
-            if(socketConnected){
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout,100*options.timeout, guid)
-                };
-                socket.emit('simpleQuery',workerId,parameters,function(err,result){
-                    if(callbacks[guid]){
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err,result);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-        function getToken(callback){
-            ASSERT(typeof callback === 'function');
-            if(socketConnected){
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout,100*options.timeout, guid)
-                };
-                socket.emit('getToken',function(err,result){
-                    if(callbacks[guid]){
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err,result);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-        return {
-            openDatabase: openDatabase,
-            closeDatabase: closeDatabase,
-            fsyncDatabase: fsyncDatabase,
-            getDatabaseStatus: getDatabaseStatus,
-            getProjectNames: getProjectNames,
-            getAllowedProjectNames: getAllowedProjectNames,
-            getAuthorizationInfo: getAuthorizationInfo,
-            deleteProject: deleteProject,
-            openProject: openProject,
-            simpleRequest: simpleRequest,
-            simpleResult: simpleResult,
-            simpleQuery: simpleQuery,
-            getNextServerEvent: getNextServerEvent,
-            getToken: getToken
-        };
+      }
     }
-    return Database;
+
+    function simpleRequest(parameters, callback) {
+      ASSERT(typeof callback === 'function');
+      if (socketConnected) {
+        var guid = GUID();
+        callbacks[guid] = {
+          cb: callback,
+          to: setTimeout(callbackTimeout, 100 * options.timeout, guid)
+        };
+        socket.emit('simpleRequest', parameters, function (err, resId) {
+          if (callbacks[guid]) {
+            clearTimeout(callbacks[guid].to);
+            delete callbacks[guid];
+            callback(err, resId);
+          }
+        });
+      } else {
+        callback(new Error(ERROR_DISCONNECTED));
+      }
+    }
+
+    function simpleResult(resultId, callback) {
+      ASSERT(typeof callback === 'function');
+      if (socketConnected) {
+        var guid = GUID();
+        callbacks[guid] = {
+          cb: callback,
+          to: setTimeout(callbackTimeout, 100 * options.timeout, guid)
+        };
+        socket.emit('simpleResult', resultId, function (err, result) {
+          if (callbacks[guid]) {
+            clearTimeout(callbacks[guid].to);
+            delete callbacks[guid];
+            callback(err, result);
+          }
+        });
+      } else {
+        callback(new Error(ERROR_DISCONNECTED));
+      }
+    }
+
+    function simpleQuery(workerId, parameters, callback) {
+      ASSERT(typeof callback === 'function');
+      if (socketConnected) {
+        var guid = GUID();
+        callbacks[guid] = {
+          cb: callback,
+          to: setTimeout(callbackTimeout, 100 * options.timeout, guid)
+        };
+        socket.emit('simpleQuery', workerId, parameters, function (err, result) {
+          if (callbacks[guid]) {
+            clearTimeout(callbacks[guid].to);
+            delete callbacks[guid];
+            callback(err, result);
+          }
+        });
+      } else {
+        callback(new Error(ERROR_DISCONNECTED));
+      }
+    }
+
+    function getToken(callback) {
+      ASSERT(typeof callback === 'function');
+      if (socketConnected) {
+        var guid = GUID();
+        callbacks[guid] = {
+          cb: callback,
+          to: setTimeout(callbackTimeout, 100 * options.timeout, guid)
+        };
+        socket.emit('getToken', function (err, result) {
+          if (callbacks[guid]) {
+            clearTimeout(callbacks[guid].to);
+            delete callbacks[guid];
+            callback(err, result);
+          }
+        });
+      } else {
+        callback(new Error(ERROR_DISCONNECTED));
+      }
+    }
+
+    return {
+      openDatabase: openDatabase,
+      closeDatabase: closeDatabase,
+      fsyncDatabase: fsyncDatabase,
+      getDatabaseStatus: getDatabaseStatus,
+      getProjectNames: getProjectNames,
+      getAllowedProjectNames: getAllowedProjectNames,
+      getAuthorizationInfo: getAuthorizationInfo,
+      deleteProject: deleteProject,
+      openProject: openProject,
+      simpleRequest: simpleRequest,
+      simpleResult: simpleResult,
+      simpleQuery: simpleQuery,
+      getNextServerEvent: getNextServerEvent,
+      getToken: getToken
+    };
+  }
+
+  return Database;
 });
 
 /**
@@ -10340,6 +12846,7 @@ define('storage/failsafe',["util/assert", "util/guid"], function (ASSERT, GUID) 
             setBranchHash: setBranchHash,
             getCommits: project.getCommits,
             makeCommit: project.makeCommit,
+            getCommonAncestorCommit: project.getCommonAncestorCommit,
             ID_NAME: project.ID_NAME
           });
         } else {
@@ -10713,53 +13220,53 @@ define('storage/failsafe',["util/assert", "util/guid"], function (ASSERT, GUID) 
  * Author: Tamas Kecskes
  */
 
-define('storage/hashcheck',[ "util/assert", "util/zssha1", "util/canon" ], function (ASSERT,SHA1,CANON) {
-    
+define('storage/hashcheck',[ "util/assert", "util/zssha1", "util/canon" ], function (ASSERT, SHA1, CANON) {
+  
 
-    var zsSHA = new SHA1();
+  var zsSHA = new SHA1();
 
-    function Database (_innerDb, options) {
-        ASSERT(typeof options === "object" && typeof _innerDb === "object");
-        var database = {};
-        for(var i in _innerDb){
-            database[i] = _innerDb[i];
-        }
-
-        //we have to modify the openProject function
-        database.openProject = function(projectName, callback){
-            _innerDb.openProject(projectName,function(err,innerProject){
-                if(!err && innerProject){
-                    var project = {};
-                    for(var i in innerProject){
-                        project[i] = innerProject[i];
-                    }
-
-                    //we add the hash check to insertObject
-                    project.insertObject = function(object, cb){
-                        var inHash = object[project.ID_NAME];
-                        object[project.ID_NAME] = "";
-                        var checkHash = "#" + zsSHA.getHash(CANON.stringify(object));
-                        object[project.ID_NAME] = inHash;
-
-                        if(inHash !== checkHash){
-                            cb("wrong hash: expeced - "+checkHash+", received - "+inHash);
-                        } else {
-                            innerProject.insertObject(object,cb);
-                        }
-                    };
-
-                    callback(null,project);
-
-                } else {
-                    callback(err);
-                }
-            });
-        };
-
-        return database;
+  function Database(_innerDb, options) {
+    ASSERT(typeof options === "object" && typeof _innerDb === "object");
+    var database = {};
+    for (var i in _innerDb) {
+      database[i] = _innerDb[i];
     }
 
-    return Database;
+    //we have to modify the openProject function
+    database.openProject = function (projectName, callback) {
+      _innerDb.openProject(projectName, function (err, innerProject) {
+        if (!err && innerProject) {
+          var project = {};
+          for (var i in innerProject) {
+            project[i] = innerProject[i];
+          }
+
+          //we add the hash check to insertObject
+          project.insertObject = function (object, cb) {
+            var inHash = object[project.ID_NAME];
+            object[project.ID_NAME] = "";
+            var checkHash = "#" + zsSHA.getHash(CANON.stringify(object));
+            object[project.ID_NAME] = inHash;
+
+            if (inHash !== checkHash) {
+              cb("wrong hash: expeced - " + checkHash + ", received - " + inHash);
+            } else {
+              innerProject.insertObject(object, cb);
+            }
+          };
+
+          callback(null, project);
+
+        } else {
+          callback(err);
+        }
+      });
+    };
+
+    return database;
+  }
+
+  return Database;
 });
 
 /*
@@ -11080,6 +13587,7 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
           //setBranchHash: project.setBranchHash,
 					getCommits: project.getCommits,
 					makeCommit: project.makeCommit,
+          getCommonAncestorCommit: project.getCommonAncestorCommit,
 					ID_NAME: project.ID_NAME
 				});
 			}
@@ -11119,97 +13627,99 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
  */
 
 define('storage/commit',[ "util/assert", "util/key", "util/canon" ], function (ASSERT, GENKEY, CANON) {
-	
-	var HASH_REGEXP = new RegExp("^#[0-9a-zA-Z_]*$");
+  
+  var HASH_REGEXP = new RegExp("^#[0-9a-zA-Z_]*$");
 
-	function Database (_database,_options) {
-        _options = _options || {};
-		ASSERT(typeof _database === "object");
+  function Database(_database, _options) {
+    _options = _options || {};
+    ASSERT(typeof _database === "object");
 
-		function openProject (projectName, callback) {
+    function openProject(projectName, callback) {
 
-			var _project = null;
-			_database.openProject(projectName, function (err, proj) {
-				if (!err && proj) {
-					_project = proj;
-					callback(null, {
-						fsyncDatabase: _project.fsyncDatabase,
-						closeProject: _project.closeProject,
-						loadObject: _project.loadObject,
-						insertObject: _project.insertObject,
+      var _project = null;
+      _database.openProject(projectName, function (err, proj) {
+        if (!err && proj) {
+          _project = proj;
+          callback(null, {
+            fsyncDatabase: _project.fsyncDatabase,
+            closeProject: _project.closeProject,
+            loadObject: _project.loadObject,
+            insertObject: _project.insertObject,
 						getInfo: _project.getInfo,
 						setInfo: _project.setInfo,
-						findHash: _project.findHash,
-						dumpObjects: _project.dumpObjects,
-						getBranchNames: _project.getBranchNames,
-						getBranchHash: _project.getBranchHash,
-						setBranchHash: _project.setBranchHash,
-						getCommits: _project.getCommits,
-						makeCommit: makeCommit,
-                        setUser: setUser,
-						ID_NAME: _project.ID_NAME
-					});
-				} else {
-					callback(err, proj);
-				}
-			});
+            findHash: _project.findHash,
+            dumpObjects: _project.dumpObjects,
+            getBranchNames: _project.getBranchNames,
+            getBranchHash: _project.getBranchHash,
+            setBranchHash: _project.setBranchHash,
+            getCommits: _project.getCommits,
+            getCommonAncestorCommit: _project.getCommonAncestorCommit,
+            makeCommit: makeCommit,
+            setUser: setUser,
+            ID_NAME: _project.ID_NAME
+          });
+        } else {
+          callback(err, proj);
+        }
+      });
 
-			function makeCommit (parents, roothash, msg, callback) {
-				ASSERT(HASH_REGEXP.test(roothash));
-				ASSERT(typeof callback === 'function');
+      function makeCommit(parents, roothash, msg, callback) {
+        ASSERT(HASH_REGEXP.test(roothash));
+        ASSERT(typeof callback === 'function');
 
-				parents = parents || [];
-				msg = msg || "n/a";
+        parents = parents || [];
+        msg = msg || "n/a";
 
-				var commitObj = {
-					root: roothash,
-					parents: parents,
-					updater: [ _options.user ],
-					time: (new Date()).getTime(),
-					message: msg,
-					type: "commit"
-				};
+        var commitObj = {
+          root: roothash,
+          parents: parents,
+          updater: [ _options.user ],
+          time: (new Date()).getTime(),
+          message: msg,
+          type: "commit"
+        };
 
 				var id = '#' + GENKEY(commitObj);
-				commitObj[_project.ID_NAME] = id;
+        commitObj[_project.ID_NAME] = id;
 
-				_project.insertObject(commitObj, function (err) {
-					if (err) {
-						callback(err);
-					} else {
-						callback(null, id);
-					}
-				});
+        _project.insertObject(commitObj, function (err) {
+          if (err) {
+            callback(err);
+          } else {
+            callback(null, id);
+          }
+        });
 
-				return id;
-			}
+        return id;
+      }
 
-            function setUser (userId){
-                if(typeof userId === 'string'){
-                    _options.user = userId;
-                };
-            }
-		}
+      function setUser(userId) {
+        if (typeof userId === 'string') {
+          _options.user = userId;
+        }
+        ;
+      }
+    }
 
-		return {
-			openDatabase: _database.openDatabase,
-			closeDatabase: _database.closeDatabase,
-			fsyncDatabase: _database.fsyncDatabase,
-			getProjectNames: _database.getProjectNames,
-            getAllowedProjectNames: _database.getAllowedProjectNames,
-            getAuthorizationInfo: _database.getAuthorizationInfo,
-			getDatabaseStatus: _database.getDatabaseStatus,
-			openProject: openProject,
-			deleteProject: _database.deleteProject,
-            simpleRequest: _database.simpleRequest,
-            simpleResult: _database.simpleResult,
-            simpleQuery: _database.simpleQuery,
-            getNextServerEvent: _database.getNextServerEvent,
-            getToken: _database.getToken
-		};
-	}
+    return {
+      openDatabase: _database.openDatabase,
+      closeDatabase: _database.closeDatabase,
+      fsyncDatabase: _database.fsyncDatabase,
+      getProjectNames: _database.getProjectNames,
+      getAllowedProjectNames: _database.getAllowedProjectNames,
+      getAuthorizationInfo: _database.getAuthorizationInfo,
+      getDatabaseStatus: _database.getDatabaseStatus,
+      openProject: openProject,
+      deleteProject: _database.deleteProject,
+      simpleRequest: _database.simpleRequest,
+      simpleResult: _database.simpleResult,
+      simpleQuery: _database.simpleQuery,
+      getNextServerEvent: _database.getNextServerEvent,
+      getToken: _database.getToken
+    };
+  }
 
-	return Database;
+  return Database;
 });
 
 /*
@@ -11219,106 +13729,107 @@ define('storage/commit',[ "util/assert", "util/key", "util/canon" ], function (A
  */
 
 define('storage/log',[ "util/assert" ], function (ASSERT) {
-	
+  
 
-	function Database (_database, options) {
-		ASSERT(typeof options === "object" && typeof _database === "object");
-		options.log = options.log || {
-			debug: function (msg) {
-				console.log("DEBUG - " + msg);
-			},
-			error: function (msg) {
-				console.log("ERROR - " + msg);
-			}
-		};
-		var logger = options.log;
+  function Database(_database, options) {
+    ASSERT(typeof options === "object" && typeof _database === "object");
+    options.log = options.log || {
+      debug: function (msg) {
+        console.log("DEBUG - " + msg);
+      },
+      error: function (msg) {
+        console.log("ERROR - " + msg);
+      }
+    };
+    var logger = options.log;
 
-		function openDatabase (callback) {
-			logger.debug('openDatabase()');
-			_database.openDatabase(callback);
-		}
+    function openDatabase(callback) {
+      logger.debug('openDatabase()');
+      _database.openDatabase(callback);
+    }
 
-		function closeDatabase (callback) {
-			logger.debug('closeDatabase()');
-			_database.closeDatabase(callback);
-		}
+    function closeDatabase(callback) {
+      logger.debug('closeDatabase()');
+      _database.closeDatabase(callback);
+    }
 
-		function fsyncDatabase (callback) {
-			logger.debug('fsyncDatabase()');
-			_database.fsyncDatabase(callback);
-		}
+    function fsyncDatabase(callback) {
+      logger.debug('fsyncDatabase()');
+      _database.fsyncDatabase(callback);
+    }
 
-		function getProjectNames (callback) {
-			logger.debug('getProjectNames()');
-			_database.getProjectNames(callback);
-		}
+    function getProjectNames(callback) {
+      logger.debug('getProjectNames()');
+      _database.getProjectNames(callback);
+    }
 
-        function getAllowedProjectNames (callback) {
-            logger.debug('getAllowedProjectNames()');
-            _database.getAllowedProjectNames(callback);
-        }
+    function getAllowedProjectNames(callback) {
+      logger.debug('getAllowedProjectNames()');
+      _database.getAllowedProjectNames(callback);
+    }
 
-        function getAuthorizationInfo (name,callback) {
-            logger.debug('getAuthorizationInfo('+name+')');
-            _database.getAuthorizationInfo(name,callback);
-        }
+    function getAuthorizationInfo(name, callback) {
+      logger.debug('getAuthorizationInfo(' + name + ')');
+      _database.getAuthorizationInfo(name, callback);
+    }
 
-		function deleteProject (project, callback) {
-			logger.debug('deleteProject(' + project + ")");
-			_database.deleteProject(project, callback);
-		}
+    function deleteProject(project, callback) {
+      logger.debug('deleteProject(' + project + ")");
+      _database.deleteProject(project, callback);
+    }
 
-		function getDatabaseStatus (oldstatus, callback) {
-			logger.debug('getDatabaseStatus(' + oldstatus + ")");
-			_database.getDatabaseStatus(oldstatus, callback);
-		}
+    function getDatabaseStatus(oldstatus, callback) {
+      logger.debug('getDatabaseStatus(' + oldstatus + ")");
+      _database.getDatabaseStatus(oldstatus, callback);
+    }
 
-		function openProject (projectName, callback) {
-			logger.debug('openProject(' + projectName + ")");
-			var project = null;
-			_database.openProject(projectName, function (err, proj) {
-				if (!err && proj) {
-					project = proj;
-					callback(null, {
-						fsyncDatabase: fsyncDatabase,
-						closeProject: closeProject,
-						loadObject: loadObject,
+    function openProject(projectName, callback) {
+      logger.debug('openProject(' + projectName + ")");
+      var project = null;
+      _database.openProject(projectName, function (err, proj) {
+        if (!err && proj) {
+          project = proj;
+          callback(null, {
+            fsyncDatabase: fsyncDatabase,
+            closeProject: closeProject,
+            loadObject: loadObject,
 						getInfo: getInfo,
 						setInfo: setInfo,
-						insertObject: insertObject,
-						findHash: findHash,
-						dumpObjects: dumpObjects,
-						getBranchNames: getBranchNames,
-						getBranchHash: getBranchHash,
-						setBranchHash: setBranchHash,
-						getCommits: getCommits,
-						makeCommit: makeCommit,
-                        setUser: project.setUser,
-						ID_NAME: project.ID_NAME
-					});
-				} else {
-					callback(err, proj);
-				}
-			});
+            insertObject: insertObject,
+            findHash: findHash,
+            dumpObjects: dumpObjects,
+            getBranchNames: getBranchNames,
+            getBranchHash: getBranchHash,
+            setBranchHash: setBranchHash,
+            getCommits: getCommits,
+            getCommonAncestorCommit: getCommonAncestorCommit,
+            makeCommit: makeCommit,
+            setUser: project.setUser,
+            ID_NAME: project.ID_NAME
+          });
+        } else {
+          callback(err, proj);
+        }
+      });
 
-			function fsyncDatabase (callback) {
-				logger.debug(projectName + '.fsyncDatabase()');
-				project.fsyncDatabase(callback);
-			}
+      function fsyncDatabase(callback) {
+        logger.debug(projectName + '.fsyncDatabase()');
+        project.fsyncDatabase(callback);
+      }
 
-			function closeProject (callback) {
-				logger.debug(projectName + '.closeProject()');
-				project.closeProject(callback);
-			}
+      function closeProject(callback) {
+        logger.debug(projectName + '.closeProject()');
+        project.closeProject(callback);
+      }
 
-			function insertObject (object, callback) {
-				logger.debug(projectName + '.insertObject(' + object[project.ID_NAME] + ")");
-				project.insertObject(object, callback);
-			}
+      function insertObject(object, callback) {
+        logger.debug(projectName + '.insertObject(' + object[project.ID_NAME] + ")");
+        project.insertObject(object, callback);
+      }
 
-			function loadObject (hash, callback) {
-				logger.debug(projectName + '.loadObject(' + hash + ")");
-				project.loadObject(hash, callback);
+      function loadObject(hash, callback) {
+        logger.debug(projectName + '.loadObject(' + hash + ")");
+        project.loadObject(hash, callback);
 			}
 
 			function getInfo (callback){
@@ -11329,89 +13840,102 @@ define('storage/log',[ "util/assert" ], function (ASSERT) {
 			function setInfo (info,callback){
 				logger.debug(projectName + '.setInfo('+JSON.stringify(info)+')');
 				project.setInfo(info,callback);
-			}
+      }
 
-			function findHash (beginning, callback) {
-				logger.debug(projectName + ".findHash(" + beginning + ")");
-				project.findHash(beginning, callback);
-			}
+      function findHash(beginning, callback) {
+        logger.debug(projectName + ".findHash(" + beginning + ")");
+        project.findHash(beginning, callback);
+      }
 
-			function dumpObjects (callback) {
-				logger.debug(projectName + "dumpObjects()");
-				project.dumpObjects(callback);
-			}
+      function dumpObjects(callback) {
+        logger.debug(projectName + "dumpObjects()");
+        project.dumpObjects(callback);
+      }
 
-			function getBranchNames (callback) {
-				logger.debug(projectName + '.getBranchNames()');
-				project.getBranchNames(callback);
-			}
+      function getBranchNames(callback) {
+        logger.debug(projectName + '.getBranchNames()');
+        project.getBranchNames(callback);
+      }
 
-			function getBranchHash (branch, oldhash, callback) {
-				logger.debug(projectName + '.getBranchHash(' + branch + ',' + oldhash + ')');
-				project.getBranchHash(branch, oldhash, function (err, newhash, forked) {
-					logger.debug(projectName + '.getBranchHash(' + branch + ',' + oldhash + ')->(' + JSON.stringify(err) + ',' + newhash + ',' + forked + ')');
-					callback(err, newhash, forked);
-				});
-			}
+      function getBranchHash(branch, oldhash, callback) {
+        logger.debug(projectName + '.getBranchHash(' + branch + ',' + oldhash + ')');
+        project.getBranchHash(branch, oldhash, function (err, newhash, forked) {
+          logger.debug(projectName + '.getBranchHash(' + branch + ',' + oldhash + ')->(' + JSON.stringify(err) + ',' + newhash + ',' + forked + ')');
+          callback(err, newhash, forked);
+        });
+      }
 
-			function setBranchHash (branch, oldhash, newhash, callback) {
-				logger.debug(projectName + '.setBranchHash(' + branch + ',' + oldhash + ',' + newhash + ')');
-				project.setBranchHash(branch, oldhash, newhash, function (err) {
-					logger.debug(projectName + '.setBranchHash(' + branch + ',' + oldhash + ',' + newhash + ') ->(' + JSON.stringify(err) + ')');
-					callback(err);
-				});
-			}
+      function setBranchHash(branch, oldhash, newhash, callback) {
+        logger.debug(projectName + '.setBranchHash(' + branch + ',' + oldhash + ',' + newhash + ')');
+        project.setBranchHash(branch, oldhash, newhash, function (err) {
+          logger.debug(projectName + '.setBranchHash(' + branch + ',' + oldhash + ',' + newhash + ') ->(' + JSON.stringify(err) + ')');
+          callback(err);
+        });
+      }
 
-			function getCommits (before, number, callback) {
-				logger.debug(projectName + '.getCommits(' + before + ',' + number + ')');
-				project.getCommits(before, number, callback);
-			}
+      function getCommits(before, number, callback) {
+        logger.debug(projectName + '.getCommits(' + before + ',' + number + ')');
+        project.getCommits(before, number, callback);
+      }
 
-			function makeCommit (parents, roothash, msg, callback) {
-				logger.debug(projectName + '.makeCommit(' + parents + ',' + roothash + ',' + msg + ')');
-				return project.makeCommit(parents, roothash, msg, callback);
-			}
-		}
+      function makeCommit(parents, roothash, msg, callback) {
+        logger.debug(projectName + '.makeCommit(' + parents + ',' + roothash + ',' + msg + ')');
+        return project.makeCommit(parents, roothash, msg, callback);
+      }
 
-        function simpleRequest (parameters,callback){
-            logger.debug('simpleRequest()');
-            _database.simpleRequest(parameters,callback);
-        }
-        function simpleResult(resultId,callback){
-            logger.debug('simpleResult('+resultId+')');
-            _database.simpleResult(resultId,callback);
-        }
-        function simpleQuery(workerId,parameters,callback){
-            logger.debug('simpleQuery('+workerId+','+parameters+')');
-            _database.simpleResult(resultId,callback);
-        }
-        function getToken(callback){
-            logger.debug('getToken()');
-            _database.getToken(callback);
-        }
-        function getNextServerEvent(latestGuid,callback){
-            logger.debug('getNextServerEvent('+latestGuid+")");
-            _database.getNextServerEvent(latestGuid,callback);
-        }
-		return {
-			openDatabase: openDatabase,
-			closeDatabase: closeDatabase,
-			fsyncDatabase: fsyncDatabase,
-			getProjectNames: getProjectNames,
-            getAllowedProjectNames: getAllowedProjectNames,
-            getAuthorizationInfo: getAuthorizationInfo,
-			getDatabaseStatus: getDatabaseStatus,
-			openProject: openProject,
-			deleteProject: deleteProject,
-            simpleRequest: simpleRequest,
-            simpleResult: simpleResult,
-            simpleQuery: simpleQuery,
-            getNextServerEvent: getNextServerEvent,
-            getToken: getToken
-		};
-	}
+      function getCommonAncestorCommit(commitA, commitB, callback) {
+        logger.debug(projectName + '.getCommonAncestorCommit(' + commitA + ',' + commitB + ')');
+        project.getCommonAncestorCommit(commitA, commitB, function (err, commit) {
+          logger.debug(projectName + '.getCommonAncestorCommit(' + commitA + ',' + commitB + ') ->(' + JSON.stringify(err) + ',' + commit + ')');
+          callback(err, commit);
+        });
+      }
+    }
 
-	return Database;
+    function simpleRequest(parameters, callback) {
+      logger.debug('simpleRequest()');
+      _database.simpleRequest(parameters, callback);
+    }
+
+    function simpleResult(resultId, callback) {
+      logger.debug('simpleResult(' + resultId + ')');
+      _database.simpleResult(resultId, callback);
+    }
+
+    function simpleQuery(workerId, parameters, callback) {
+      logger.debug('simpleQuery(' + workerId + ',' + parameters + ')');
+      _database.simpleResult(resultId, callback);
+    }
+
+    function getToken(callback) {
+      logger.debug('getToken()');
+      _database.getToken(callback);
+    }
+
+    function getNextServerEvent(latestGuid, callback) {
+      logger.debug('getNextServerEvent(' + latestGuid + ")");
+      _database.getNextServerEvent(latestGuid, callback);
+    }
+
+    return {
+      openDatabase: openDatabase,
+      closeDatabase: closeDatabase,
+      fsyncDatabase: fsyncDatabase,
+      getProjectNames: getProjectNames,
+      getAllowedProjectNames: getAllowedProjectNames,
+      getAuthorizationInfo: getAuthorizationInfo,
+      getDatabaseStatus: getDatabaseStatus,
+      openProject: openProject,
+      deleteProject: deleteProject,
+      simpleRequest: simpleRequest,
+      simpleResult: simpleResult,
+      simpleQuery: simpleQuery,
+      getNextServerEvent: getNextServerEvent,
+      getToken: getToken
+    };
+  }
+
+  return Database;
 });
 
 /*
@@ -11420,16 +13944,15 @@ define('storage/log',[ "util/assert" ], function (ASSERT) {
  * Author: Tamas Kecskes
  */
 
-define('storage/clientstorage',['storage/client', 'storage/failsafe', 'storage/hashcheck', 'storage/cache', 'storage/commit', 'storage/log'], function (Client,Failsafe,Hashcheck,Cache,Commit,Log) {
-    
-    function client(options){
-        //return  new Log(new Commit(new Cache(new Failsafe(new Client(options),options),options),options),options);
-        return  new Commit(new Cache(new Failsafe(new Client(options),options),options),options);
-    }
+define('storage/clientstorage',['storage/client', 'storage/failsafe', 'storage/hashcheck', 'storage/cache', 'storage/commit', 'storage/log'], function (Client, Failsafe, Hashcheck, Cache, Commit, Log) {
+  
+  function client(options) {
+    //return  new Log(new Commit(new Cache(new Failsafe(new Client(options),options),options),options),options);
+    return  new Commit(new Cache(new Failsafe(new Client(options), options), options), options);
+  }
 
 
-
-    return client;
+  return client;
 });
 
 
@@ -15220,7 +17743,7 @@ define('client',[
             next: null
           };
           if(currentModification){
-              currentModification.next = newElement;
+            currentModification.next = newElement;
           }
           currentModification = newElement;
         },
@@ -15314,6 +17837,9 @@ define('client',[
         META = new BaseMeta(),
         _rootHash = null,
         _root = null,
+        _previousRootHash = null,
+        _changeTree = null,
+        _inheritanceHash = {},
         _gHash = 0,
         _addOns = {},
         _constraintCallback = null,
@@ -15902,7 +18428,7 @@ define('client',[
         };
         var stop = function () {
           running = false;
-        }
+        };
         _database.getDatabaseStatus('', dbStatusUpdated);
 
         return {
@@ -16150,6 +18676,8 @@ define('client',[
           _patterns = {};
           _msg = "";
           _recentCommits = [];
+          _previousRootHash = null;
+          _rootHash = null;
           _viewer = false;
           _readOnlyProject = false;
           _loadNodes = {};
@@ -16211,17 +18739,74 @@ define('client',[
 
       }
 
-      function getModifiedNodes(newerNodes) {
+      function _getModifiedNodes(newerNodes){
         var modifiedNodes = [];
-        for (var i in _nodes) {
-          if (newerNodes[i]) {
-            if (newerNodes[i].hash !== _nodes[i].hash && _nodes[i].hash !== "") {
+        for(var i in _nodes){
+          if(newerNodes[i]){
+            if(newerNodes[i].hash !== _nodes[i].hash && _nodes[i].hash !== ""){
               modifiedNodes.push(i);
             }
           }
         }
         return modifiedNodes;
       }
+      function isInChangeTree(path){
+        var pathArray = path.split("/"),
+          diffObj = _changeTree,
+          index = 0,
+          found = false;
+
+        pathArray.shift();
+        if(pathArray.length === 0){
+          found = true;
+        }
+
+        if(!diffObj){
+          return false;
+        }
+
+        while(index<pathArray.length && !found){
+          if(diffObj[pathArray[index]]){
+            diffObj = diffObj[pathArray[index]];
+            if(++index === pathArray.length){
+              found = true;
+            }
+          } else {
+            index = pathArray.length;
+          }
+        }
+
+        if(found && diffObj){
+          if(diffObj.removed !== undefined){
+            return false;
+          }
+          if(diffObj.reg || diffObj.attr || diffObj.pointer || diffObj.set || diffObj.meta || diffObj.childrenListChanged){
+            return true;
+          }
+        }
+
+        return false;
+      }
+      function getModifiedNodes(newerNodes){
+        var modifiedNodes = [],
+          keys = Object.keys(newerNodes),
+          i,found,
+          inheritanceArray;
+        for(i=0;i<keys.length;i++){
+          found = false;
+          inheritanceArray = getInheritanceChain(newerNodes[keys[i]].node);
+          inheritanceArray.unshift(keys[i]);
+          while(inheritanceArray.length > 0 && !found){
+            if(isInChangeTree(inheritanceArray.shift())){
+              found = true;
+              modifiedNodes.push(keys[i]);
+            }
+          }
+        }
+
+        return modifiedNodes;
+      }
+
 
       //this is just a first brute implementation it needs serious optimization!!!
       function fitsInPatternTypes(path, pattern) {
@@ -16294,15 +18879,28 @@ define('client',[
         _users[userId].PATHS = newPaths;
 
 
-        if (events.length > 0) {
-          if (_loadError > startErrorLevel) {
-            // TODO events.unshift({etype:'incomplete',eid:null});
+        //this is how the events should go
+        if(events.length>0){
+          if(_loadError > startErrorLevel){
+            events.unshift({etype:'incomplete',eid:null});
           } else {
-            // TODO events.unshift({etype:'complete',eid:null});
+            events.unshift({etype:'complete',eid:null});
           }
-
-          _users[userId].FN(events);
+        } else {
+          events.unshift({etype:'complete',eid:null});
         }
+        _users[userId].FN(events);
+
+      }
+
+      function getInheritanceChain(node){
+        var ancestors = [];
+        node = _core.getBase(node);
+        while(node){
+          ancestors.push(_core.getPath(node));
+          node = _core.getBase(node);
+        }
+        return ancestors;
       }
 
       function storeNode(node, basic) {
@@ -16314,6 +18912,8 @@ define('client',[
             //TODO we try to avoid this
           } else {
             _nodes[path] = {node: node, hash: ""/*,incomplete:true,basic:basic*/};
+            _inheritanceHash[path] = getInheritanceChain(node);
+
           }
           return path;
         }
@@ -16460,6 +19060,39 @@ define('client',[
         return ordered;
       }
 
+      function getEventTree(oldRootHash,newRootHash,callback){
+        var error = null,
+          sRoot = null,
+          tRoot = null,
+          start = new Date().getTime(),
+          loadRoot = function(hash,root){
+            _core.loadRoot(hash,function(err,r){
+              error = error || err;
+              if(sRoot === null && hash === oldRootHash){
+                sRoot = r;
+              } else {
+                tRoot = r;
+              }
+              if(--needed === 0){
+                rootsLoaded();
+              }
+            });
+          },
+          rootsLoaded = function(){
+            if(error){
+              return callback(error);
+            }
+            _core./*generateLightTreeDiff*/generateTreeDiff(sRoot,tRoot,function(err,diff){
+              console.log('genDiffTree',new Date().getTime()-start);
+              console.log('diffTree',JSON.stringify(diff,null,2));
+              callback(err,diff);
+            });
+          },
+          needed = 2;
+        loadRoot(oldRootHash,sRoot);
+        loadRoot(newRootHash,tRoot);
+      }
+
       function loadRoot(newRootHash, callback) {
         //with the newer approach we try to optimize a bit the mechanizm of the loading and try to get rid of the paralellism behind it
         var patterns = {},
@@ -16523,7 +19156,49 @@ define('client',[
       }
 
       //this is just a first brute implementation it needs serious optimization!!!
-      function loading(newRootHash, callback) {
+      function loading(newRootHash,callback){
+        var finalEvents = function () {
+          var modifiedPaths;
+          modifiedPaths = getModifiedNodes(_loadNodes);
+          _nodes = _loadNodes;
+          _loadNodes = {};
+          for (var i in _users) {
+            userEvents(i, modifiedPaths);
+          }
+          callback(null);
+        };
+        callback = callback || function(err){};
+        _previousRootHash = _rootHash;
+        _rootHash = newRootHash;
+        if(_previousRootHash){
+          getEventTree(_previousRootHash,_rootHash,function(err,diffTree){
+            if(err){
+              _rootHash = null;
+              callback(err);
+            } else {
+              _changeTree = diffTree;
+              loadRoot(newRootHash,function(err){
+                if(err){
+                  _rootHash = null;
+                  callback(err);
+                } else {
+                  finalEvents();
+                }
+              });
+            }
+          });
+        } else {
+          loadRoot(newRootHash,function(err){
+            if(err){
+              _rootHash = null;
+              callback(err);
+            } else {
+              finalEvents();
+            }
+          });
+        }
+      }
+      function _loading(newRootHash, callback) {
         callback = callback || function () {
         };
         var incomplete = false;
@@ -16547,17 +19222,40 @@ define('client',[
           callback(null);
         };
 
-        _rootHash = newRootHash
-        loadRoot(newRootHash, function (err) {
-          if (err) {
-            _rootHash = null;
-            callback(err);
-          } else {
-            if (--missing === 0) {
-              finalEvents();
+        _previousRootHash = _rootHash;
+        _rootHash = newRootHash;
+        if(_previousRootHash){
+          getEventTree(_previousRootHash,_rootHash,function(err,diffTree){
+            if(err){
+              _rootHash = null;
+              callback(err);
+            } else {
+              _changeTree = diffTree;
+              loadRoot(newRootHash,function(err){
+                if(err){
+                  _rootHash = null;
+                  callback(err);
+                } else {
+                  if(--missing === 0){
+                    finalEvents();
+                  }
+                }
+              });
             }
-          }
-        });
+          });
+        } else {
+          loadRoot(newRootHash,function(err){
+            if(err){
+              _rootHash = null;
+              callback(err);
+            } else {
+              if(--missing === 0){
+                finalEvents();
+              }
+            }
+          });
+        }
+
         //here we try to make an immediate event building
         //TODO we should deal with the full unloading!!!
         //TODO we should check not to hide any issue related to immediate loading!!!
@@ -16680,7 +19378,7 @@ define('client',[
                   if (--wait === 0) {
                     callback(null, fullList);
                   }
-                })
+                });
               }
             } else {
               callback(null, {});
@@ -17883,36 +20581,15 @@ define('client',[
       }
 
       //testing
-      function testMethod(testnumber) {
-        /*deleteBranchAsync("blabla",function(err){
-         getBranchesAsync(function(err,branches){
-         console.log('kecso');
-         });
-         /*setTimeout(function(){
-         getBranchesAsync(function(err,branches){
-         console.log('kecso');
-         });
-         },0);
-         });*/
-        //_database.getNextServerEvent("",function(err,guid,parameters){
-        //    console.log(err,guid,parameters);
-        //});
-        //connectToDatabaseAsync({open:true},function(err){
-        //    console.log('kecso connecting to database',err);
-        //});
-        //_self.addEventListener(_self.events.SERVER_BRANCH_UPDATED,function(client,data){
-        //    console.log(data);
-        //});
-        switch (testnumber) {
+      function testMethod(testnumber){
+        switch(testnumber){
           case 1:
             break;
           case 2:
-
             break;
           case 3:
             break;
         }
-
       }
 
       //export and import functions
@@ -18184,6 +20861,275 @@ define('client',[
         });
       }
 
+      //TODO probably it would be a good idea to put this functionality to server
+      function getBaseOfCommits(one,other,callback){
+        _project.getCommonAncestorCommit(one,other,callback);
+      }
+      //TODO probably this would also beneficial if this would work on server as well
+      function getDiffTree(from,to,callback){
+        var needed = 2,error = null,
+          core = getNewCore(_project),
+          fromRoot={root:{},commit:from},
+          toRoot={root:{},commit:to},
+          rootsLoaded = function(){
+            if(error){
+              return callback(error,{});
+            }
+            _core.generateTreeDiff(fromRoot.root,toRoot.root,callback);
+          },
+          loadRoot = function(root){
+            _project.loadObject(root.commit,function(err,c){
+              error = error || ( err || c ? null : new Error('no commit object was found'));
+              if(!err && c){
+                core.loadRoot(c.root,function(err,r){
+                  error = error || ( err || r ? null : new Error('no root was found'));
+                  root.root = r;
+                  if(--needed === 0){
+                    rootsLoaded();
+                  }
+                });
+              } else {
+                if(--needed === 0){
+                  rootsLoaded();
+                }
+              }
+            });
+          };
+        loadRoot(fromRoot);
+        loadRoot(toRoot);
+
+      }
+
+      function getConflictOfDiffs(base,extension){
+        return _core.tryToConcatChanges(base,extension);
+      }
+      function getResolve(resolveObject){
+        return _core.applyResolution(resolveObject);
+      }
+      //TODO move to server
+      function applyDiff(branch,baseCommitHash,branchCommitHash,parents,diff,callback){
+        _project.loadObject(baseCommitHash,function(err,cObject){
+          var core = getNewCore(_project);
+          if(!err && cObject){
+            core.loadRoot(cObject.root,function(err,root){
+              if(!err && root){
+                core.applyTreeDiff(root,diff,function(err){
+                  if(err){
+                    return callback(err);
+                  }
+
+                  core.persist(root,function(err){
+                    if(err){
+                      return callback(err);
+                    }
+
+                    var newHash = _project.makeCommit(parents,core.getHash(root),"merging",function(err){
+                      if(err){
+                        return callback(err);
+                      }
+                      _project.setBranchHash(branch,branchCommitHash,newHash,callback);
+                    });
+                  });
+                });
+              } else {
+                callback(err || new Error('no root was found'));
+              }
+            });
+          } else {
+            callback(err || new Error('no commit object was found'));
+          }
+        });
+      }
+
+      function merge(whereBranch,whatCommit,whereCommit,callback){
+        ASSERT(_project && typeof whatCommit === 'string' && typeof whereCommit === 'string' && typeof callback === 'function');
+        _project.getCommonAncestorCommit(whatCommit,whereCommit,function(err,baseCommit){
+          if(!err && baseCommit){
+            var base,what,where,baseToWhat,baseToWhere,rootNeeds = 3,error = null,
+            rootsLoaded = function(){
+                var needed = 2,error = null;
+                _core.generateTreeDiff(base,what,function(err,diff){
+                  error = error || err;
+                  baseToWhat = diff;
+                  if(--needed===0){
+                    if(!error){
+                      diffsGenerated();
+                    } else {
+                      callback(error);
+                    }
+                  }
+                });
+                _core.generateTreeDiff(base,where,function(err,diff){
+                  error = error || err;
+                  baseToWhere = diff;
+                  if(--needed===0){
+                    if(!error){
+                      diffsGenerated();
+                    } else {
+                      callback(error);
+                    }
+                  }
+                });
+              },
+              diffsGenerated = function(){
+                var conflict = _core.tryToConcatChanges(baseToWhere,baseToWhat);
+                console.log('conflict object',conflict);
+                if(conflict.items.length === 0){
+                  //no conflict
+                  callback(null,conflict);
+                  /*
+                  _core.applyTreeDiff(base,conflict.merge,function(err){
+                    if(err){
+                      return callback(err);
+                    }
+                    _core.persist(base,function(err){
+                      if(err){
+                        callback(err);
+                      } else {
+                        var newHash = _project.makeCommit([whatCommit,whereCommit],_core.getHash(base), "merging", function(err){
+                          if(err){
+                            callback(err);
+                          } else {
+                            _project.setBranchHash(whereBranch,whereCommit,newHash,callback);
+                          }
+                        });
+                      }
+                    });
+                  });*/
+                } else {
+                  callback(null,conflict);
+                }
+                /*var endingWhatDiff = _core.concatTreeDiff(baseToWhere,baseToWhat),
+                  endingWhereDiff = _core.concatTreeDiff(baseToWhat,baseToWhere);
+                console.log('kecso endingwhatdiff',endingWhatDiff);
+                console.log('kecso endingwherediff',endingWhereDiff);
+                if(_core.isEqualDifferences(endingWhereDiff,endingWhatDiff)){
+                  _core.applyTreeDiff(base,endingWhatDiff,function(err){
+                    if(err){
+                      callback(err);
+                    } else {
+                      _core.persist(base,function(err){
+                        if(err){
+                          callback(err);
+                        } else {
+                          var newHash = _project.makeCommit([whatCommit,whereCommit],_core.getHash(base), "merging", function(err){
+                            if(err){
+                              callback(err);
+                            } else {
+                              console.log('setting branch hash after merge');
+                              _project.setBranchHash(whereBranch,whereCommit,newHash,callback);
+                            }
+                          });
+                        }
+                      });
+                    }
+
+                  });
+                } else {
+                  callback(new Error('there is a conflict...'),{
+                    baseObject:base,
+                    baseCommit:baseCommit,
+                    branch: whereBranch,
+                    mine:endingWhereDiff,
+                    mineCommit: whereCommit,
+                    theirs:endingWhatDiff,
+                    theirsCommit:whatCommit,
+                    conflictItems:_core.getConflictItems(endingWhereDiff,endingWhatDiff)});
+                }*/
+              };
+
+              _project.loadObject(baseCommit,function(err,baseCommitObject){
+                error = error || err;
+                if(!error && baseCommitObject){
+                  _core.loadRoot(baseCommitObject.root,function(err,r){
+                    error = error || err;
+                    base = r;
+                    if(--rootNeeds === 0){
+                      if(!error){
+                        rootsLoaded();
+                      } else {
+                        callback(error);
+                      }
+                    }
+                  });
+                } else {
+                  error = error || new Error('cannot load common ancestor commit');
+                  if(--rootNeeds === 0){
+                    callback(error);
+                  }
+                }
+              });
+              _project.loadObject(whatCommit,function(err,whatCommitObject){
+                error = error || err;
+                if(!error && whatCommitObject){
+                  _core.loadRoot(whatCommitObject.root,function(err,r){
+                    error = error || err;
+                    what = r;
+                    if(--rootNeeds === 0){
+                      if(!error){
+                        rootsLoaded();
+                      } else {
+                        callback(error);
+                      }
+                    }
+                  });
+                } else {
+                  error = error || new Error('cannot load the commit to merge');
+                  if(--rootNeeds === 0){
+                    callback(error);
+                  }
+                }
+              });
+              _project.loadObject(whereCommit,function(err,whereCommitObject){
+                error = error || err;
+                if(!error && whereCommitObject){
+                  _core.loadRoot(whereCommitObject.root,function(err,r){
+                    error = error || err;
+                    where = r;
+                    if(--rootNeeds === 0){
+                      if(!error){
+                        rootsLoaded();
+                      } else {
+                        callback(error);
+                      }
+                    }
+                  });
+                } else {
+                  error = error || new Error('cannot load the commit to merge into');
+                  if(--rootNeeds === 0){
+                    callback(error);
+                  }
+                }
+              });
+          } else {
+            callback(err || new Error('we cannot locate common ancestor commit!!!'));
+          }
+        });
+      }
+
+      function resolve(baseObject,mineDiff,branch,mineCommit,theirsCommit,resolvedConflictItems,callback){
+        mineDiff = _core.applyResolution(mineDiff,resolvedConflictItems);
+        _core.applyTreeDiff(baseObject,mineDiff,function(err){
+          if(err){
+            callback(err);
+          } else {
+            _core.persist(baseObject,function(err){
+              if(err){
+                callback(err);
+              } else {
+                var newHash = _project.makeCommit([theirsCommit,mineCommit],_core.getHash(baseObject), "merging", function(err){
+                  if(err){
+                    callback(err);
+                  } else {
+                    console.log('setting branch hash after merge');
+                    _project.setBranchHash(branch,mineCommit,newHash,callback);
+                  }
+                });
+              }
+            });
+          }
+        });
+      }
       //initialization
       function initialize() {
         _database = newDatabase();
@@ -18218,17 +21164,17 @@ define('client',[
         initialize();
       }
       _redoer = new UndoRedo({
-          //eventer
-          events: _self.events,
-          networkStates: _self.networkStates,
-          branchStates: _self.branchStates,
-          _eventList: _self._eventList,
-          _getEvent: _self._getEvent,
-          addEventListener: _self.addEventListener,
-          removeEventListener: _self.removeEventListener,
-          removeAllEventListeners: _self.removeAllEventListeners,
-          dispatchEvent: _self.dispatchEvent,
-          getProjectObject: getProjectObject});
+        //eventer
+        events: _self.events,
+        networkStates: _self.networkStates,
+        branchStates: _self.branchStates,
+        _eventList: _self._eventList,
+        _getEvent: _self._getEvent,
+        addEventListener: _self.addEventListener,
+        removeEventListener: _self.removeEventListener,
+        removeAllEventListeners: _self.removeAllEventListeners,
+        dispatchEvent: _self.dispatchEvent,
+        getProjectObject: getProjectObject});
 
       return {
         //eventer
@@ -18395,6 +21341,15 @@ define('client',[
         //undo - redo
         undo: _redoer.undo,
         redo: _redoer.redo,
+
+        //merge
+        getBaseOfCommits: getBaseOfCommits,
+        getDiffTree: getDiffTree,
+        getConflictOfDiffs: getConflictOfDiffs,
+        applyDiff: applyDiff,
+        merge: merge,
+        getResolve: getResolve,
+        resolve: resolve,
 
         //testing
         testMethod: testMethod
