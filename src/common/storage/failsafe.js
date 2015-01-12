@@ -4,7 +4,7 @@
  * Author: Tamas Kecskes
  */
 
-define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
+define(["util/assert", "util/guid"], function (ASSERT, GUID) {
   "use strict";
   var BRANCH_OBJ_ID = '*branch*';
   var BRANCH_STATES = {
@@ -82,29 +82,6 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
       }
     }
 
-    function closeDatabase(callback) {
-      _database.closeDatabase(callback);
-    }
-
-    function fsyncDatabase(callback) {
-      _database.fsyncDatabase(function (err) {
-        //TODO we should start to select amongst errors
-        callback(null);
-      });
-    }
-
-    function getProjectNames(callback) {
-      _database.getProjectNames(callback);
-    }
-
-    function getAllowedProjectNames(callback) {
-      _database.getAllowedProjectNames(callback);
-    }
-
-    function deleteProject(project, callback) {
-      _database.deleteProject(project, callback);
-    }
-
     function openProject(projectName, callback) {
       var project = null;
       var inSync = true;
@@ -116,11 +93,13 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
             pendingStorage[projectName][BRANCH_OBJ_ID] = {};
           }
           callback(null, {
-            fsyncDatabase: fsyncDatabase,
+            fsyncDatabase: project.fsyncDatabase,
             getDatabaseStatus: project.getDatabaseStatus,
             closeProject: project.closeProject,
             loadObject: loadObject,
             insertObject: insertObject,
+            getInfo: project.getInfo,
+            setInfo: project.setInfo,
             findHash: project.findHash,
             dumpObjects: project.dumpObjects,
             getBranchNames: getBranchNames,
@@ -417,7 +396,7 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
           case BRANCH_STATES.SYNC:
             ASSERT(branchObj.local.length === 0);
             branchObj.state = BRANCH_STATES.AHEAD;
-            branchObj.local = [ newhash, oldhash ];
+            branchObj.local = [newhash, oldhash];
             project.setBranchHash(branch, oldhash, newhash, returnFunction);
             callback(null);
             return;
@@ -444,7 +423,7 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
              callback(new Error("branch hash mismatch"));
              }*/
             if (branchObj.local.length === 0) {
-              branchObj.local = [ newhash, oldhash ];
+              branchObj.local = [newhash, oldhash];
               callback(null);
             } else {
               if (oldhash === branchObj.local[0]) {
@@ -477,14 +456,14 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
 
     return {
       openDatabase: openDatabase,
-      closeDatabase: closeDatabase,
-      fsyncDatabase: fsyncDatabase,
-      getProjectNames: getProjectNames,
-      getAllowedProjectNames: getAllowedProjectNames,
+      closeDatabase: _database.closeDatabase,
+      fsyncDatabase: _database.fsyncDatabase,
+      getProjectNames: _database.getProjectNames,
+      getAllowedProjectNames: _database.getAllowedProjectNames,
       getAuthorizationInfo: _database.getAuthorizationInfo,
       getDatabaseStatus: _database.getDatabaseStatus,
       openProject: openProject,
-      deleteProject: deleteProject,
+      deleteProject: _database.deleteProject,
       simpleRequest: _database.simpleRequest,
       simpleResult: _database.simpleResult,
       simpleQuery: _database.simpleQuery,

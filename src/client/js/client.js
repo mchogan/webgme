@@ -175,10 +175,14 @@ define([
           _configuration.host = "";
         }
       }
-      require([_configuration.host + '/listAllDecorators', _configuration.host + '/listAllPlugins'], function (d, p) {
-        AllDecorators = WebGMEGlobal.allDecorators;
-        AllPlugins = WebGMEGlobal.allPlugins;
-      });
+      if(typeof WebGMEGlobal !== 'undefined') {
+        require([_configuration.host + '/listAllDecorators', _configuration.host + '/listAllPlugins'], function (d, p) {
+          AllDecorators = WebGMEGlobal.allDecorators;
+          AllPlugins = WebGMEGlobal.allPlugins;
+        });
+      } else {
+        console.warn('WebGMEGlobal not defined - cannot get plugins.');
+      }
 
       function print_nodes(pretext) {
         if (pretext) {
@@ -248,7 +252,7 @@ define([
 
       function newDatabase() {
         var storageOptions ={log: LogManager.create('client-storage'), host: _configuration.host};
-        if(WebGMEGlobal.TESTING === true){
+        if(typeof WebGMEGlobal !== 'undefined' && WebGMEGlobal.TESTING === true){
           storageOptions.type = 'node';
           storageOptions.host = 'http://localhost';
           storageOptions.port = _configuration.port;
@@ -531,7 +535,9 @@ define([
         refreshToken();
 
         //TODO check if this is okay to set it here
-        WebGMEGlobal.getToken = getToken;
+        if(typeof WebGMEGlobal !== 'undefined') {
+           WebGMEGlobal.getToken = getToken;
+        }
         return {
           getToken: getToken
         };
@@ -1724,7 +1730,7 @@ define([
         }
       }
 
-      function createProjectAsync(projectname, callback) {
+      function createProjectAsync(projectname, projectInfo, callback) {
         if (_database) {
           getAvailableProjectsAsync(function (err, names) {
             if (!err && names) {
@@ -1733,7 +1739,14 @@ define([
                   if (!err && p) {
                     createEmptyProject(p, function (err, commit) {
                       if (!err && commit) {
-                        callback(null);
+                        //TODO currently this is just a hack
+                        p.setInfo(projectInfo || {
+                          visibleName:projectname,
+                          description:"project in webGME",
+                          tags:{}
+                        },function(err){
+                          callback(err);
+                        });
                       } else {
                         callback(err);
                       }
@@ -2891,121 +2904,12 @@ define([
       function testMethod(testnumber){
         switch(testnumber){
           case 1:
-            _core.loadRoot(_previousRootHash,function(err,root){
-              if(!err && root){
-                _core.applyTreeDiff(root,_changeTree,function(err){
-                  console.log('apply finished...');
-                  _core.persist(root,function(){});
-                  _core.generateTreeDiff(root,_nodes[''].node,function(err,diff){
-                    console.log('recheck apply',err,diff);
-                  });
-                });
-              } else {
-                console.log('kecso HIBAAAAA');
-              }
-            });
             break;
           case 2:
-            /*getFullProjectsInfoAsync(function(err,info){
-              if(err){
-                console.log('hibaaa',err);
-              } else {
-                //console.log(info);
-                var myInfo = info[getActiveProject()];
-                _project.getCommonAncestorCommit(myInfo.branches.master,myInfo.branches.masik,function(err,commit){
-                  console.log('common commit',err,commit);
-                });
-              }
-            });*/
-            _core.loadRoot('#07e862295417e7140b46b3ad33c7985d37852ccd',function(err,sRoot){
-              _core.loadRoot('#8a188a9138afbd083965d7cb7a7952067221a5d3',function(err,tRoot){
-                _core.generateTreeDiff(sRoot,tRoot,function(err,diff){
-                  console.log(JSON.stringify(diff,null,2));
-                });
-              });
-            });
-          /*#ad2d5574108ff98d36d1a0a0ffbfa2bec88df7f0 - targetcommit - #8a188a9138afbd083965d7cb7a7952067221a5d3
-            #42034ab3144916d2ac9855afbbd65318575e78e4 - sourcecommit - #07e862295417e7140b46b3ad33c7985d37852ccd -rootCommit*/
             break;
           case 3:
-            //we try our first merge
-            var base,master,masik,
-              baseToMaster,baseToMasik,mastHash,masiHash,
-              getRootHashes = function(){
-                var needed = 3;
-                _project.loadObject(base,function(err,b){
-                  _core.loadRoot(b.root,function(err,r){
-                    base = r;
-                    if(--needed === 0){
-                      rootsLoaded();
-                    }
-                  });
-                });
-                _project.loadObject(master,function(err,b){
-                  _core.loadRoot(b.root,function(err,r){
-                    master = r;
-                    if(--needed === 0){
-                      rootsLoaded();
-                    }
-                  });
-                });
-                _project.loadObject(masik,function(err,b){
-                  _core.loadRoot(b.root,function(err,r){
-                    masik = r;
-                    if(--needed === 0){
-                      rootsLoaded();
-                    }
-                  });
-                });
-              },
-              rootsLoaded = function(){
-                var needed = 2;
-                _core.generateTreeDiff(base,master,function(err,diff){
-                  baseToMaster = diff;
-                  if(--needed===0){
-                    diffsGenerated();
-                  }
-                });
-                _core.generateTreeDiff(base,masik,function(err,diff){
-                  baseToMasik = diff;
-                  if(--needed===0){
-                    diffsGenerated();
-                  }
-                });
-              },
-              diffsGenerated = function(){
-                console.log('diffMaster',baseToMaster);
-                console.log('diffMasik',baseToMasik);
-                var fullDiffMaster = _core.concatTreeDiff(baseToMaster,baseToMasik),
-                  fullDiffMasik = _core.concatTreeDiff(baseToMasik,baseToMaster);
-                console.log('fullMaster',fullDiffMaster);
-                console.log('fullMasik',fullDiffMasik);
-                if(_core.isEqualDifferences(fullDiffMaster,fullDiffMasik)){
-                  _core.applyTreeDiff(base,fullDiffMaster,function(err){
-                    _core.persist(base,function(err){
-                      var newHash = _project.makeCommit([mastHash,masiHash], _core.getHash(base), "merging", function(){
-                        _project.setBranchHash('merged','',newHash,function(err){
-                          console.log('merged branch created');
-                        });
-                      });
-                    });
-                  });
-                }
-              };
-            getFullProjectsInfoAsync(function(err,info){
-              var myInfo = info[getActiveProject()];
-              master = myInfo.branches.master;
-              masik = myInfo.branches.masik;
-              mastHash = master;
-              masiHash = masik;
-              _project.getCommonAncestorCommit(master,masik,function(err,commit){
-                base = commit;
-                getRootHashes();
-              });
-            });
             break;
         }
-
       }
 
       //export and import functions
@@ -3137,7 +3041,8 @@ define([
 
       function createProjectFromFileAsync(projectname, jProject, callback) {
         //if called on an existing project, it will ruin it!!! - although the old commits will be untouched
-        createProjectAsync(projectname, function (err) {
+        //TODO somehow the export / import should contain the INFO field so the tags and description could come from it
+        createProjectAsync(projectname, {}, function (err) {
           selectProjectAsync(projectname, function (err) {
             Serialization.import(_core, _root, jProject, function (err) {
               if (err) {
@@ -3229,6 +3134,33 @@ define([
           }
           _database.simpleResult(id, callback);
         });
+      }
+
+      function setProjectInfoAsync(projectId,info,callback){
+        _database.simpleRequest({command:'setProjectInfo',projectId:projectId,info:info},function(err,rId){
+          if(err){
+            return callback(err);
+          }
+          _database.simpleResult(rId,callback);
+        })
+      }
+
+      function getProjectInfoAsync(projectId,callback){
+        _database.simpleRequest({command:'getProjectInfo',projectId:projectId},function(err,rId){
+          if(err){
+            return callback(err);
+          }
+          _database.simpleResult(rId,callback);
+        })
+      }
+
+      function getAllInfoTagsAsync(callback){
+        _database.simpleRequest({command:'getAllInfoTags'},function(err,rId){
+          if(err){
+            return callback(err);
+          }
+          _database.simpleResult(rId,callback);
+        })
       }
 
       function createGenericBranchAsync(project, branch, commit, callback) {
@@ -3704,6 +3636,9 @@ define([
         getFullProjectsInfoAsync: getFullProjectsInfoAsync,
         createGenericBranchAsync: createGenericBranchAsync,
         deleteGenericBranchAsync: deleteGenericBranchAsync,
+        setProjectInfoAsync: setProjectInfoAsync,
+        getProjectInfoAsync: getProjectInfoAsync,
+        getAllInfoTagsAsync: getAllInfoTagsAsync,
 
         //constraint
         setConstraint: setConstraint,
