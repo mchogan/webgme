@@ -16,29 +16,31 @@ define([ "util/assert", "core/tasync" ], function(ASSERT, TASYNC) {
     }
 
     core.loadRoot = function(rootHash){
-      //This function loads the root and all hashed sub-objects
-      // right now we HASH-es the direct children of the OVR of the root
-      var root = innerCore.loadRoot(rootHash),
-        loadOvrChildren = function(object){
-          //here the object is the root
-          var OVR = core.getChild(object,OVERLAYS), i,children,done,child;
-          children = core.getKeys(OVR);
-          for(i=0;i<children.length;i++){
-            done = TASYNC.call(core.loadChild,OVR,children[i]);
+      return TASYNC.call(function(root){
+        var OVR = core.getChild(root,OVERLAYS),
+          keys = core.getKeys(OVR),
+          i,done,toHashed=[];
+        for(i=0;i<keys.length;i++){
+          if(!isValidHash(core.getChild(OVR,keys[i]).data)){
+            toHashed.push(keys[i]);
           }
-          return TASYNC.call(function(){
-            //now all of OVR children have been loaded
-            var i,children,child;
-            children = core.getKeys(OVR);
-            for(i=0;i<children.length;i++){
-              core.setHashed(core.getChild(OVR,children[i]),true);
+        }
+        for(i=0;i<keys.length;i++){
+          done = TASYNC.call(function(ovrChild){
+            if(toHashed.indexOf(core.getRelid(ovrChild)) !== -1){
+              core.setHashed(ovrChild,true);
             }
-            return root;
-          });
-        };
-
-      return TASYNC.call(loadOvrChildren,root);
+            //core.setHashed(ovrChild,true);
+          },core.loadChild(OVR,keys[i]),done);
+        }
+        return TASYNC.call(function(){
+          return root;
+        },done);
+      },innerCore.loadRoot(rootHash));
     };
+
+    //core.loadRoot = innerCore.loadRoot;
+
     return core;
   };
   return RootLoader;

@@ -13,7 +13,7 @@ define(["core/corerel",'core/setcore','core/guidcore','core/nullpointercore','co
         options = options || {};
         options.usetype = options.usertype || 'nodejs';
 
-        var coreCon = new RootLoader(new TreeLoader(new MetaCore(new Constraint(new Descriptor(new Guid(new Set(new NullPtr(new Type(new NullPtr(new CoreRel(new CoreTree(storage, options))))))))))));
+        var coreCon = new TreeLoader(new MetaCore(new Constraint(new Descriptor(new Guid(new Set(new NullPtr(new Type(new NullPtr(new CoreRel(new RootLoader(new CoreTree(storage, options))))))))))));
 
         if(options.usertype === 'tasync'){
             return coreCon;

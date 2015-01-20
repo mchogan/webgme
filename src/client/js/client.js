@@ -1447,6 +1447,7 @@ define([
       }
 
       function saveRoot(msg, callback) {
+        var start;
         callback = callback || function () {
         };
         if (!_viewer && !_readOnlyProject) {
@@ -1457,8 +1458,10 @@ define([
           }
           if (!_inTransaction) {
             ASSERT(_project && _core && _branch);
+            start = new Date().getTime();
             _core.persist(_nodes[ROOT_PATH].node, function (err) {
             });
+            console.warn('persist1 - ', new Date().getTime()-start);
             var newRootHash = _core.getHash(_nodes[ROOT_PATH].node);
             var newCommitHash = _project.makeCommit([_recentCommits[0]], newRootHash, _msg, function (err) {
               //TODO now what??? - could we end up here?
@@ -1474,8 +1477,10 @@ define([
             });
             //loading(newRootHash);
           } else {
+            start = new Date().getTime();
             _core.persist(_nodes[ROOT_PATH].node, function (err) {
             });
+            console.warn('persist2 - ', new Date().getTime()-start);
           }
         } else {
           _msg = "";

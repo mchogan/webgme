@@ -920,7 +920,9 @@ define([ "util/assert", "util/key", "core/future", "core/tasync", 'util/canon' ]
 			loadChild: loadChild,
 			loadByPath: loadByPath,
 
-			isValidNode: isValidNode
+			isValidNode: isValidNode,
+
+			ID_NAME : ID_NAME
 		};
 	};
 });

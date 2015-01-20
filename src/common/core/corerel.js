@@ -13,6 +13,7 @@ define([ "util/assert", "core/coretree", "core/tasync", "util/canon" ], function
 	var REGISTRY = "reg";
 	var OVERLAYS = "ovr";
 	var COLLSUFFIX = "-inv";
+	var ID_NAME;
 
 	function isPointerName(name) {
 		ASSERT(typeof name === "string");
@@ -20,6 +21,9 @@ define([ "util/assert", "core/coretree", "core/tasync", "util/canon" ], function
         if(name === "_mutable"){
             return false;
         }
+				if(name === ID_NAME){
+					return false;
+				}
 		return name.slice(-COLLSUFFIX.length) !== COLLSUFFIX;
 	}
 
@@ -38,6 +42,7 @@ define([ "util/assert", "core/coretree", "core/tasync", "util/canon" ], function
 	function CoreRel(coretree) {
 		ASSERT(typeof coretree == "object");
 
+		ID_NAME = coretree.ID_NAME;
 		function isValidNode(node) {
 			try {
 				__test("coretree", coretree.isValidNode(node));
@@ -542,7 +547,7 @@ define([ "util/assert", "core/coretree", "core/tasync", "util/canon" ], function
 			return TASYNC.lift(children);
 		}
 
-		function getPointerNames(node) {
+		/*function getPointerNames(node) {
 			ASSERT(isValidNode(node));
 
 			var source = "";
@@ -562,6 +567,31 @@ define([ "util/assert", "core/coretree", "core/tasync", "util/canon" ], function
 				source = "/" + coretree.getRelid(node) + source;
 				node = coretree.getParent(node);
 			} while (node);
+
+			return names;
+		}*/
+
+		function getPointerNames(node){
+			ASSERT(isValidNode(node));
+
+			var source = "",
+				names =[],
+				child,i;
+
+			do{
+				child = coretree.getChild(coretree.getChild(node,OVERLAYS),source);
+				if(child){
+					child = coretree.getKeys(child) || [];
+					for(i=0;i<child.length;i++){
+						ASSERT(names.indexOf(child[i]) === -1);
+						if(isPointerName(child[i])){
+							names.push(child[i]);
+						}
+					}
+				}
+				source = "/" + coretree.getRelid(node) + source;
+				node = coretree.getParent(node);
+			} while(node);
 
 			return names;
 		}
