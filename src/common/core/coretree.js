@@ -708,7 +708,10 @@ define([ "util/assert", "util/key", "core/future", "core/tasync", 'util/canon' ]
 				ASSERT(hash === "" || typeof hash === "undefined");
 
 				if (hash === "") {
+					console.warn('objSize',JSON.stringify(data).length);
+					var start = new Date().getTime();
 					hash = "#" + GENKEY(data);
+					console.log('objHashTime',new Date().getTime()-start);
 					data[ID_NAME] = hash;
 
 					done = FUTURE.join(done, storage.insertObject(data));

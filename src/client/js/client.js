@@ -1477,10 +1477,10 @@ define([
             });
             //loading(newRootHash);
           } else {
-            start = new Date().getTime();
+            /*start = new Date().getTime();
             _core.persist(_nodes[ROOT_PATH].node, function (err) {
             });
-            console.warn('persist2 - ', new Date().getTime()-start);
+            console.warn('persist2 - ', new Date().getTime()-start);*/
           }
         } else {
           _msg = "";

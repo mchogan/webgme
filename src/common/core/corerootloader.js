@@ -30,7 +30,8 @@ define([ "util/assert", "core/tasync" ], function(ASSERT, TASYNC) {
             if(toHashed.indexOf(core.getRelid(ovrChild)) !== -1){
               core.setHashed(ovrChild,true);
             }
-            //core.setHashed(ovrChild,true);
+            root.ovrChildren = root.ovrChildren || {};
+            root.ovrChildren[core.getRelid(ovrChild)] = ovrChild;
           },core.loadChild(OVR,keys[i]),done);
         }
         return TASYNC.call(function(){
