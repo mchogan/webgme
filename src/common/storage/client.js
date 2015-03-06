@@ -121,7 +121,7 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
                 } else {
                     //we should try to reconnect
                     callback(null);
-                    socket.socket.reconnect();
+                    //socket.socket.reconnect();
                 }
             } else {
                 var guid = GUID(), firstConnection = true;
@@ -135,8 +135,9 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
                         'connect timeout': 10,
                         'reconnection delay': 1,
                         'force new connection': true,
-                        'reconnect': false,
-                        'query':"webGMESessionId="+options.webGMESessionId
+                        'reconnect': false, // FIXME: should we set it to true?
+                        'query':"webGMESessionId="+options.webGMESessionId, //this option is only used when some user initiated server function connects to the webgme server
+                        'transports': ['websocket']
                     });
 
                     socket.on('connect', function () {
@@ -176,6 +177,10 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
                         }
                     });
 
+                    socket.on('error', function (err) {
+                        callback(err);
+                    });
+
                     socket.on('disconnect', function () {
                         status = STATUS_NETWORK_DISCONNECTED;
                         socketConnected = false;
@@ -186,13 +191,11 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
                 };
 
                 if (options.type === 'browser') {
-                    require([ _hostAddress + "/socket.io/socket.io.js" ], function () {
-                        IO = io;
+                    require([ _hostAddress + "/socket.io/socket.io.js" ], function (io) {
+                        IO = io || window.io;
                         IOReady();
                     });
                 } else {
-                    /*IO = require("socket.io-client");
-                     IOReady();*/
                     require([ 'socket.io-client' ], function (io) {
                         IO = io;
                         IOReady();
@@ -222,7 +225,7 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
             }
         }
 
-        function fsyncDatabase (callback) {
+        function fsyncDatabase (callback, projectName) {
             ASSERT(typeof callback === 'function');
             if (socketConnected) {
                 var guid = GUID();
@@ -230,7 +233,7 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
                     cb: callback,
                     to: setTimeout(callbackTimeout, options.timeout, guid)
                 };
-                socket.emit('fsyncDatabase', function (err) {
+                socket.emit('fsyncDatabase', projectName, function (err) {
                     if(callbacks[guid]){
                         clearTimeout(callbacks[guid].to);
                         delete callbacks[guid];
@@ -404,6 +407,7 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
                                     setBranchHash: setBranchHash,
                                     getCommits: getCommits,
                                     makeCommit: makeCommit,
+                  getCommonAncestorCommit: getCommonAncestorCommit,
                                     ID_NAME: "_id"
                                 };
                                 callback(null, projects[project]);
@@ -427,7 +431,7 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
                         to: setTimeout(callbackTimeout, options.timeout, guid)
                     };
                     flushSaveBucket();
-                    socket.emit('fsyncDatabase', function (err) {
+                    socket.emit('fsyncDatabase', project, function (err) {
                         if(callbacks[guid]){
                             clearTimeout(callbacks[guid].to);
                             delete callbacks[guid];
@@ -789,7 +793,27 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
                     callback(new Error(ERROR_DISCONNECTED));
                 }
             }
+
+      function getCommonAncestorCommit(commitA, commitB, callback) {
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
+          socket.emit('getCommonAncestorCommit', project, commitA, commitB, function (err, commit) {
+            if (callbacks[guid]) {
+              clearTimeout(callbacks[guid].to);
+              delete callbacks[guid];
+              callback(err, commit);
         }
+          });
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
+        }
+      }
+    }
 
         function simpleRequest (parameters,callback){
             ASSERT(typeof callback === 'function');

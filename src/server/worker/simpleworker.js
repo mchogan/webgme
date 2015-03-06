@@ -1,4 +1,4 @@
-/*global __dirname, webGMEGlobal */
+/*global __dirname, webGMEGlobal, require, process, setImmediate */
 var requirejs = require("requirejs"),
   BASEPATH = __dirname + "/../..",
   WEBGME = require(BASEPATH + '/../webgme');
@@ -28,13 +28,13 @@ requirejs(['worker/constants',
     'logManager',
     'fs',
     'path',
-    'blob/BlobServerClient',
+    'blob/BlobClient',
     'plugin/PluginManagerBase',
     'plugin/PluginResult',
     'storage/clientstorage',
     'coreclient/serialization',
     'auth/gmeauth'],
-  function (CONSTANT, Core, Storage, GUID, DUMP, logManager, FS, PATH, BlobServerClient, PluginManagerBase, PluginResult, ConnectedStorage, Serialization, GMEAUTH) {
+  function (CONSTANT, Core, Storage, GUID, DUMP, logManager, FS, PATH, BlobClient, PluginManagerBase, PluginResult, ConnectedStorage, Serialization, GMEAUTH) {
     'use strict';
     var storage = null,
       core = null,
@@ -62,7 +62,7 @@ requirejs(['worker/constants',
 
         WebGMEGlobal.setConfig(parameters.globConf);
         _CONFIG = parameters.globConf;
-        if (_CONFIG.authorization === true) {
+        if (_CONFIG.authentication === true) {
           AUTH = GMEAUTH(parameters.auth);
         }
         storage = new Storage({
@@ -76,13 +76,13 @@ requirejs(['worker/constants',
         storage.openDatabase(function (err) {
           if (err) {
             initialized = false;
-            process.send({
+            safeSend({
               pid: process.pid,
               type: CONSTANT.msgTypes.info,
               info: 'worker initialization failed, try again'
             });
           } else {
-            process.send({pid: process.pid, type: CONSTANT.msgTypes.initialized});
+            safeSend({pid: process.pid, type: CONSTANT.msgTypes.initialized});
           }
         });
       }
@@ -163,13 +163,13 @@ requirejs(['worker/constants',
     };
 
     //TODO the getContext should be refactored!!!
-    var getConnectedStorage = function (sessionId, callback) {
+    var getConnectedStorage = function (webGMESessionId, callback) {
       var connStorage = new ConnectedStorage({
         type: 'node',
-        host: '127.0.0.1',
+        host: (_CONFIG.httpsecure === true ? 'https' : 'http') + '://127.0.0.1',
         port: _CONFIG.port,
         log: logManager.create('SERVER-WORKER-PLUGIN-' + process.pid),
-        webGMESessionId: sessionId
+        webGMESessionId: webGMESessionId
       });
       connStorage.openDatabase(function (err) {
         callback(err, connStorage);
@@ -186,8 +186,8 @@ requirejs(['worker/constants',
         storage.openProject(projectName, callback);
       });
     };
-    var getProject = function (projectName, sessionId, callback) {
-      getConnectedStorage(sessionId, function (err, storage) {
+    var getProject = function (projectName, webGMESessionId, callback) {
+      getConnectedStorage(webGMESessionId, function (err, storage) {
         if (err) {
           return callback(err);
         }
@@ -198,16 +198,21 @@ requirejs(['worker/constants',
     var getPlugin = function (name) {
       return requirejs('plugin/' + name + '/' + name + '/' + name);
     };
-    var executePlugin = function (userId, name, sessionId, context, callback) {
+    var executePlugin = function (userId, name, webGMESessionId, context, callback) {
       var interpreter = getPlugin(name);
       if (interpreter) {
-        getProject(context.managerConfig.project, sessionId, function (err, project) {
+        getProject(context.managerConfig.project, webGMESessionId, function (err, project) {
           if (!err) {
             project.setUser(userId);
             var plugins = {};
             plugins[name] = interpreter;
             var manager = new PluginManagerBase(project, Core, plugins);
-            context.managerConfig.blobClient = new BlobServerClient({serverPort: _CONFIG.port, sessionId: sessionId});
+
+            context.managerConfig.blobClient = new BlobClient({
+              serverPort: _CONFIG.port,
+              httpsecure: _CONFIG.httpsecure,
+              server: _CONFIG.server || '127.0.0.1'
+            });
 
             manager.initialize(null, function (pluginConfigs, configSaveCallback) {
               if (configSaveCallback) {
@@ -235,8 +240,8 @@ requirejs(['worker/constants',
       }
     };
 
-    var createProject = function (sessionId, name, jsonProject, callback) {
-      getConnectedStorage(sessionId, function (err, storage) {
+    var createProject = function (webGMESessionId, name, jsonProject, callback) {
+      getConnectedStorage(webGMESessionId, function (err, storage) {
         if (err) {
           return callback("" + err);
         }
@@ -272,6 +277,7 @@ requirejs(['worker/constants',
     };
 
     var getAllProjectsInfo = function (userId, callback) {
+      // TODO: if authentication is turned on, just query the users database for the list of projects for which the user is authorized
       var projectNames,
         userAuthInfo = null,
         completeInfo = {},
@@ -302,7 +308,7 @@ requirejs(['worker/constants',
               cb(null);
             });
           } else {
-            projectNames = []; //we have authentication yet doesn't get valid user name...
+              projectNames = []; //we have authentication yet doesn't get valid user name...
             return cb(new Error('invalid user'));
 
           }
@@ -388,7 +394,7 @@ requirejs(['worker/constants',
       }
 
     };
-    var setProjectInfo = function (sessionId, projectId, info, callback) {
+    var setProjectInfo = function (webGMESessionId, projectId, info, callback) {
       if (storage) {
         if (initialized) {
           storage.getProjectNames(function (err, projectlist) {
@@ -399,7 +405,7 @@ requirejs(['worker/constants',
             if (projectlist.indexOf(projectId) === -1) {
               return callback(new Error('no such project'));
             }
-            getProject(projectId, sessionId, function (err, project) {
+            getProject(projectId, webGMESessionId, function (err, project) {
               if (err) {
                 return callback(err);
               }
@@ -414,7 +420,7 @@ requirejs(['worker/constants',
         callback(new Error('no active data connection'));
       }
     };
-    var getProjectInfo = function (sessionId, projectId, callback) {
+    var getProjectInfo = function (webGMESessionId, projectId, callback) {
       if (storage) {
         if (initialized) {
           storage.getProjectNames(function (err, projectlist) {
@@ -425,7 +431,7 @@ requirejs(['worker/constants',
             if (projectlist.indexOf(projectId) === -1) {
               return callback(new Error('no such project'));
             }
-            getProject(projectId, sessionId, function (err, project) {
+            getProject(projectId, webGMESessionId, function (err, project) {
               if (err) {
                 return callback(err);
               }
@@ -441,7 +447,7 @@ requirejs(['worker/constants',
       }
     };
 
-    var getAllInfoTags = function (sessionId, callback) {
+    var getAllInfoTags = function (webGMESessionId, callback) {
       var i, tags = {},
         needed,
         projectLoaded = function (err, project) {
@@ -476,7 +482,7 @@ requirejs(['worker/constants',
 
             needed = projectlist.length;
             for (i = 0; i < projectlist.length; i++) {
-              getProject(projectlist[i], sessionId, projectLoaded);
+              getProject(projectlist[i], webGMESessionId, projectLoaded);
             }
           });
         } else {
@@ -486,7 +492,7 @@ requirejs(['worker/constants',
         callback(new Error('no active data connection'));
       }
     };
-    var setBranch = function (sessionId, projectName, branchName, oldHash, newHash, callback) {
+    var setBranch = function (webGMESessionId, projectName, branchName, oldHash, newHash, callback) {
       if (storage) {
         if (initialized) {
           storage.getProjectNames(function (err, projectlist) {
@@ -497,7 +503,7 @@ requirejs(['worker/constants',
             if (projectlist.indexOf(projectName) === -1) {
               return callback(new Error('no such project'));
             }
-            getProject(projectName, sessionId, function (err, project) {
+            getProject(projectName, webGMESessionId, function (err, project) {
               if (err) {
                 return callback(err);
               }
@@ -517,11 +523,14 @@ requirejs(['worker/constants',
     var getAddOn = function (name) {
       return requirejs('addon/' + name + '/' + name + '/' + name);
     };
-    var initConnectedWorker = function (name, sessionId, projectName, branchName, callback) {
+    var initConnectedWorker = function (name, webGMESessionId, projectName, branchName, callback) {
+      if (!name || (AUTH && !webGMESessionId) || !projectName || !branchName) {
+          return setImmediate(callback, 'Required parameter was not provided');
+      }
       var addOnClass = getAddOn(name),
         connStorage = null;
       //for instance creation we need the Core class and the Storage object
-      getConnectedStorage(sessionId, function (err, cs) {
+      getConnectedStorage(webGMESessionId, function (err, cs) {
         if (!err && cs) {
           connStorage = cs;
           _addOn = new addOnClass(Core, connStorage);
@@ -533,7 +542,7 @@ requirejs(['worker/constants',
             _addOn.start({projectName: projectName, branchName: branchName, project: project}, callback);
           });
         } else {
-          callback('unable to connect user\'s storage');
+          callback('unable to connect user\'s storage: ' + err);
         }
       });
     };
@@ -559,6 +568,17 @@ requirejs(['worker/constants',
       }
     };
 
+    var safeSend = function(msg){
+      try {
+        process.send(msg);
+      } catch(e) {
+        //TODO check if we should separate some case
+        process.exit(0);
+      }
+    };
+
+
+
     //main message processing loop
     process.on('message', function (parameters) {
       parameters = parameters || {};
@@ -571,11 +591,11 @@ requirejs(['worker/constants',
         case CONSTANT.workerCommands.dumpMoreNodes:
           if (typeof parameters.name === 'string' && typeof parameters.hash === 'string' && parameters.nodes && parameters.nodes.length) {
             resultId = GUID();
-            process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
+            safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
             dumpMoreNodes(parameters.name, parameters.hash, parameters.nodes, function (err, r) {
               if (resultRequested === true) {
                 initResult();
-                process.send({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: r});
+                safeSend({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: r});
               } else {
                 resultReady = true;
                 error = err;
@@ -584,15 +604,15 @@ requirejs(['worker/constants',
             });
           } else {
             initResult();
-            process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: 'invalid parameters'});
+            safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: 'invalid parameters'});
           }
           break;
         case CONSTANT.workerCommands.generateJsonURL:
           resultId = GUID();
-          process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
+          safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
           if (resultRequested === true) {
             initResult();
-            process.send({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: parameters.object});
+            safeSend({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: parameters.object});
           } else {
             resultReady = true;
             error = null;
@@ -605,29 +625,29 @@ requirejs(['worker/constants',
               r = result;
 
             initResult();
-            process.send({pid: process.pid, type: CONSTANT.msgTypes.result, error: e, result: r});
+            safeSend({pid: process.pid, type: CONSTANT.msgTypes.result, error: e, result: r});
           } else {
             resultRequested = true;
           }
           break;
         case CONSTANT.workerCommands.executePlugin:
           if (typeof parameters.name === 'string' && typeof parameters.context === 'object') {
-            executePlugin(parameters.user, parameters.name, parameters.webGMESessionId, parameters.context, function (err, result) {
-              process.send({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: result});
+            executePlugin(parameters.userId, parameters.name, parameters.webGMESessionId, parameters.context, function (err, result) {
+              safeSend({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: result});
             });
           } else {
             initResult();
-            process.send({pid: process.pid, type: CONSTANT.msgTypes.result, error: 'invalid parameters', result: {}});
+            safeSend({pid: process.pid, type: CONSTANT.msgTypes.result, error: 'invalid parameters', result: {}});
           }
           break;
         case CONSTANT.workerCommands.exportLibrary:
           if (typeof parameters.name === 'string' && typeof parameters.hash === 'string' && typeof parameters.path === 'string') {
             resultId = GUID();
-            process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
+            safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
             exportLibrary(parameters.name, parameters.hash, parameters.path, function (err, r) {
               if (resultRequested === true) {
                 initResult();
-                process.send({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: r});
+                safeSend({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: r});
               } else {
                 resultReady = true;
                 error = err;
@@ -636,17 +656,17 @@ requirejs(['worker/constants',
             });
           } else {
             initResult();
-            process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: 'invalid parameters'});
+            safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: 'invalid parameters'});
           }
           break;
         case CONSTANT.workerCommands.createProjectFromFile:
           if (typeof parameters.name === 'string' && typeof parameters.json === 'object') {
             resultId = GUID();
-            process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
+            safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
             createProject(parameters.webGMESessionId, parameters.name, parameters.json, function (err) {
               if (resultRequested === true) {
                 initResult();
-                process.send({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: null});
+                safeSend({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: null});
               } else {
                 resultReady = true;
                 error = err;
@@ -655,16 +675,16 @@ requirejs(['worker/constants',
             });
           } else {
             initResult();
-            process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: 'invalid parameters'});
+            safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: 'invalid parameters'});
           }
           break;
         case CONSTANT.workerCommands.getAllProjectsInfo:
           resultId = GUID();
-          process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
-          getAllProjectsInfo(parameters.user, function (err, r) {
+          safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
+          getAllProjectsInfo(parameters.userId, function (err, r) {
             if (resultRequested === true) {
               initResult();
-              process.send({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: r});
+              safeSend({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: r});
             } else {
               resultReady = true;
               error = err;
@@ -674,11 +694,11 @@ requirejs(['worker/constants',
           break;
         case CONSTANT.workerCommands.setProjectInfo:
           resultId = GUID();
-          process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
+          safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
           setProjectInfo(parameters.webGMESessionId, parameters.projectId, parameters.info || {}, function (err) {
             if (resultRequested === true) {
               initResult();
-              process.send({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: null});
+              safeSend({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: null});
             } else {
               resultReady = true;
               error = err;
@@ -688,11 +708,11 @@ requirejs(['worker/constants',
           break;
         case CONSTANT.workerCommands.getProjectInfo:
           resultId = GUID();
-          process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
+          safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
           getProjectInfo(parameters.webGMESessionId, parameters.projectId, function (err, res) {
             if (resultRequested === true) {
               initResult();
-              process.send({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: res});
+              safeSend({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: res});
             } else {
               resultReady = true;
               error = err;
@@ -702,11 +722,11 @@ requirejs(['worker/constants',
           break;
         case CONSTANT.workerCommands.getAllInfoTags:
           resultId = GUID();
-          process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
+          safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
           getAllInfoTags(parameters.webGMESessionId, function (err, res) {
             if (resultRequested === true) {
               initResult();
-              process.send({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: res});
+              safeSend({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: res});
             } else {
               resultReady = true;
               error = err;
@@ -716,11 +736,11 @@ requirejs(['worker/constants',
           break;
         case CONSTANT.workerCommands.setBranch:
           resultId = GUID();
-          process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
+          safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: resultId});
           setBranch(parameters.webGMESessionId, parameters.project, parameters.branch, parameters.old, parameters.new, function (err, r) {
             if (resultRequested === true) {
               initResult();
-              process.send({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: r});
+              safeSend({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: r});
             } else {
               resultReady = true;
               error = err;
@@ -729,28 +749,29 @@ requirejs(['worker/constants',
           });
           break;
         case CONSTANT.workerCommands.connectedWorkerStart:
-          initConnectedWorker(parameters.workerName, parameters.sessionId, parameters.project, parameters.branch, function (err) {
+          initConnectedWorker(parameters.workerName, parameters.webGMESessionId, parameters.project, parameters.branch, function (err) {
             if (err) {
-              process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: err, resid: null});
+              safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: err, resid: null});
             } else {
-              process.send({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: process.pid});
+              safeSend({pid: process.pid, type: CONSTANT.msgTypes.request, error: null, resid: process.pid});
             }
           });
           break;
         case CONSTANT.workerCommands.connectedWorkerQuery:
           connectedWorkerQuery(parameters, function (err, result) {
-            process.send({pid: process.pid, type: CONSTANT.msgTypes.query, error: err, result: result});
+            safeSend({pid: process.pid, type: CONSTANT.msgTypes.query, error: err, result: result});
           });
           break;
         case CONSTANT.workerCommands.connectedWorkerStop:
           connectedworkerStop(function (err) {
-            process.send({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: null});
+            safeSend({pid: process.pid, type: CONSTANT.msgTypes.result, error: err, result: null});
           });
           break;
         default:
-          process.send({error: 'unknown command'});
+          safeSend({error: 'unknown command'});
       }
     });
 
-    process.send({pid: process.pid, type: CONSTANT.msgTypes.initialize});
+    safeSend({pid: process.pid, type: CONSTANT.msgTypes.initialize});
+
   });

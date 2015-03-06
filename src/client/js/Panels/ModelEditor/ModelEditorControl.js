@@ -285,6 +285,9 @@ define(['logManager',
             territoryChanged = false,
             self = this;
 
+        this.logger.debug("_dispatchEvents "+ events[0].etype);
+        events.shift();
+
         this.logger.debug("_dispatchEvents '" + i + "' items");
 
         /********** ORDER EVENTS BASED ON DEPENDENCY ************/
@@ -321,9 +324,10 @@ define(['logManager',
                     var dstGMEID = e.desc.target;
                     var srcConnIdx = -1;
                     var dstConnIdx = -1;
-                    var j = orderedConnectionEvents.length;
+                    var j = orderedConnectionEvents.length,
+                        ce;
                     while (j--) {
-                        var ce = orderedConnectionEvents[j];
+                        ce = orderedConnectionEvents[j];
                         if (ce.id === srcGMEID) {
                             srcConnIdx = j;
                         } else if (ce.id === dstGMEID) {
@@ -538,7 +542,7 @@ define(['logManager',
         //we are interested in the load of sub_components of the opened component
         if (this.currentNodeInfo.id !== gmeID) {
             if (objD) {
-                if (objD.parentId == this.currentNodeInfo.id) {
+                if (objD.parentId === this.currentNodeInfo.id) {
                     objDesc = _.extend({}, objD);
                     this._GmeID2ComponentID[gmeID] = [];
 
@@ -1102,11 +1106,10 @@ define(['logManager',
                     aspectRulesChanged = (_.difference(newAspectRules.items, this._selfPatterns[nodeId].items)).length > 0;
                 }
             } else {
-                if (!this._selfPatterns[nodeId].items && !newAspectRules.items) {
-                    //none of them has items, no change
-                } else {
+                if (this._selfPatterns[nodeId].items || newAspectRules.items) {
+                    //at least one has an item
                     aspectRulesChanged = true;
-                }
+                } 
             }
 
             if (aspectRulesChanged) {
