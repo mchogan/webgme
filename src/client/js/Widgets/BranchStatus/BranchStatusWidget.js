@@ -1,24 +1,29 @@
-/*globals define, _, requirejs, WebGMEGlobal*/
+/*globals define, WebGMEGlobal*/
+/*jshint browser: true*/
 
-define(['logManager',
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
+
+define([
+    'js/logger',
     'js/Controls/DropDownMenu',
-    'js/Controls/PopoverBox'], function (logManager,
-                                           DropDownMenu,
-                                           PopoverBox) {
+    'js/Controls/PopoverBox'
+], function (Logger, DropDownMenu, PopoverBox) {
 
-    "use strict";
+    'use strict';
 
     var BranchStatusWidget;
 
     BranchStatusWidget = function (containerEl, client) {
-        this._logger = logManager.create("BranchStatusWidget");
+        this._logger = Logger.create('gme:Widgets:BranchStatusWidget', WebGMEGlobal.gmeConfig.client.log);
 
         this._client = client;
         this._el = containerEl;
 
         this._initializeUI();
 
-        this._logger.debug("Created");
+        this._logger.debug('Created');
     };
 
     BranchStatusWidget.prototype._initializeUI = function () {
@@ -27,10 +32,12 @@ define(['logManager',
         this._el.empty();
 
         //BranchStatus DropDownMenu
-        this._ddBranchStatus = new DropDownMenu({"dropUp": true,
-            "pullRight": true,
-            "size": "micro",
-            "sort": true});
+        this._ddBranchStatus = new DropDownMenu({
+            dropUp: true,
+            pullRight: true,
+            size: 'micro',
+            sort: true
+        });
         this._ddBranchStatus.setTitle('BRANCHSTATUS');
 
         this._el.append(this._ddBranchStatus.getEl());

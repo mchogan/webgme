@@ -1,4 +1,4 @@
-/*globals require, process, __dirname, console, module*/
+/*jshint node: true*/
 /**
  * NOTE: Expected to be run only under nodejs.
  *
@@ -7,59 +7,39 @@
  * @author lattmann / https://github.com/lattmann
  */
 
-var requirejs = require('requirejs'),
+var webgme = require('../../webgme'),
     Q = require('q'),
     MongoURI = require('mongo-uri'),
 
-    GMEAuth,
-    config,
+    GMEAuth = require('../server/middleware/auth/gmeauth'),
 
-    main;
+    main,
 
-requirejs.config({
-    nodeRequire: require,
-    baseUrl: __dirname + '/..',
-    paths: {
-        'util': 'common/util',
-        'auth': 'server/auth',
-        'bin': 'bin'
-    }
-});
+    path = require('path'),
+    gmeConfig = require(path.join(process.cwd(), 'config')),
+    webgme = require('../../webgme');
 
-GMEAuth = requirejs('auth/gmeauth');
-config = requirejs('bin/getconfig');
+webgme.addToRequireJsPaths(gmeConfig);
 
-main = function () {
+main = function (argv) {
     'use strict';
-
-    var program = require('commander'),
+    var Command = require('commander').Command,
+        program = new Command(), // we need a new program (Command) instance every time when main is called.
         auth,
         mainDeferred = Q.defer(),
-        setupGMEAuth = function (databaseConnectionString) {
-            var mongoConnectionInfo,
-                uri;
+        setupGMEAuth = function (databaseConnectionString, callback) {
             if (databaseConnectionString) {
                 // this line throws a TypeError for invalid databaseConnectionString
-                uri = MongoURI.parse(databaseConnectionString);
+                MongoURI.parse(databaseConnectionString);
 
-                mongoConnectionInfo = {
-                    host: uri.hosts[0],
-                    port: uri.ports[0] || 27017,
-                    database: uri.database || 'multi'
-                };
-            } else {
-                mongoConnectionInfo = {
-                    host: config.mongoip,
-                    port: config.mongoport,
-                    database: config.mongodatabase
-                };
+                gmeConfig.mongo.uri = databaseConnectionString;
             }
 
-            console.log(mongoConnectionInfo);
-
-            auth = new GMEAuth(mongoConnectionInfo);
+            console.log(gmeConfig.mongo.uri);
+            auth = new GMEAuth(null, gmeConfig);
+            auth.connect(callback);
         },
-        args = Array.prototype.slice.call(process.argv);
+        args = Array.prototype.slice.call(argv);
 
     if (args.length === 2) {
         args.push('--help');
@@ -67,20 +47,29 @@ main = function () {
 
     program
         .version('0.1.0')
-        .option('--db <database>', 'database connection string', 'mongodb://127.0.0.1:27017/multi');
+        .option('--db <database>', 'database connection string')
+        .on('--help', function () {
+            mainDeferred.resolve();
+        });
 
     program
         .command('useradd <username> <email> <password>')
         .description('adds a new user')
         .option('-c, --canCreate', 'user can create a new project', false)
+        .option('-s, --siteAdmin', 'user can create a new project', false)
         .action(function (username, email, password, options) {
-            setupGMEAuth(options.parent.db);
-
-            // TODO: we may need to use a module like 'prompt' to get user password
-            auth.addUser(username, email, password, options.canCreate, { overwrite: true})
-                .then(mainDeferred.resolve)
-                .catch(mainDeferred.reject)
-                .finally(auth.unload);
+            setupGMEAuth(options.parent.db, function (/*err*/) {
+                // TODO: we may need to use a module like 'prompt' to get user password
+                if (username && email && password) {
+                    auth.addUser(username, email, password, options.canCreate || false,
+                        {overwrite: true, siteAdmin: options.siteAdmin || false})
+                            .then(mainDeferred.resolve)
+                            .catch(mainDeferred.reject)
+                            .finally(auth.unload);
+                } else {
+                    mainDeferred.reject(new SyntaxError('username, email, and password parameters are required'));
+                }
+            });
         })
         .on('--help', function () {
             console.log('  Examples:');
@@ -94,16 +83,27 @@ main = function () {
         .command('userlist [username]')
         .description('lists all users or the specified user')
         .action(function (username, options) {
-            setupGMEAuth(options.parent.db);
-
-            return auth.getAllUserAuthInfo(username)
-                .then(function (userObject) {
-                    // TODO: pretty print users
-                    console.log(userObject);
-                    mainDeferred.resolve();
-                })
-                .catch(mainDeferred.reject)
-                .finally(auth.unload);
+            setupGMEAuth(options.parent.db, function (/*err*/) {
+                if (username) {
+                    auth.getUser(username)
+                        .then(function (userObject) {
+                            // TODO: pretty print users
+                            console.log(userObject);
+                            mainDeferred.resolve();
+                        })
+                        .catch(mainDeferred.reject)
+                        .finally(auth.unload);
+                } else {
+                    auth.listUsers(null)
+                        .then(function (userObject) {
+                            // TODO: pretty print users
+                            console.log(userObject);
+                            mainDeferred.resolve();
+                        })
+                        .catch(mainDeferred.reject)
+                        .finally(auth.unload);
+                }
+            });
         })
         .on('--help', function () {
             console.log('  Examples:');
@@ -117,17 +117,25 @@ main = function () {
         .command('passwd <username> <password>')
         .description('updates the user')
         .action(function (username, password, options) {
-            setupGMEAuth(options.parent.db);
+            setupGMEAuth(options.parent.db, function (/*err*/) {
 
-            // TODO: we may need to use a module like 'prompt' to get user password
-            return auth.getAllUserAuthInfo(username)
-                .then(function (userObject) {
-                    return auth.addUser(username, userObject.email, password, userObject.canCreate, { overwrite: true});
-                })
-                .then(mainDeferred.resolve)
-                .catch(mainDeferred.reject)
-                .finally(auth.unload);
-
+                // TODO: we may need to use a module like 'prompt' to get user password
+                if (username && password) {
+                    auth.getAllUserAuthInfo(username)
+                        .then(function (userObject) {
+                            return auth.addUser(username,
+                                userObject.email,
+                                password,
+                                userObject.canCreate,
+                                {overwrite: true});
+                        })
+                        .then(mainDeferred.resolve)
+                        .catch(mainDeferred.reject)
+                        .finally(auth.unload);
+                } else {
+                    mainDeferred.reject(new SyntaxError('username and password parameters are required'));
+                }
+            });
         })
         .on('--help', function () {
             console.log('  Examples:');
@@ -140,12 +148,17 @@ main = function () {
         .command('userdel <username>')
         .description('deletes a user')
         .action(function (username, options) {
-            setupGMEAuth(options.parent.db);
+            setupGMEAuth(options.parent.db, function (/*err*/) {
 
-            return auth.removeUserByUserId(username)
-                .then(mainDeferred.resolve)
-                .catch(mainDeferred.reject)
-                .finally(auth.unload);
+                if (username) {
+                    auth.deleteUser(username)
+                        .then(mainDeferred.resolve)
+                        .catch(mainDeferred.reject)
+                        .finally(auth.unload);
+                } else {
+                    mainDeferred.reject(new SyntaxError('username parameter is missing'));
+                }
+            });
         })
         .on('--help', function () {
             console.log('  Examples:');
@@ -155,15 +168,20 @@ main = function () {
         });
 
     program
-        .command('organizationadd <orgname>')
+        .command('organizationadd <organizationname>')
         .description('adds a new organization')
-        .action(function (orgname, options) {
-            setupGMEAuth(options.parent.db);
+        .action(function (organizationname, options) {
+            setupGMEAuth(options.parent.db, function (/*err*/) {
 
-            return auth.addOrganization(orgname)
-                .then(mainDeferred.resolve)
-                .catch(mainDeferred.reject)
-                .finally(auth.unload);
+                if (organizationname) {
+                    auth.addOrganization(organizationname)
+                        .then(mainDeferred.resolve)
+                        .catch(mainDeferred.reject)
+                        .finally(auth.unload);
+                } else {
+                    mainDeferred.reject(new SyntaxError('organizationname parameter is missing'));
+                }
+            });
         })
         .on('--help', function () {
             console.log('  Examples:');
@@ -176,12 +194,17 @@ main = function () {
         .command('organizationdel <organizationname>')
         .description('deletes an existing organization')
         .action(function (organizationname, options) {
-            setupGMEAuth(options.parent.db);
+            setupGMEAuth(options.parent.db, function (/*err*/) {
 
-            return auth.removeOrganizationByOrgId(organizationname)
-                .then(mainDeferred.resolve)
-                .catch(mainDeferred.reject)
-                .finally(auth.unload);
+                if (organizationname) {
+                    auth.removeOrganizationByOrgId(organizationname)
+                        .then(mainDeferred.resolve)
+                        .catch(mainDeferred.reject)
+                        .finally(auth.unload);
+                } else {
+                    mainDeferred.reject(new SyntaxError('organizationname parameter is missing'));
+                }
+            });
         })
         .on('--help', function () {
             console.log('  Examples:');
@@ -190,25 +213,26 @@ main = function () {
             console.log();
         });
 
-    var authUserOrGroup = function(id, projectname, options, fn) {
+    var authUserOrGroup = function (id, projectname, options, fn) {
         var rights = {
-            read:   options.authorize.indexOf('r') !== -1,
-            write:  options.authorize.indexOf('w') !== -1,
+            read: options.authorize.indexOf('r') !== -1,
+            write: options.authorize.indexOf('w') !== -1,
             delete: options.authorize.indexOf('d') !== -1
         };
 
-        setupGMEAuth(options.parent.db);
+        setupGMEAuth(options.parent.db, function (/*err*/) {
 
-        if (options.deauthorize) {
-            // deauthorize
-            rights = {};
-        }
+            if (options.deauthorize) {
+                // deauthorize
+                rights = {};
+            }
 
-        // authorize
-        return auth[fn].call(this, id, projectname, 'create', rights)
-            .then(mainDeferred.resolve)
-            .catch(mainDeferred.reject)
-            .finally(auth.unload);
+            // authorize
+            auth[fn].call(this, id, projectname, 'create', rights)
+                .then(mainDeferred.resolve)
+                .catch(mainDeferred.reject)
+                .finally(auth.unload);
+        });
     };
 
     program
@@ -217,7 +241,11 @@ main = function () {
         .option('-a, --authorize <mode>', 'mode is rwd, read, write, delete', 'rwd')
         .option('-d, --deauthorize', 'deauthorizes user', false)
         .action(function (username, projectname, options) {
-            return authUserOrGroup(username, projectname, options, 'authorizeByUserId');
+            if (username && projectname) {
+                authUserOrGroup(username, projectname, options, 'authorizeByUserId');
+            } else {
+                mainDeferred.reject(new SyntaxError('username and projectname parameter are missing'));
+            }
         })
         .on('--help', function () {
             console.log('  Examples:');
@@ -237,7 +265,11 @@ main = function () {
         .option('-a, --authorize <mode>', 'mode is rwd, read, write, delete', 'rwd')
         .option('-d, --deauthorize', 'deauthorizes user', false)
         .action(function (orgname, projectname, options) {
-            return authUserOrGroup(orgname, projectname, options, 'authorizeOrganization');
+            if (orgname && projectname) {
+                authUserOrGroup(orgname, projectname, options, 'authorizeOrganization');
+            } else {
+                mainDeferred.reject(new SyntaxError('orgname and projectname parameter are missing'));
+            }
         })
         .on('--help', function () {
             console.log('    Organizations are authorized like users are authorized. See also: usermod_auth');
@@ -247,12 +279,17 @@ main = function () {
         .command('usermod_organization_add <username> <organizationname>')
         .description('adds a user to an existing organization')
         .action(function (username, organizationname, options) {
-            setupGMEAuth(options.parent.db);
+            setupGMEAuth(options.parent.db, function (/*err*/) {
 
-            return auth.addUserToOrganization(username, organizationname)
-                .then(mainDeferred.resolve)
-                .catch(mainDeferred.reject)
-                .finally(auth.unload);
+                if (username && organizationname) {
+                    auth.addUserToOrganization(username, organizationname)
+                        .then(mainDeferred.resolve)
+                        .catch(mainDeferred.reject)
+                        .finally(auth.unload);
+                } else {
+                    mainDeferred.reject(new SyntaxError('username and organizationname parameter are missing'));
+                }
+            });
         })
         .on('--help', function () {
             console.log('  Examples:');
@@ -265,12 +302,17 @@ main = function () {
         .command('usermod_organization_del <username> <organizationname>')
         .description('removes a user from an existing organization')
         .action(function (username, organizationname, options) {
-            setupGMEAuth(options.parent.db);
+            setupGMEAuth(options.parent.db, function (/*err*/) {
 
-            return auth.removeUserFromOrganization(username, organizationname)
-                .then(mainDeferred.resolve)
-                .catch(mainDeferred.reject)
-                .finally(auth.unload);
+                if (username && organizationname) {
+                    auth.removeUserFromOrganization(username, organizationname)
+                        .then(mainDeferred.resolve)
+                        .catch(mainDeferred.reject)
+                        .finally(auth.unload);
+                } else {
+                    mainDeferred.reject(new SyntaxError('username and organizationname parameter are missing'));
+                }
+            });
         })
         .on('--help', function () {
             console.log('  Examples:');
@@ -285,9 +327,13 @@ main = function () {
     return mainDeferred.promise;
 };
 
+module.exports = {
+    main: main
+};
+
 if (require.main === module) {
-    
-    main()
+
+    main(process.argv)
         .then(function () {
             'use strict';
             console.log('Done');

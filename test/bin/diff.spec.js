@@ -1,4 +1,4 @@
-/*jshint node:true, mocha:true */
+/*jshint node:true, mocha:true, expr:true */
 
 /**
  * @author kecso / https://github.com/kecso
@@ -8,30 +8,28 @@ var testFixture = require('../_globals');
 
 describe('diff CLI tests', function () {
     'use strict';
-    var diffCLI = require('../../src/bin/diff'),
+    var gmeConfig = testFixture.getGmeConfig(),
+        Storage = testFixture.WebGME.serverUserStorage,
+        diffCLI = require('../../src/bin/diff'),
         importCLI = require('../../src/bin/import'),
         mongodb = testFixture.mongodb,
+        mongoConn,
         FS = testFixture.fs,
         getJsonProject = function (path) {
             return JSON.parse(FS.readFileSync(path, 'utf-8'));
         },
 
-        mongoUri = 'mongodb://127.0.0.1:27017/multi',
+        mongoUri = gmeConfig.mongo.uri,
         diffCliTest = 'diffCliTest';
 
     before(function (done) {
         // TODO: move this to globals.js as a utility function
-        mongodb.MongoClient.connect('mongodb://127.0.0.1:27017/multi', {
-            'w': 1,
-            'native-parser': true,
-            'auto_reconnect': true,
-            'poolSize': 20,
-            socketOptions: {keepAlive: 1}
-        }, function (err, db) {
+        mongodb.MongoClient.connect(mongoUri, gmeConfig.mongo.options, function (err, db) {
             if (err) {
                 done(err);
                 return;
             }
+            mongoConn = db;
             db.dropCollection(diffCliTest, function (err) {
                 // ignores if the collection was not found
                 if (err && err.errmsg !== 'ns not found') {
@@ -41,6 +39,11 @@ describe('diff CLI tests', function () {
                 done();
             });
         });
+    });
+
+    after(function (done) {
+        mongoConn.close();
+        done();
     });
 
     describe('basic', function () {
@@ -54,12 +57,12 @@ describe('diff CLI tests', function () {
                     done(err);
                     return;
                 }
-                importCLI.import(mongoUri, diffCliTest, jsonProject, 'source', function (err) {
+                importCLI.import(Storage, gmeConfig, diffCliTest, jsonProject, 'source', true, function (err) {
                     if (err) {
                         done(err);
                         return;
                     }
-                    importCLI.import(mongoUri, diffCliTest, jsonProject, 'target', done);
+                    importCLI.import(Storage, gmeConfig, diffCliTest, jsonProject, 'target', false, done);
                 });
             });
 
@@ -98,12 +101,12 @@ describe('diff CLI tests', function () {
                     done(err);
                     return;
                 }
-                importCLI.import(mongoUri, diffCliTest, source, 'source', function (err) {
+                importCLI.import(Storage, gmeConfig, diffCliTest, source, 'source', true, function (err) {
                     if (err) {
                         done(err);
                         return;
                     }
-                    importCLI.import(mongoUri, diffCliTest, target, 'target', done);
+                    importCLI.import(Storage, gmeConfig, diffCliTest, target, 'target', false, done);
                 });
             });
 
@@ -149,12 +152,12 @@ describe('diff CLI tests', function () {
                     done(err);
                     return;
                 }
-                importCLI.import(mongoUri, diffCliTest, source, 'source', function (err) {
+                importCLI.import(Storage, gmeConfig, diffCliTest, source, 'source', true, function (err) {
                     if (err) {
                         done(err);
                         return;
                     }
-                    importCLI.import(mongoUri, diffCliTest, target, 'target', done);
+                    importCLI.import(Storage, gmeConfig, diffCliTest, target, 'target', false, done);
                 });
             });
 
@@ -201,12 +204,12 @@ describe('diff CLI tests', function () {
                     done(err);
                     return;
                 }
-                importCLI.import(mongoUri, diffCliTest, source, 'source', function (err) {
+                importCLI.import(Storage, gmeConfig, diffCliTest, source, 'source', true, function (err) {
                     if (err) {
                         done(err);
                         return;
                     }
-                    importCLI.import(mongoUri, diffCliTest, target, 'target', done);
+                    importCLI.import(Storage, gmeConfig, diffCliTest, target, 'target', false, done);
                 });
             });
 

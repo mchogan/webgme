@@ -1,4 +1,3 @@
-/*globals console*/
 /*jshint node:true, mocha:true*/
 /**
  * @author pmeijer / https://github.com/pmeijer
@@ -9,7 +8,8 @@ var testFixture = require('../../../_globals.js');
 describe('PluginGenerator', function () {
     'use strict';
 
-    var should = testFixture.should,
+    var logger = testFixture.logger.fork('PluginGeneratorTest'),
+        should = testFixture.should,
         requirejs = testFixture.requirejs,
         esprima = require('esprima'),
         pluginConfig = {
@@ -31,8 +31,8 @@ describe('PluginGenerator', function () {
         catch (e) {
             err = e;
             if (logError) {
-                console.error(err.toString());
-                console.error(testString);
+                logger.error(err.toString());
+                logger.error(testString);
             }
         }
         return err;
@@ -80,17 +80,17 @@ describe('PluginGenerator', function () {
         };
 
         plugin.logger = {
-            info: function () {
-                //console.log(msg)
+            info: function (msg) {
+                logger.info(msg);
             },
-            debug: function () {
-                //console.log(msg)
+            debug: function (msg) {
+                logger.debug(msg);
             },
-            warning: function () {
-                //console.warn(msg)
+            warning: function (msg) {
+                logger.warn(msg);
             },
             error: function (msg) {
-                console.error(msg);
+                logger.error(msg);
             }
         };
 
@@ -144,8 +144,10 @@ describe('PluginGenerator', function () {
             should.equal(err, null);
             should.equal(keys.length, 3);
             for (i = 0; i < keys.length; i += 1) {
-                //console.log(files[keys[i]]);
-                if (keys[i] === 'src/plugins/null/I have a space/meta.js') {
+                logger.debug(files[keys[i]]);
+                if (keys[i] === 'src/plugins/null/I have a space/meta.js' ||
+                    keys[i] === 'test/plugins/null/I have a space/I have a space.spec.js') {
+
                     should.equal(isValidJs(files[keys[i]], true), null);
                 } else {
                     should.not.equal(isValidJs(files[keys[i]]), null);
@@ -164,7 +166,7 @@ describe('PluginGenerator', function () {
             should.equal(err, null);
             should.equal(keys.length, 3);
             for (i = 0; i < keys.length; i += 1) {
-                //console.log(files[keys[i]]);
+                logger.debug(files[keys[i]]);
                 should.equal(isValidJs(files[keys[i]], true), null);
             }
             done();
@@ -182,7 +184,7 @@ describe('PluginGenerator', function () {
             should.equal(err, null);
             should.equal(keys.length, 3);
             for (i = 0; i < keys.length; i += 1) {
-                //console.log(files[keys[i]]);
+                logger.debug(files[keys[i]]);
                 should.equal(isValidJs(files[keys[i]], true), null);
             }
             done();
@@ -200,7 +202,7 @@ describe('PluginGenerator', function () {
             should.equal(err, null);
             should.equal(keys.length, 3);
             for (i = 0; i < keys.length; i += 1) {
-                //console.log(files[keys[i]]);
+                logger.debug(files[keys[i]]);
                 should.equal(isValidJs(files[keys[i]], true), null);
             }
             done();
@@ -219,7 +221,7 @@ describe('PluginGenerator', function () {
             should.equal(err, null);
             should.equal(keys.length, 3);
             for (i = 0; i < keys.length; i += 1) {
-                //console.log(files[keys[i]]);
+                logger.debug(files[keys[i]]);
                 should.equal(isValidJs(files[keys[i]], true), null);
             }
             done();
@@ -237,7 +239,7 @@ describe('PluginGenerator', function () {
             should.equal(err, null);
             should.equal(keys.length, 2);
             for (i = 0; i < keys.length; i += 1) {
-                //console.log(files[keys[i]]);
+                logger.debug(files[keys[i]]);
                 should.equal(isValidJs(files[keys[i]], true), null);
             }
             done();
@@ -255,7 +257,7 @@ describe('PluginGenerator', function () {
             should.equal(err, null);
             should.equal(keys.length, 5);
             for (i = 0; i < keys.length; i += 1) {
-                //console.log(files[keys[i]]);
+                logger.debug(files[keys[i]]);
                 if (keys[i] === 'src/plugins/null/NewPlugin/Templates/Python.py.ejs') {
                     should.not.equal(isValidJs(files[keys[i]]), null);
                 } else {
@@ -278,7 +280,7 @@ describe('PluginGenerator', function () {
             should.equal(err, null);
             should.equal(keys.length, 5);
             for (i = 0; i < keys.length; i += 1) {
-                //console.log(files[keys[i]]);
+                logger.debug(files[keys[i]]);
                 if (keys[i] === 'src/plugins/null/NewPlugin/Templates/Python.py.ejs') {
                     should.not.equal(isValidJs(files[keys[i]]), null);
                 } else {
@@ -300,7 +302,7 @@ describe('PluginGenerator', function () {
             should.equal(err, null);
             should.equal(keys.length, 5);
             for (i = 0; i < keys.length; i += 1) {
-                //console.log(files[keys[i]]);
+                logger.debug(files[keys[i]]);
                 if (keys[i] === 'src/plugins/null/NewPlugin/Templates/JavaScript.js.ejs') {
                     should.not.equal(isValidJs(files[keys[i]]), null);
                 } else {
@@ -322,7 +324,7 @@ describe('PluginGenerator', function () {
             should.equal(err, null);
             should.equal(keys.length, 5);
             for (i = 0; i < keys.length; i += 1) {
-                //console.log(files[keys[i]]);
+                logger.debug(files[keys[i]]);
                 if (keys[i] === 'src/plugins/null/NewPlugin/Templates/CSharp.cs.ejs') {
                     should.not.equal(isValidJs(files[keys[i]]), null);
                 } else {

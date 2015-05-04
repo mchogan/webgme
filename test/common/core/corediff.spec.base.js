@@ -1,4 +1,4 @@
-/* jshint node:true, mocha: true*/
+/* jshint node:true, mocha: true, expr:true*/
 
 /**
  * @author kecso / https://github.com/kecso
@@ -8,7 +8,11 @@ var testFixture = require('../../_globals.js');
 
 describe('corediff-base', function () {
     'use strict';
-    var storage = new testFixture.StorageLocal();
+    var gmeConfig = testFixture.getGmeConfig(),
+        storage = new testFixture.Storage({
+            globConf: gmeConfig,
+            logger: testFixture.logger.fork('corediff-base:storage')
+        });
 
     describe('commitAncestor', function () {
         describe('straight line', function () {

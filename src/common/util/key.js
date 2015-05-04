@@ -1,19 +1,24 @@
+/*globals define*/
+/*jshint node: true, browser: true*/
+
 /**
- * Created by tkecskes on 1/6/2015.
+ * @author kecso / https://github.com/kecso
  */
-/* globals define, WebGMEGlobal, GME */
+
 define([
-    './sha1',
-    './zssha1',
-    './assert',
-    './canon'
+    'common/util/sha1',
+    'common/util/zssha1.min',
+    'common/util/assert',
+    'common/util/canon'
 ], function (SHA1, ZS, ASSERT, CANON) {
     'use strict';
+
     var keyType = null,
         ZSSHA = new ZS();
 
     function rand160Bits() {
-        var result = '', i, code;
+        var result = '',
+            i, code;
         for (i = 0; i < 40; i++) {
             code = Math.floor(Math.random() * 16);
             code = code > 9 ? code + 87 : code + 48;
@@ -22,19 +27,8 @@ define([
         return result;
     }
 
-    return function KeyGenerator(object) {
-        if (keyType === null) {
-            if (typeof WebGMEGlobal !== 'undefined' && WebGMEGlobal.config && typeof WebGMEGlobal.config.keyType === 'string') {
-                keyType = WebGMEGlobal.config.keyType;
-            } else if (typeof WebGMEGlobal !== 'undefined' && typeof WebGMEGlobal.getConfig === 'function') {
-                keyType = WebGMEGlobal.getConfig().storageKeyType || 'plainSHA1';
-            } else if (typeof GME !== 'undefined' && GME.config && typeof GME.config.keyType === 'string') {
-                keyType = GME.config.keyType;
-            } else {
-                keyType = 'plainSHA1';
-            }
-        }
-
+    return function KeyGenerator(object, gmeConfig) {
+        keyType = gmeConfig.storage.keyType;
         ASSERT(typeof keyType === 'string');
 
         switch (keyType) {

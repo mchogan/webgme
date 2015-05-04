@@ -1,3 +1,6 @@
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
 /* make sure to update commit_WIDTH and commit_HEIGHT in Widgets/ProjectRepository/ProjectRepositoryWidget.js */
 .repository-dialog .modal-header > h3 {
   margin-top: 0;
@@ -53,7 +56,8 @@
         .project-repository-widget table tr th.actions > div.input-group,
         .project-repository-widget table tr td.actions > div.input-group {
           margin-bottom: 0;
-          display: inline-flex; }
+          display: inline-flex;
+          display: -webkit-inline-flex; }
           .project-repository-widget table tr th.actions > div.input-group > input,
           .project-repository-widget table tr td.actions > div.input-group > input {
             height: 100%;

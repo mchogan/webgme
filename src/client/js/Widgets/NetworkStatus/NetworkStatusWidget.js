@@ -1,25 +1,32 @@
-/*globals define, _, requirejs, WebGMEGlobal*/
+/*globals define, WebGMEGlobal*/
+/*jshint browser: true*/
 
-define(['logManager',
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
+
+
+define([
+    'js/logger',
     'js/Controls/DropDownMenu',
-    'js/Controls/PopoverBox'], function (logManager,
-                                        DropDownMenu,
-                                        PopoverBox) {
+    'js/Controls/PopoverBox'
+], function (Logger, DropDownMenu, PopoverBox) {
 
-    "use strict";
+    'use strict';
 
     var NetworkStatusWidget,
         ITEM_VALUE_CONNECT = 'connect';
 
     NetworkStatusWidget = function (containerEl, client) {
-        this._logger = logManager.create("NetworkStatusWidget");
+        this._logger = Logger.create('gme:Widgets:NetworkStatus:NetworkStatusWidget',
+            WebGMEGlobal.gmeConfig.client.log);
 
         this._client = client;
         this._el = containerEl;
 
         this._initializeUI();
 
-        this._logger.debug("Created");
+        this._logger.debug('Created');
     };
 
     NetworkStatusWidget.prototype._initializeUI = function () {
@@ -28,10 +35,12 @@ define(['logManager',
         this._el.empty();
 
         //#1 - NetworkStatus
-        this._ddNetworkStatus = new DropDownMenu({"dropUp": true,
-            "pullRight": true,
-            "size": "micro",
-            "sort": true});
+        this._ddNetworkStatus = new DropDownMenu({
+            dropUp: true,
+            pullRight: true,
+            size: 'micro',
+            sort: true
+        });
         this._ddNetworkStatus.setTitle('NETWORKSTATUS');
 
         this._el.append(this._ddNetworkStatus.getEl());
@@ -68,7 +77,8 @@ define(['logManager',
         this._ddNetworkStatus.setColor(DropDownMenu.prototype.COLORS.GREEN);
 
         if (this._disconnected === true) {
-            this._popoverBox.show('Connection to the server has been restored...', this._popoverBox.alertLevels.SUCCESS, true);
+            this._popoverBox.show('Connection to the server has been restored...',
+                this._popoverBox.alertLevels.SUCCESS, true);
             delete this._disconnected;
         }
     };
@@ -76,8 +86,10 @@ define(['logManager',
     NetworkStatusWidget.prototype._modeDisconnected = function () {
         this._ddNetworkStatus.clear();
         this._ddNetworkStatus.setTitle('DISCONNECTED');
-        this._ddNetworkStatus.addItem({"text": 'Connect...',
-            "value": ITEM_VALUE_CONNECT});
+        this._ddNetworkStatus.addItem({
+            text: 'Connect...',
+            value: ITEM_VALUE_CONNECT
+        });
         this._ddNetworkStatus.setColor(DropDownMenu.prototype.COLORS.ORANGE);
 
         this._disconnected = true;

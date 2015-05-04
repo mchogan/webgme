@@ -2,17 +2,19 @@
 /**
  * @author kecso / https://github.com/kecso
  */
-var tGlobals = require('../../_globals.js');
+var testFixture = require('../../_globals.js');
 
 describe('Core IntraPersist', function () {
     'use strict';
-    var storage = null,
-        requirejs = require('requirejs'),
-        CANON = requirejs('../src/common/util/canon');
+    var gmeConfig = testFixture.getGmeConfig(),
+        storage = null,
+        CANON = testFixture.requirejs('../src/common/util/canon');
 
     function loadNodes(paths, next) {
         var needed = paths.length,
-            nodes = {}, error = null, i,
+            nodes = {},
+            error = null,
+            i,
             loadNode = function (path) {
                 core.loadByPath(root, path, function (err, node) {
                     error = error || err;
@@ -36,27 +38,27 @@ describe('Core IntraPersist', function () {
         project = null;
 
 
-    describe('Pre', function () {
-        it('import the basic project', function (done) {
-            tGlobals.importProject({
-                filePath: './test/asset/intraPersist.json',
-                projectName: 'coreIntrapersistTest'
-            }, function (err, result) {
-                if (err) {
-                    done(err);
-                    return;
-                }
-                storage = result.storage;
-                project = result.project;
-                core = result.core;
-                root = result.root;
-                commit = result.commitHash;
-                baseCommit = result.commitHash;
-                rootHash = core.getHash(root);
-                done();
-            });
+    before(function (done) {
+        testFixture.importProject({
+            filePath: 'test/common/core/core/intraPersist.json',
+            projectName: 'coreIntrapersistTest',
+            gmeConfig: gmeConfig
+        }, function (err, result) {
+            if (err) {
+                done(err);
+                return;
+            }
+            storage = result.storage;
+            project = result.project;
+            core = result.core;
+            root = result.root;
+            commit = result.commitHash;
+            baseCommit = result.commitHash;
+            rootHash = core.getHash(root);
+            done();
         });
     });
+
     describe('SimpleChanges', function () {
         var e1NodePath = '/1736622193/1271963336',
             e1NodePrimePath = '/1710723537/1271963336',
@@ -82,27 +84,38 @@ describe('Core IntraPersist', function () {
             });
         });
         it('modified attributes should be visible in already loaded nodes', function () {
-            if (core.getAttribute(nodes[e1NodePath], 'name') !== 'e1' || core.getAttribute(nodes[e1NodePrimePath], 'name') !== 'e1') {
+            if (core.getAttribute(nodes[e1NodePath], 'name') !== 'e1' ||
+                core.getAttribute(nodes[e1NodePrimePath], 'name') !== 'e1') {
+
                 throw new Error('initial attribute values are wrong');
             }
             core.setAttribute(nodes[e1NodePath], 'name', 'e1modified');
-            if (core.getAttribute(nodes[e1NodePath], 'name') !== 'e1modified' || core.getAttribute(nodes[e1NodePrimePath], 'name') !== 'e1modified') {
+            if (core.getAttribute(nodes[e1NodePath], 'name') !== 'e1modified' ||
+                core.getAttribute(nodes[e1NodePrimePath], 'name') !== 'e1modified') {
                 throw new Error('modified attribute values are wrong');
             }
             core.setAttribute(nodes[e1NodePrimePath], 'name', 'e1prime');
-            if (core.getAttribute(nodes[e1NodePath], 'name') !== 'e1modified' || core.getAttribute(nodes[e1NodePrimePath], 'name') !== 'e1prime') {
+            if (core.getAttribute(nodes[e1NodePath], 'name') !== 'e1modified' ||
+                core.getAttribute(nodes[e1NodePrimePath], 'name') !== 'e1prime') {
+
                 throw new Error('differentiated attribute values are wrong');
             }
             core.delAttribute(nodes[e1NodePrimePath], 'name');
-            if (core.getAttribute(nodes[e1NodePath], 'name') !== 'e1modified' || core.getAttribute(nodes[e1NodePrimePath], 'name') !== 'e1modified') {
+            if (core.getAttribute(nodes[e1NodePath], 'name') !== 'e1modified' ||
+                core.getAttribute(nodes[e1NodePrimePath], 'name') !== 'e1modified') {
+
                 throw new Error('removed prime attribute values are wrong');
             }
             core.delAttribute(nodes[e1NodePath], 'name');
-            if (core.getAttribute(nodes[e1NodePath], 'name') !== 'node' || core.getAttribute(nodes[e1NodePrimePath], 'name') !== 'node') {
+            if (core.getAttribute(nodes[e1NodePath], 'name') !== 'node' ||
+                core.getAttribute(nodes[e1NodePrimePath], 'name') !== 'node') {
+
                 throw new Error('removed attribute values are wrong');
             }
             core.setAttribute(nodes[e1NodePath], 'name', 'e1');
-            if (core.getAttribute(nodes[e1NodePath], 'name') !== 'e1' || core.getAttribute(nodes[e1NodePrimePath], 'name') !== 'e1') {
+            if (core.getAttribute(nodes[e1NodePath], 'name') !== 'e1' ||
+                core.getAttribute(nodes[e1NodePrimePath], 'name') !== 'e1') {
+
                 throw new Error('final attribute values are wrong');
             }
 
@@ -149,32 +162,44 @@ describe('Core IntraPersist', function () {
             }
         });
         it('modified pointer targets should be visible in already loaded nodes', function () {
-            if (core.getPointerPath(nodes[s1NodePath], 'myNode') !== core.getPath(nodes[e1NodePath]) || core.getPointerPath(nodes[s1NodePrimePath], 'myNode') !== core.getPath(nodes[e1NodePrimePath])) {
+            if (core.getPointerPath(nodes[s1NodePath], 'myNode') !== core.getPath(nodes[e1NodePath]) ||
+                core.getPointerPath(nodes[s1NodePrimePath], 'myNode') !== core.getPath(nodes[e1NodePrimePath])) {
+
                 throw new Error('initial target values are wrong');
             }
 
             core.setPointer(nodes[s1NodePath], 'myNode', nodes[e1NodePrimePath]);
-            if (core.getPointerPath(nodes[s1NodePath], 'myNode') !== core.getPath(nodes[e1NodePrimePath]) || core.getPointerPath(nodes[s1NodePrimePath], 'myNode') !== core.getPath(nodes[e1NodePrimePath])) {
+            if (core.getPointerPath(nodes[s1NodePath], 'myNode') !== core.getPath(nodes[e1NodePrimePath]) ||
+                core.getPointerPath(nodes[s1NodePrimePath], 'myNode') !== core.getPath(nodes[e1NodePrimePath])) {
+
                 throw new Error('modified target values are wrong');
             }
 
             core.setPointer(nodes[s1NodePrimePath], 'myNode', nodes[e1NodePath]);
-            if (core.getPointerPath(nodes[s1NodePath], 'myNode') !== core.getPath(nodes[e1NodePrimePath]) || core.getPointerPath(nodes[s1NodePrimePath], 'myNode') !== core.getPath(nodes[e1NodePath])) {
+            if (core.getPointerPath(nodes[s1NodePath], 'myNode') !== core.getPath(nodes[e1NodePrimePath]) ||
+                core.getPointerPath(nodes[s1NodePrimePath], 'myNode') !== core.getPath(nodes[e1NodePath])) {
+
                 throw new Error('differentiated target values are wrong');
             }
 
             core.deletePointer(nodes[s1NodePath], 'myNode');
-            if (core.getPointerPath(nodes[s1NodePath], 'myNode') !== null || core.getPointerPath(nodes[s1NodePrimePath], 'myNode') !== core.getPath(nodes[e1NodePath])) {
+            if (core.getPointerPath(nodes[s1NodePath], 'myNode') !== null ||
+                core.getPointerPath(nodes[s1NodePrimePath], 'myNode') !== core.getPath(nodes[e1NodePath])) {
+
                 throw new Error('removed target values are wrong');
             }
 
             core.deletePointer(nodes[s1NodePrimePath], 'myNode');
-            if (core.getPointerPath(nodes[s1NodePath], 'myNode') !== null || core.getPointerPath(nodes[s1NodePrimePath], 'myNode') !== null) {
+            if (core.getPointerPath(nodes[s1NodePath], 'myNode') !== null ||
+                core.getPointerPath(nodes[s1NodePrimePath], 'myNode') !== null) {
+
                 throw new Error('removed prime target values are wrong');
             }
 
             core.setPointer(nodes[s1NodePath], 'myNode', nodes[e1NodePath]);
-            if (core.getPointerPath(nodes[s1NodePath], 'myNode') !== core.getPath(nodes[e1NodePath]) || core.getPointerPath(nodes[s1NodePrimePath], 'myNode') !== core.getPath(nodes[e1NodePrimePath])) {
+            if (core.getPointerPath(nodes[s1NodePath], 'myNode') !== core.getPath(nodes[e1NodePath]) ||
+                core.getPointerPath(nodes[s1NodePrimePath], 'myNode') !== core.getPath(nodes[e1NodePrimePath])) {
+
                 throw new Error('final target values are wrong');
             }
         });
@@ -185,7 +210,9 @@ describe('Core IntraPersist', function () {
             elementsPrime = core.getMemberPaths(nodes[e1NodePrimePath], 'mySpecials');
             elementsPrime.sort();
             if (CANON.stringify(elements) !== CANON.stringify(['/1736622193/1579656591', '/1736622193/274170516']) ||
-                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591', '/1710723537/274170516'])) {
+                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591',
+                    '/1710723537/274170516'])) {
+
                 throw new Error('initial set members are wrong');
             }
 
@@ -207,8 +234,10 @@ describe('Core IntraPersist', function () {
             elementsPrime.sort();
             position = core.getMemberRegistry(nodes[e1NodePrimePath], 'mySpecials', s1NodePrimePath, 'position');
             if (CANON.stringify(elements) !== CANON.stringify(['/1736622193/1579656591']) ||
-                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591', '/1710723537/274170516']) ||
+                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591',
+                    '/1710723537/274170516']) ||
                 position.x !== 100 || position.y !== 200) {
+
                 throw new Error('prime set members are wrong');
             }
 
@@ -220,8 +249,10 @@ describe('Core IntraPersist', function () {
             elementsPrime.sort();
             position = core.getMemberRegistry(nodes[e1NodePrimePath], 'mySpecials', s1NodePrimePath, 'position');
             if (CANON.stringify(elements) !== CANON.stringify(['/1736622193/1579656591', '/1736622193/274170516']) ||
-                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591', '/1710723537/274170516']) ||
+                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591',
+                    '/1710723537/274170516']) ||
                 position.x !== 100 || position.y !== 200) {
+
                 throw new Error('prime set member registry value are wrong');
             }
             position = core.getMemberRegistry(nodes[e1NodePath], 'mySpecials', s1NodePath, 'position');
@@ -237,7 +268,9 @@ describe('Core IntraPersist', function () {
             elementsPrime = core.getMemberPaths(nodes[e1NodePrimePath], 'mySpecials');
             elementsPrime.sort();
             if (CANON.stringify(elements) !== CANON.stringify(['/1736622193/1579656591', '/1736622193/274170516']) ||
-                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591', '/1710723537/274170516'])) {
+                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591',
+                    '/1710723537/274170516'])) {
+
                 throw new Error('initial set members are wrong');
             }
 
@@ -247,7 +280,9 @@ describe('Core IntraPersist', function () {
             elementsPrime = core.getMemberPaths(nodes[e1NodePrimePath], 'mySpecials');
             elementsPrime.sort();
             if (CANON.stringify(elements) !== CANON.stringify(['/1736622193/1579656591', '/1736622193/274170516']) ||
-                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591', '/1710723537/274170516'])) {
+                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591',
+                    '/1710723537/274170516'])) {
+
                 throw new Error('prime removed set members are wrong');
             }
 
@@ -258,6 +293,7 @@ describe('Core IntraPersist', function () {
             elementsPrime.sort();
             if (CANON.stringify(elements) !== CANON.stringify(['/1736622193/1579656591']) ||
                 CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591'])) {
+
                 throw new Error('removed set members are wrong');
             }
 
@@ -267,7 +303,9 @@ describe('Core IntraPersist', function () {
             elementsPrime = core.getMemberPaths(nodes[e1NodePrimePath], 'mySpecials');
             elementsPrime.sort();
             if (CANON.stringify(elements) !== CANON.stringify(['/1736622193/1579656591']) ||
-                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591', '/1710723537/274170516'])) {
+                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591',
+                    '/1710723537/274170516'])) {
+
                 throw new Error('prime set members are wrong');
             }
 
@@ -278,7 +316,9 @@ describe('Core IntraPersist', function () {
             elementsPrime = core.getMemberPaths(nodes[e1NodePrimePath], 'mySpecials');
             elementsPrime.sort();
             if (CANON.stringify(elements) !== CANON.stringify(['/1736622193/1579656591', '/1736622193/274170516']) ||
-                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591', '/1710723537/274170516'])) {
+                CANON.stringify(elementsPrime) !== CANON.stringify(['/1710723537/1579656591',
+                    '/1710723537/274170516'])) {
+
                 throw new Error('prime set members are wrong');
             }
         });

@@ -1,56 +1,60 @@
+/*jshint node: true*/
 /**
- * Created by tamas on 2/17/15.
+ * @author kecso / https://github.com/kecso
  */
 
-var program = require('commander'),
-    HASH_REGEXP = new RegExp("^#[0-9a-zA-Z_]*$"),
-    BRANCH_REGEXP = new RegExp("^[0-9a-zA-Z_]*$"),
-    requirejs = require('requirejs'),
+var webgme = require('../../webgme'),
+    program = require('commander'),
     FS = require('fs'),
-    Core,
-    Storage;
-requirejs.config({
-    paths:{
-        'core': './../../src/common/core',
-        'storage': './../../src/common/storage',
-        'util': './../../src/common/util'
-    }
-});
-Core = requirejs('core/core');
-Storage = requirejs('storage/serveruserstorage');
+    openContext,
+    Storage,
+    path = require('path'),
+    gmeConfig = require(path.join(process.cwd(), 'config')),
+    logger = webgme.Logger.create('gme:bin:diff', gmeConfig.bin.log, false),
+    REGEXP = webgme.REGEXP,
+    openContext = webgme.openContext,
+    Storage = webgme.serverUserStorage;
 
-var generateDiff = function(mongoUri,projectId,sourceBranchOrCommit,targetBranchOrCommit,callback){
-    var database = new Storage({uri:mongoUri,log:{debug:function(msg){},error:function(msg){}}}), //we do not want debugging
+
+webgme.addToRequireJsPaths(gmeConfig);
+
+
+var generateDiff = function (mongoUri, projectId, sourceBranchOrCommit, targetBranchOrCommit, callback) {
+    'use strict';
+    var storage,
         project,
         core,
-        close = function(error,data){
-            try{
-                project.closeProject(function(){
-                    database.closeDatabase(function(){
-                        callback(error,data);
+        contextParams,
+        closeContext = function (error, data) {
+            try {
+                project.closeProject(function () {
+                    storage.closeDatabase(function () {
+                        callback(error, data);
                     });
                 });
-            } catch(err){
-                database.closeDatabase(function(){
-                    callback(error,data);
+            } catch (err) {
+                storage.closeDatabase(function () {
+                    callback(error, data);
                 });
             }
         },
-        getRoot = function(branchOrCommit,next){
-            var getFromCommitHash = function(cHash){
-                project.loadObject(cHash,function(err,cObj){
-                    if(err){
-                        return next(err);
+        getRoot = function (branchOrCommit, next) {
+            var getFromCommitHash = function (cHash) {
+                project.loadObject(cHash, function (err, cObj) {
+                    if (err) {
+                        next(err);
+                        return;
                     }
-                    core.loadRoot(cObj.root,next);
+                    core.loadRoot(cObj.root, next);
                 });
             };
-            if(HASH_REGEXP.test(branchOrCommit)){
+            if (REGEXP.HASH.test(branchOrCommit)) {
                 getFromCommitHash(branchOrCommit);
-            } else if(BRANCH_REGEXP.test(branchOrCommit)){
-                project.getBranchHash(branchOrCommit,'#hack',function(err,commitHash){
-                    if(err){
-                        return next(err);
+            } else if (REGEXP.BRANCH.test(branchOrCommit)) {
+                project.getBranchHash(branchOrCommit, '#hack', function (err, commitHash) {
+                    if (err) {
+                        next(err);
+                        return;
                     }
                     getFromCommitHash(commitHash);
                 });
@@ -59,47 +63,40 @@ var generateDiff = function(mongoUri,projectId,sourceBranchOrCommit,targetBranch
             }
         };
 
-    database.openDatabase(function(err){
-        if(err){
-            return callback(err);
-        }
-        database.openProject(projectId,function(err,p) {
-            if (err) {
-                return close(err, null);
-            }
-            project = p;
-            core = new Core(project);
+    gmeConfig.mongo.uri = mongoUri || gmeConfig.mongo.uri;
 
-            var needed = 2,
-                error = null,
-                sRoot, tRoot,
-                rootsAreReady = function () {
-                    if (error) {
-                        return close(error, null);
-                    }
-                    core.generateTreeDiff(sRoot, tRoot, close);
-                };
-            getRoot(sourceBranchOrCommit, function (err, root) {
-                error = error || err;
-                sRoot = root;
-                if (--needed === 0) {
-                    rootsAreReady();
-                }
-            });
-            getRoot(targetBranchOrCommit, function (err, root) {
-                error = error || err;
-                tRoot = root;
-                if (--needed === 0) {
-                    rootsAreReady();
-                }
-            });
+    storage = new Storage({globConf: gmeConfig, logger: logger.fork('storage')});
+
+    contextParams = {
+        projectName: projectId,
+        branchOrCommit: sourceBranchOrCommit
+    };
+
+    openContext(storage, gmeConfig, logger, contextParams, function (err, context) {
+        var srcRoot,
+            targetRoot;
+        if (err) {
+            callback(err);
+            return;
+        }
+        project = context.project;
+        core = context.core;
+        srcRoot = context.rootNode;
+
+        getRoot(targetBranchOrCommit, function (err, root) {
+            if (err) {
+                closeContext(err);
+                return;
+            }
+            targetRoot = root;
+            core.generateTreeDiff(srcRoot, targetRoot, closeContext);
         });
     });
 };
 
 module.exports.generateDiff = generateDiff;
 
-if(require.main === module){
+if (require.main === module) {
     program
         .version('0.1.0')
         .option('-m, --mongo-database-uri [url]', 'URI to connect to mongoDB where the project is stored')
@@ -110,38 +107,41 @@ if(require.main === module){
         .parse(process.argv);
 
 //check necessary arguments
-    if(!program.mongoDatabaseUri){
-        console.warn('mongoDB URL is a mandatory parameter!');
-        process.exit(0);
-    }
-    if(!program.projectIdentifier){
+//    if (!program.mongoDatabaseUri) {
+//        console.warn('mongoDB URL is a mandatory parameter!');
+//        process.exit(0);
+//    }
+    if (!program.projectIdentifier) {
         console.warn('project identifier is a mandatory parameter!');
-        process.exit(0);
+        program.help();
     }
-    if(!program.source){
+    if (!program.source) {
         console.warn('source is a mandatory parameter!');
-        process.exit(0);
+        program.help();
     }
-    if(!program.target){
+    if (!program.target) {
         console.warn('target is a mandatory parameter!');
-        process.exit(0);
+        program.help();
     }
 
-    generateDiff(program.mongoDatabaseUri,program.projectIdentifier,program.source,program.target,function(err,diff){
-        if(err){
-            console.warn('diff generation finished with error: ',err);
+    generateDiff(program.mongoDatabaseUri, program.projectIdentifier, program.source, program.target,
+        function (err, diff) {
+            'use strict';
+            if (err) {
+                console.warn('diff generation finished with error: ', err);
+                process.exit(0);
+            }
+            if (program.out) {
+                try {
+                    FS.writeFileSync(program.out, JSON.stringify(diff, null, 2));
+                } catch (err) {
+                    console.warn('unable to create output file:', err);
+                }
+            } else {
+                console.log('generated diff:');
+                console.log(JSON.stringify(diff, null, 2));
+            }
             process.exit(0);
         }
-        if(program.out){
-            try{
-                FS.writeFileSync(program.out,JSON.stringify(diff,null,2));
-            } catch(err){
-                console.warn('unable to create output file:',err);
-            }
-        } else {
-            console.log('generated diff:');
-            console.log(JSON.stringify(diff,null,2));
-        }
-        process.exit(0);
-    });
+    );
 }

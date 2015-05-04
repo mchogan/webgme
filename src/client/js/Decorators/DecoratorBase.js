@@ -1,21 +1,26 @@
-/*globals define, _, requirejs, WebGMEGlobal, Raphael*/
+/*globals define, WebGMEGlobal*/
+/*jshint browser: true*/
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
 
-define(['logManager'], function (logManager) {
+define(['js/logger'], function (Logger) {
 
-    "use strict";
+    'use strict';
 
     var DecoratorBase,
-        DECORATOR_ID = "DecoratorBase";
+        DECORATOR_ID = 'DecoratorBase';
 
     DecoratorBase = function (params) {
-
-        this.logger = logManager.create(params.loggerName || this.DECORATORID);
+        var loggerName = 'gme:Decorators:DecoratorBase:';
+        loggerName = params.loggerName ? loggerName += params.loggerName : loggerName += this.DECORATORID;
+        this.logger = Logger.create(loggerName, WebGMEGlobal.gmeConfig.client.log);
 
         this.supportedWidgetMap = {};
 
         this.initializeSupportedWidgetMap();
 
-        this.logger.debug("Created");
+        this.logger.debug('Created');
     };
 
     DecoratorBase.prototype.DECORATORID = DECORATOR_ID;

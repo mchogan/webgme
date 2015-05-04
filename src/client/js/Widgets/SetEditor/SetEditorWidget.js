@@ -1,16 +1,22 @@
-/*globals define, _, requirejs, WebGMEGlobal*/
+/*globals define, _*/
+/*jshint browser: true*/
+
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
 
 define(['js/DragDrop/DragHelper',
-    'js/Widgets/DiagramDesigner/DiagramDesignerWidget'], function (DragHelper,
-                                                             DiagramDesignerWidget) {
+    'js/Widgets/DiagramDesigner/DiagramDesignerWidget'
+], function (DragHelper,
+             DiagramDesignerWidget) {
+    'use strict';
 
-    "use strict";
-
-    var SetEditorWidget;
+    var SetEditorWidget,
+        BACKGROUND_TEXT_COLOR = '#FFCCFF';
 
     SetEditorWidget = function (container, params) {
         params = params || {};
-        params.loggerName = "SetEditorWidget";
+        params.loggerName = 'gme:Widgets:SetEditor:SetEditorWidget';
 
         params.tabsEnabled = true;
         params.addTabs = false;
@@ -21,14 +27,14 @@ define(['js/DragDrop/DragHelper',
 
         DiagramDesignerWidget.call(this, container, params);
 
-        this.logger.debug("SetEditorWidget ctor");
+        this.logger.debug('SetEditorWidget ctor');
     };
 
     _.extend(SetEditorWidget.prototype, DiagramDesignerWidget.prototype);
 
-    SetEditorWidget.prototype._initializeUI = function (containerElement) {
+    SetEditorWidget.prototype._initializeUI = function (/*containerElement*/) {
         DiagramDesignerWidget.prototype._initializeUI.apply(this, arguments);
-        this.logger.debug("SetEditorWidget._initializeUI");
+        this.logger.debug('SetEditorWidget._initializeUI');
 
         //TODO: disable connecting at all
 
@@ -49,6 +55,13 @@ define(['js/DragDrop/DragHelper',
         helperEl.html('');
 
         return helperEl;
+    };
+
+    /* OVERWRITE DiagramDesignerWidget.prototype.setBackgroundText */
+    SetEditorWidget.prototype.setBackgroundText = function (text, params) {
+        params = params || {};
+        params.color = params.color || BACKGROUND_TEXT_COLOR;
+        DiagramDesignerWidget.prototype.setBackgroundText.apply(this, [text, params]);
     };
 
     return SetEditorWidget;

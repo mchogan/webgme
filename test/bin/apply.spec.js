@@ -9,10 +9,13 @@ var testFixture = require('../_globals');
 describe('apply CLI tests', function () {
     'use strict';
 
-    var applyCLI = require('../../src/bin/apply'),
+    var gmeConfig = testFixture.getGmeConfig(),
+        Storage = testFixture.WebGME.serverUserStorage,
+        applyCLI = require('../../src/bin/apply'),
         importCLI = require('../../src/bin/import'),
         exportCLI = require('../../src/bin/export'),
         mongodb = testFixture.mongodb,
+        mongoConn,
         FS = testFixture.fs,
         getJsonProject = function (path) {
             return JSON.parse(FS.readFileSync(path, 'utf-8'));
@@ -30,23 +33,17 @@ describe('apply CLI tests', function () {
             return i.should.be.eql(-1);
         },
 
-        mongoUri = 'mongodb://127.0.0.1:27017/multi',
+        mongoUri = gmeConfig.mongo.uri,
         applyCliTestProject = 'applyCliTest';
 
     before(function (done) {
         // TODO: move this to globals.js as a utility function
-        mongodb.MongoClient.connect(mongoUri, {
-            'w': 1,
-            'native-parser': true,
-            'auto_reconnect': true,
-            'poolSize': 20,
-            socketOptions: {keepAlive: 1}
-        }, function (err, db) {
+        mongodb.MongoClient.connect(mongoUri, gmeConfig.mongo.options, function (err, db) {
             if (err) {
                 done(err);
                 return;
             }
-
+            mongoConn = db;
             db.dropCollection(applyCliTestProject, function (err) {
                 // ignores if the collection was not found
                 if (err && err.errmsg !== 'ns not found') {
@@ -59,6 +56,11 @@ describe('apply CLI tests', function () {
         });
     });
 
+    after(function (done) {
+        mongoConn.close();
+        done();
+    });
+
     describe('basic', function () {
         var jsonBaseProject;
 
@@ -67,7 +69,7 @@ describe('apply CLI tests', function () {
         });
 
         beforeEach(function (done) {
-            importCLI.import(mongoUri, applyCliTestProject, jsonBaseProject, 'base', done);
+            importCLI.import(Storage, gmeConfig, applyCliTestProject, jsonBaseProject, 'base', true, done);
         });
 
         it('project should remain the same after applying empty patch', function (done) {

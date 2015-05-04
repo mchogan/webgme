@@ -1,20 +1,21 @@
-/*globals define,_*/
-/*
- * Copyright (C) 2013 Vanderbilt University, All rights reserved.
- * 
+/*globals define, _, WebGMEGlobal*/
+/*jshint browser: true*/
+
+/**
  * @author brollb / https://github/brollb
  */
 
-define(['logManager',
-    'js/Widgets/BlockEditor/BlockEditorWidget.Constants'], function (logManager,
-                                                                             BlockEditorWidgetConstants) {
+define(['js/logger',
+    'js/Widgets/BlockEditor/BlockEditorWidget.Constants'
+], function (Logger, BlockEditorWidgetConstants) {
 
     "use strict";
 
     var SearchManager;
 
     SearchManager = function (options) {
-        this.logger = logManager.create(((options && options.loggerName) || "SearchManager"));
+        var loggerName = ((options && options.loggerName) || 'gme:Widgets:BlockEditor:SearchManager');
+        this.logger = Logger.create(loggerName, WebGMEGlobal.gmeConfig.client.log);
 
         this._widget = options ? options.widget : null;
 

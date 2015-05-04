@@ -1,26 +1,33 @@
-/*globals define, _, requirejs, WebGMEGlobal, Raphael*/
+/*globals define, WebGMEGlobal, _*/
+/*jshint browser: true*/
 
-define(['logManager',
-    'js/Widgets/DiagramDesigner/DiagramDesignerWidget.Constants'], function (logManager,
-                                                                             DiagramDesignerWidgetConstants) {
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
 
-    "use strict";
+define([
+    'js/logger',
+    'js/Widgets/DiagramDesigner/DiagramDesignerWidget.Constants'
+], function (Logger, DiagramDesignerWidgetConstants) {
+
+    'use strict';
 
     var SearchManager;
 
     SearchManager = function (options) {
-        this.logger = logManager.create(((options && options.loggerName) || "SearchManager"));
+        var loggerName = (options && options.loggerName) || 'gme:Widgets:DiagramDesigner:SearchManager';
+        this.logger = (options && options.logger) || Logger.create(loggerName, WebGMEGlobal.gmeConfig.client.log);
 
         this._diagramDesigner = options ? options.diagramDesigner : null;
 
         if (this._diagramDesigner === undefined || this._diagramDesigner === null) {
-            this.logger.error("Trying to initialize a SearchManager without a diagramDesigner...");
-            throw ("SearchManager can not be created");
+            this.logger.error('Trying to initialize a SearchManager without a diagramDesigner...');
+            throw ('SearchManager can not be created');
         }
 
         this._highlightedElements = [];
 
-        this.logger.debug("SearchManager ctor finished");
+        this.logger.debug('SearchManager ctor finished');
     };
 
     SearchManager.prototype.initialize = function (el) {
@@ -28,9 +35,11 @@ define(['logManager',
 
         this.$el = el;
 
-        this._diagramDesigner.addEventListener(this._diagramDesigner.events.ON_COMPONENT_DELETE, function (__diagramDesigner, componentId) {
-            self._onComponentDelete(componentId);
-        });
+        this._diagramDesigner.addEventListener(this._diagramDesigner.events.ON_COMPONENT_DELETE,
+            function (__diagramDesigner, componentId) {
+                self._onComponentDelete(componentId);
+            }
+        );
     };
 
     SearchManager.prototype.activate = function () {

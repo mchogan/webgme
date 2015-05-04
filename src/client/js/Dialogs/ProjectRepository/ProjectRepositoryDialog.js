@@ -1,26 +1,28 @@
-/*globals define*/
-
+/*globals define, $, WebGMEGlobal*/
+/*jshint browser: true*/
 /**
  * @author rkereskenyi / https://github.com/rkereskenyi
  * @author nabana / https://github.com/nabana
  */
 
-define(['logManager',
+define(['js/logger',
     'text!./templates/ProjectRepositoryDialog.html',
-    'js/Widgets/ProjectRepository/ProjectRepositoryWidget'], function (logManager,
-                                                 projectRepositoryDialogTemplate,
-                                                 ProjectRepositoryWidget) {
+    'js/Widgets/ProjectRepository/ProjectRepositoryWidget'
+], function (Logger,
+             projectRepositoryDialogTemplate,
+             ProjectRepositoryWidget) {
 
-    "use strict";
+    'use strict';
 
     var ProjectRepositoryDialog;
 
     ProjectRepositoryDialog = function (client) {
-        this._logger = logManager.create("ProjectRepositoryDialog");
+        this._logger = Logger.create('gme:Dialogs:ProjectRepository:ProjectRepositoryDialog',
+            WebGMEGlobal.gmeConfig.client.log);
 
         this._client = client;
 
-        this._logger.debug("Created");
+        this._logger.debug('Created');
     };
 
     ProjectRepositoryDialog.prototype.show = function () {
@@ -44,10 +46,9 @@ define(['logManager',
             client = this._client,
             self = this,
             WINDOW_PADDING = 20,
-            wH = $(window).height(),
-            wW = $(window).width();
+            wH = $(window).height();
 
-        this._dialog = $( projectRepositoryDialogTemplate );
+        this._dialog = $(projectRepositoryDialogTemplate);
 
         modalBody = this._dialog.find('.modal-body');
 
@@ -62,20 +63,21 @@ define(['logManager',
         this._dialog.on('show.bs.modal', function () {
             var dialogHeaderH = self._dialog.find('.modal-header').outerHeight(true),
                 dialogFooterH = self._dialog.find('.modal-footer').outerHeight(true),
-                modalBodyVPadding = parseInt(modalBody.css('padding-top'), 10) + parseInt(modalBody.css('padding-bottom'), 10),
-                //dW,
+                modalBodyVPadding = parseInt(modalBody.css('padding-top'), 10) +
+                                    parseInt(modalBody.css('padding-bottom'), 10),
+            //dW,
                 dH;
 
             //make it almost full screen
             //dW = wW - 2 * WINDOW_PADDING;
             dH = wH - 2 * WINDOW_PADDING;
 
-            self._dialog.removeClass("fade");
+            self._dialog.removeClass('fade');
 
             modalBody.css(
                 {
-                    "max-height": dH - modalBodyVPadding - dialogHeaderH - dialogFooterH,
-                    "height": dH - modalBodyVPadding - dialogHeaderH - dialogFooterH
+                    'max-height': dH - modalBodyVPadding - dialogHeaderH - dialogFooterH,
+                    height:     dH - modalBodyVPadding - dialogHeaderH - dialogFooterH
                 }
             );
 

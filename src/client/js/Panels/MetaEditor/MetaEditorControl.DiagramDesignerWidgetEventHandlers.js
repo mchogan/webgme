@@ -1,8 +1,12 @@
-/*globals define, _, requirejs, WebGMEGlobal*/
+/*globals define, WebGMEGlobal*/
+/*jshint browser: true */
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
 
-define(['logManager',
-    'clientUtil',
-    'util/guid',
+define(['js/logger',
+    'js/util',
+    'common/util/guid',
     'js/Constants',
     'js/NodePropertyNames',
     'js/RegistryKeys',
@@ -10,25 +14,28 @@ define(['logManager',
     './MetaRelations',
     './MetaEditorConstants',
     'js/DragDrop/DragHelper',
-    'js/Controls/Dialog'], function (logManager,
-                                        util,
-                                        generateGuid,
-                                        CONSTANTS,
-                                        nodePropertyNames,
-                                        REGISTRY_KEYS,
-                                        GMEConcepts,
-                                        MetaRelations,
-                                        MetaEditorConstants,
-                                        DragHelper,
-                                        dialog) {
+    'js/Controls/Dialog'
+], function (Logger,
+             util,
+             generateGuid,
+             CONSTANTS,
+             nodePropertyNames,
+             REGISTRY_KEYS,
+             GMEConcepts,
+             MetaRelations,
+             MetaEditorConstants,
+             DragHelper,
+             dialog) {
 
-    "use strict";
+    'use strict';
 
     var MetaEditorControlDiagramDesignerWidgetEventHandlers,
         DRAG_PARAMS_META_CONTAINER_ID = 'metaContainerID',
         DRAG_PARAMS_ACTIVE_META_ASPECT = 'DRAG_PARAMS_ACTIVE_META_ASPECT';
 
     MetaEditorControlDiagramDesignerWidgetEventHandlers = function () {
+        this.logger = Logger.create('gme:Panels:MetaEditor:MetaEditorControl.DiagramDesignerWidgetEventHandlers',
+            WebGMEGlobal.gmeConfig.client.log);
     };
 
     MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype.attachDiagramDesignerWidgetEventHandlers = function () {
@@ -110,13 +117,14 @@ define(['logManager',
             self._onSelectionTextColorChanged(selectedElements, color);
         };
 
-        this.logger.debug("attachDesignerCanvasEventHandlers finished");
+        this.logger.debug('attachDesignerCanvasEventHandlers finished');
     };
 
     /**********************************************************/
     /*  HANDLE OBJECT DRAG & DROP ACCEPTANCE                  */
     /**********************************************************/
-    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onBackgroundDroppableAccept = function (event, dragInfo) {
+    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onBackgroundDroppableAccept = function (event,
+                                                                                                           dragInfo) {
         var gmeIDList = DragHelper.getDragItems(dragInfo),
             params = DragHelper.getDragParams(dragInfo),
             dragEffects = DragHelper.getDragEffects(dragInfo),
@@ -135,8 +143,9 @@ define(['logManager',
                 } else {
                     //return true if there is at least one item among the dragged ones that is not on the sheet yet
                     if (gmeIDList.length > 0 && gmeIDList.indexOf(CONSTANTS.PROJECT_ROOT_ID) === -1) {
-                        for (i = 0; i < gmeIDList.length; i+= 1) {
-                            if (this._metaAspectMembersPerSheet[this._selectedMetaAspectSet].indexOf(gmeIDList[i]) === -1 ) {
+                        for (i = 0; i < gmeIDList.length; i += 1) {
+                            if (this._metaAspectMembersPerSheet[this._selectedMetaAspectSet].indexOf(gmeIDList[i]) ===
+                                -1) {
                                 accept = true;
                                 break;
                             }
@@ -156,7 +165,8 @@ define(['logManager',
     /**********************************************************/
     /*  HANDLE OBJECT DRAG & DROP TO SHEET                    */
     /**********************************************************/
-    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onBackgroundDrop = function (event, dragInfo, position) {
+    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onBackgroundDrop = function (event, dragInfo,
+                                                                                                position) {
         var _client = this._client,
             aspectNodeID = this.metaAspectContainerNodeID,
             gmeIDList = DragHelper.getDragItems(dragInfo),
@@ -167,7 +177,11 @@ define(['logManager',
             posX,
             posY,
             dragEffects = DragHelper.getDragEffects(dragInfo),
-            createParams;
+            createParams,
+
+            newGmeID,
+            origNode,
+            newName;
 
         //check to see it self drop and reposition or dropping from somewhere else
         if (params &&
@@ -185,12 +199,19 @@ define(['logManager',
 
                     posX = position.x + params.positions[i].x;
                     posY = position.y + params.positions[i].y;
-                    _client.setMemberRegistry(aspectNodeID, i, this._selectedMetaAspectSet, REGISTRY_KEYS.POSITION, {'x': posX, 'y': posY} );
+                    _client.setMemberRegistry(aspectNodeID,
+                        i,
+                        this._selectedMetaAspectSet,
+                        REGISTRY_KEYS.POSITION,
+                        {
+                            x: posX,
+                            y: posY
+                        });
 
                     componentID = this._GMEID2ComponentID[i];
 
                     selectedIDs.push(componentID);
-                    this.diagramDesigner.updateDesignerItem(componentID, { "position": {'x': posX, 'y': posY}});
+                    this.diagramDesigner.updateDesignerItem(componentID, {position: {x: posX, y: posY}});
                 }
             }
 
@@ -205,34 +226,53 @@ define(['logManager',
                 dragEffects[0] === DragHelper.DRAG_EFFECTS.DRAG_CREATE_INSTANCE &&
                 gmeIDList.length === 1) {
                 //dragging from PartBrowser
-                //create instance of the dragged item with the parent being the MetaContainer, and add it to the current metasheet + allmetasheet
+                //create instance of the dragged item with the parent being the MetaContainer,
+                //  and add it to the current metasheet + allmetasheet
                 _client.startTransaction();
 
                 //if the item is not currently in the current META Aspect sheet, add it
                 componentID = gmeIDList[0];
-                createParams = { "parentId": aspectNodeID,
-                    "baseId": componentID };
+                createParams = {
+                    parentId: aspectNodeID,
+                    baseId: componentID
+                };
 
-                var newGmeID = _client.createChild(createParams);
+                newGmeID = _client.createChild(createParams);
 
                 if (newGmeID) {
                     //store new position
-                    _client.setRegistry(newGmeID, REGISTRY_KEYS.POSITION, {'x': position.x,
-                        'y': position.y});
+                    _client.setRegistry(newGmeID, REGISTRY_KEYS.POSITION, {
+                        x: position.x,
+                        y: position.y
+                    });
 
                     //try to set name
-                    var origNode = _client.getNode(componentID);
+                    origNode = _client.getNode(componentID);
                     if (origNode) {
-                        var newName = origNode.getAttribute(nodePropertyNames.Attributes.name) + "_instance";
+                        newName = origNode.getAttribute(nodePropertyNames.Attributes.name) + '_instance';
                         _client.setAttributes(newGmeID, nodePropertyNames.Attributes.name, newName);
                     }
 
                     _client.addMember(aspectNodeID, newGmeID, this._selectedMetaAspectSet);
-                    _client.setMemberRegistry(aspectNodeID, newGmeID, this._selectedMetaAspectSet, REGISTRY_KEYS.POSITION, {'x': position.x, 'y': position.y} );
+                    _client.setMemberRegistry(aspectNodeID,
+                        newGmeID,
+                        this._selectedMetaAspectSet,
+                        REGISTRY_KEYS.POSITION,
+                        {
+                            x: position.x,
+                            y: position.y
+                        });
 
                     //this item has not been part of the META Aspect at all, add it
                     _client.addMember(aspectNodeID, newGmeID, MetaEditorConstants.META_ASPECT_SET_NAME);
-                    _client.setMemberRegistry(aspectNodeID, newGmeID, MetaEditorConstants.META_ASPECT_SET_NAME, REGISTRY_KEYS.POSITION, {'x': position.x, 'y': position.y} );
+                    _client.setMemberRegistry(aspectNodeID,
+                        newGmeID,
+                        MetaEditorConstants.META_ASPECT_SET_NAME,
+                        REGISTRY_KEYS.POSITION,
+                        {
+                            x: position.x,
+                            y: position.y
+                        });
                 }
 
                 _client.completeTransaction();
@@ -268,12 +308,26 @@ define(['logManager',
                             }
 
                             _client.addMember(aspectNodeID, componentID, this._selectedMetaAspectSet);
-                            _client.setMemberRegistry(aspectNodeID, componentID, this._selectedMetaAspectSet, REGISTRY_KEYS.POSITION, {'x': posX, 'y': posY} );
+                            _client.setMemberRegistry(aspectNodeID,
+                                componentID,
+                                this._selectedMetaAspectSet,
+                                REGISTRY_KEYS.POSITION,
+                                {
+                                    x: posX,
+                                    y: posY
+                                });
 
                             //if this item has not been part of the META Aspect at all, add it
                             if (this._metaAspectMembersAll.indexOf(componentID) === -1) {
                                 _client.addMember(aspectNodeID, componentID, MetaEditorConstants.META_ASPECT_SET_NAME);
-                                _client.setMemberRegistry(aspectNodeID, componentID, MetaEditorConstants.META_ASPECT_SET_NAME, REGISTRY_KEYS.POSITION, {'x': posX, 'y': posY} );
+                                _client.setMemberRegistry(aspectNodeID,
+                                    componentID,
+                                    MetaEditorConstants.META_ASPECT_SET_NAME,
+                                    REGISTRY_KEYS.POSITION,
+                                    {
+                                        x: posX,
+                                        y: posY
+                                    });
                             }
                         }
                     }
@@ -302,7 +356,13 @@ define(['logManager',
             deleteConnection,
             self = this,
             metaInfoToBeLost = [],
-            doDelete;
+            doDelete,
+
+            confirmMsg,
+            itemNames,
+            nodeObj;
+
+        this.logger.debug('_onSelectionDelete', idList);
 
         deleteConnection = function (connectionID) {
             var connDesc = self._connectionListByID[connectionID];
@@ -322,24 +382,25 @@ define(['logManager',
             _client.startTransaction();
 
             len = itemsToDelete.length;
-             while (len--) {
-                 gmeID = self._ComponentID2GMEID[itemsToDelete[len]];
-                 idx = self._GMENodes.indexOf(gmeID);
-                 if ( idx !== -1) {
-                     //entity is a box --> delete GME object from the aspect's members list
-                     _client.removeMember(aspectNodeID, gmeID, self._selectedMetaAspectSet);
+            while (len--) {
+                gmeID = self._ComponentID2GMEID[itemsToDelete[len]];
+                idx = self._GMENodes.indexOf(gmeID);
+                if (idx !== -1) {
+                    //entity is a box --> delete GME object from the aspect's members list
+                    _client.removeMember(aspectNodeID, gmeID, self._selectedMetaAspectSet);
 
-                     //if the items is not present anywhere else, remove it from the META's global sheet too
-                     if (self._metaAspectSheetsPerMember[gmeID].length === 1) {
-                         _client.removeMember(aspectNodeID, gmeID, MetaEditorConstants.META_ASPECT_SET_NAME);
-                     }
-                 } else if (self._connectionListByID.hasOwnProperty(itemsToDelete[len])) {
-                     //entity is a connection, just simply delete it
-                     deleteConnection(itemsToDelete[len]);
-                 }
-             }
+                    //if the items is not present anywhere else, remove it from the META's global sheet too
+                    if (self._metaAspectSheetsPerMember[gmeID].length === 1) {
+                        _client.removeMember(aspectNodeID, gmeID, MetaEditorConstants.META_ASPECT_SET_NAME);
+                        _client.setMeta(gmeID, {});
+                    }
+                } else if (self._connectionListByID.hasOwnProperty(itemsToDelete[len])) {
+                    //entity is a connection, just simply delete it
+                    deleteConnection(itemsToDelete[len]);
+                }
+            }
 
-             _client.completeTransaction();
+            _client.completeTransaction();
         };
 
         //first figure out if the deleted-to-be items are present in any other meta sheet
@@ -348,7 +409,7 @@ define(['logManager',
         while (len--) {
             gmeID = this._ComponentID2GMEID[idList[len]];
             idx = this._GMENodes.indexOf(gmeID);
-            if ( idx !== -1) {
+            if (idx !== -1) {
                 //entity is a box
                 //check to see if this gmeID is present on any other sheet at all
                 if (this._metaAspectSheetsPerMember[gmeID].length === 1) {
@@ -359,9 +420,9 @@ define(['logManager',
 
         if (metaInfoToBeLost.length > 0) {
             //need user confirmation because there is some meta info to be lost
-            var confirmMsg = "The following items you are about to delete are not present on any other sheet and will be permanently removed from the META aspect:<br><br>";
-            var itemNames = [];
-            var nodeObj;
+            confirmMsg = 'The following items you are about to delete are not present on any other sheet and will ' +
+            'be permanently removed from the META aspect:<br><br>';
+            itemNames = [];
             len = metaInfoToBeLost.length;
             while (len--) {
                 gmeID = metaInfoToBeLost[len];
@@ -373,13 +434,14 @@ define(['logManager',
                 }
             }
             itemNames.sort();
-            for(len = 0; len < itemNames.length; len += 1) {
-                confirmMsg += "- " + itemNames[len] + "<br>";
+            for (len = 0; len < itemNames.length; len += 1) {
+                confirmMsg += '- <b>' + itemNames[len] +
+                              '</b>  (all associated meta rules will be deleted for this element)<br>';
             }
-            confirmMsg += "<br>Are you sure you want to delete?";
+            confirmMsg += '<br>Are you sure you want to delete?';
             dialog.confirm('Confirm delete', confirmMsg, function () {
                 doDelete(idList);
-});
+            });
         } else {
             //trivial deletion
             doDelete(idList);
@@ -392,7 +454,7 @@ define(['logManager',
 
     MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._getDragParams = function (selectedElements, event) {
         var oParams = this._oGetDragParams.call(this.diagramDesigner, selectedElements, event),
-            params = { 'positions': {} },
+            params = {positions: {}},
             i;
 
         params[DRAG_PARAMS_META_CONTAINER_ID] = this.metaAspectContainerNodeID;
@@ -467,7 +529,8 @@ define(['logManager',
             len,
             newSetID,
             componentID,
-            pos;
+            pos,
+            newSheetDesc;
 
         metaAspectSheetsRegistry.sort(function (a, b) {
             if (a.order < b.order) {
@@ -489,14 +552,17 @@ define(['logManager',
         newSetID = MetaEditorConstants.META_ASPECT_SHEET_NAME_PREFIX + generateGuid();
         this._client.createSet(aspectNodeID, newSetID);
 
-        var newSheetDesc = {'SetID': newSetID,
-                            'order': metaAspectSheetsRegistry.length,
-                            'title': 'New sheet'};
+        newSheetDesc = {
+            SetID: newSetID,
+            order: metaAspectSheetsRegistry.length,
+            title: 'New sheet'
+        };
 
         metaAspectSheetsRegistry.push(newSheetDesc);
 
         //migrating projects that already have META aspect members but did not have sheets before
-        //TODO: not needed in the future, but before version 0.4.3 users were able to create META definitions without meta sheets
+        //TODO: not needed in the future,
+        //  TODO: but before version 0.4.3 users were able to create META definitions without meta sheets
         //TODO: that needed to be carried over
         //TODO: can be removed sometimes in the future
         if (metaAspectSheetsRegistry.length === 1) {
@@ -506,9 +572,23 @@ define(['logManager',
                 componentID = this._metaAspectMembersAll[len];
                 this._client.addMember(aspectNodeID, componentID, newSetID);
                 if (this._metaAspectMembersCoordinatesGlobal[componentID]) {
-                    this._client.setMemberRegistry(aspectNodeID, componentID, newSetID, REGISTRY_KEYS.POSITION, {'x': this._metaAspectMembersCoordinatesGlobal[componentID].x, 'y': this._metaAspectMembersCoordinatesGlobal[componentID].y} );
+                    this._client.setMemberRegistry(aspectNodeID,
+                        componentID,
+                        newSetID,
+                        REGISTRY_KEYS.POSITION,
+                        {
+                            x: this._metaAspectMembersCoordinatesGlobal[componentID].x,
+                            y: this._metaAspectMembersCoordinatesGlobal[componentID].y
+                        });
                 } else {
-                    this._client.setMemberRegistry(aspectNodeID, componentID, newSetID, REGISTRY_KEYS.POSITION, {'x': pos, 'y': pos} );
+                    this._client.setMemberRegistry(aspectNodeID,
+                        componentID,
+                        newSetID,
+                        REGISTRY_KEYS.POSITION,
+                        {
+                            x: pos,
+                            y: pos
+                        });
                     pos += 30;
                 }
             }
@@ -523,7 +603,8 @@ define(['logManager',
         this._client.completeTransaction();
     };
 
-    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onTabTitleChanged = function (tabID, oldValue, newValue) {
+    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onTabTitleChanged = function (tabID, oldValue,
+                                                                                                 newValue) {
         var aspectNodeID = this.metaAspectContainerNodeID,
             aspectNode = this._client.getNode(aspectNodeID),
             metaAspectSheetsRegistry = aspectNode.getEditableRegistry(REGISTRY_KEYS.META_SHEETS) || [],
@@ -572,7 +653,11 @@ define(['logManager',
             _client = this._client,
             doDeleteTab,
             i,
-            confirmMsg;
+            confirmMsg,
+            itemNames,
+            nodeObj;
+
+        this.logger.debug('_onTabDeleteClicked', tabID);
 
         doDeleteTab = function () {
             _client.startTransaction();
@@ -582,11 +667,12 @@ define(['logManager',
             while (len--) {
                 gmeID = metaAspectMemberToBeLost[len];
                 _client.removeMember(aspectNodeID, gmeID, MetaEditorConstants.META_ASPECT_SET_NAME);
+                _client.setMeta(gmeID, {});
             }
 
             //delete the sheet
             len = metaAspectSheetsRegistry.length;
-            while(len--) {
+            while (len--) {
                 if (metaAspectSheetsRegistry[len].SetID === aspectToDelete) {
                     metaAspectSheetsRegistry.splice(len, 1);
                     break;
@@ -622,7 +708,7 @@ define(['logManager',
         while (len--) {
             gmeID = itemsOfAspect[len];
             idx = this._GMENodes.indexOf(gmeID);
-            if ( idx !== -1) {
+            if (idx !== -1) {
                 //entity is a box
                 //check to see if this gmeID is present on any other sheet at all
                 if (this._metaAspectSheetsPerMember[gmeID].length === 1) {
@@ -633,9 +719,9 @@ define(['logManager',
 
         if (metaAspectMemberToBeLost.length > 0) {
             //need user confirmation because there is some meta info to be lost
-            confirmMsg = "You are about to delete a sheet that contains the following items that are not present on any other sheet and will be permanently removed from the META aspect:<br><br>";
-            var itemNames = [];
-            var nodeObj;
+            confirmMsg = 'You are about to delete a sheet that contains the following items that are not present ' +
+            'on any other sheet and will be permanently removed from the META aspect:<br><br>';
+            itemNames = [];
             len = metaAspectMemberToBeLost.length;
             while (len--) {
                 gmeID = metaAspectMemberToBeLost[len];
@@ -647,16 +733,17 @@ define(['logManager',
                 }
             }
             itemNames.sort();
-            for(len = 0; len < itemNames.length; len += 1) {
-                confirmMsg += "- " + itemNames[len] + "<br>";
+            for (len = 0; len < itemNames.length; len += 1) {
+                confirmMsg += '- <b>' + itemNames[len] +
+                              '</b> (all associated meta rules will be deleted for this element)<br>';
             }
-            confirmMsg += "<br>Are you sure you want to delete the sheet anyway?";
+            confirmMsg += '<br>Are you sure you want to delete the sheet anyway?';
             dialog.confirm('Confirm delete', confirmMsg, function () {
                 doDeleteTab();
             });
         } else {
             //no meta member will be lost permanently but make sure that the user really wants to delete the sheet
-            confirmMsg = "Are you sure you want to delete this sheet?";
+            confirmMsg = 'Are you sure you want to delete this sheet?';
             dialog.confirm('Confirm delete', confirmMsg, function () {
                 doDeleteTab();
             });
@@ -698,30 +785,41 @@ define(['logManager',
     };
 
 
-    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionFillColorChanged = function (selectedElements, color) {
+    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionFillColorChanged = function (selectedElements,
+                                                                                                           color) {
         this._onSelectionSetColor(selectedElements, color, REGISTRY_KEYS.COLOR);
     };
 
-    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionBorderColorChanged = function (selectedElements, color) {
+    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionBorderColorChanged = function (selectedElements,
+                                                                                                             color) {
         this._onSelectionSetColor(selectedElements, color, REGISTRY_KEYS.BORDER_COLOR);
     };
 
-    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionTextColorChanged = function (selectedElements, color) {
+    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionTextColorChanged = function (selectedElements,
+                                                                                                           color) {
         this._onSelectionSetColor(selectedElements, color, REGISTRY_KEYS.TEXT_COLOR);
     };
 
-    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionSetColor = function (selectedIds, color, regKey) {
+    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionSetColor = function (selectedIds, color,
+                                                                                                   regKey) {
         var i = selectedIds.length,
             gmeID;
 
         this._client.startTransaction();
-        while(i--) {
+        while (i--) {
             gmeID = this._ComponentID2GMEID[selectedIds[i]];
 
             if (color) {
-                this._client.setMemberRegistry(this.metaAspectContainerNodeID, gmeID, MetaEditorConstants.META_ASPECT_SET_NAME, regKey, color);
+                this._client.setMemberRegistry(this.metaAspectContainerNodeID,
+                    gmeID,
+                    MetaEditorConstants.META_ASPECT_SET_NAME,
+                    regKey,
+                    color);
             } else {
-                this._client.delMemberRegistry(this.metaAspectContainerNodeID, gmeID, MetaEditorConstants.META_ASPECT_SET_NAME, regKey);
+                this._client.delMemberRegistry(this.metaAspectContainerNodeID,
+                    gmeID,
+                    MetaEditorConstants.META_ASPECT_SET_NAME,
+                    regKey);
             }
         }
         this._client.completeTransaction();

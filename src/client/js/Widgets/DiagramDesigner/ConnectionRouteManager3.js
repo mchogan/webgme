@@ -1,32 +1,36 @@
-/*globals define, _*/
+/*globals DEBUG,define, _, WebGMEGlobal*/
+/*jshint browser: true*/
 
-define(['logManager', 
-        './AutoRouter', 
-        './ConnectionRouteManager3.ActionApplier.js', 
-        'util/assert', 
-        './Profiler'], function (logManager, 
-                                 AutoRouter, 
-                                 ActionApplier, 
-                                 assert, 
-                                 Profiler) {
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
 
-    "use strict";
+define([
+    'js/logger',
+    './AutoRouter',
+    './AutoRouter.ActionApplier'
+], function (Logger,
+             AutoRouter,
+             ActionApplier) {
+
+    'use strict';
 
     var ConnectionRouteManager3,
         DESIGNERITEM_SUBCOMPONENT_SEPARATOR = '_x_',
         ASYNC = false;
 
     ConnectionRouteManager3 = function (options) {
-        this.logger = (options && options.logger) || logManager.create(((options && options.loggerName) || "ConnectionRouteManager3"));
+        var loggerName = (options && options.loggerName) || 'gme:Widgets:DiagramDesigner:ConnectionRouteManager3';
+        this.logger = (options && options.logger) || Logger.create(loggerName, WebGMEGlobal.gmeConfig.client.log);
 
         this.diagramDesigner = options ? options.diagramDesigner : null;
 
         if (this.diagramDesigner === undefined || this.diagramDesigner === null) {
-            this.logger.error("Trying to initialize a ConnectionRouteManager3 without a canvas...");
-            throw ("ConnectionRouteManager3 can not be created");
+            this.logger.error('Trying to initialize a ConnectionRouteManager3 without a canvas...');
+            throw ('ConnectionRouteManager3 can not be created');
         }
 
-        this.logger.debug("ConnectionRouteManager3 ctor finished");
+        this.logger.debug('ConnectionRouteManager3 ctor finished');
         this._portSeparator = DESIGNERITEM_SUBCOMPONENT_SEPARATOR;
 
         this._recordActions = DEBUG;
@@ -39,26 +43,27 @@ define(['logManager',
         //Adding event listeners
         var self = this;
 
-        this._onComponentUpdate = function(_canvas, ID) {
-            if(self.diagramDesigner.itemIds.indexOf(ID) !== -1) {
-                if(self.diagramDesigner.items[ID].rotation !== self._autorouterBoxRotation[ID]) { //Item has been rotated
+        this._onComponentUpdate = function (_canvas, ID) {
+            if (self.diagramDesigner.itemIds.indexOf(ID) !== -1) {
+                if (self.diagramDesigner.items[ID].rotation !== self._autorouterBoxRotation[ID]) {
+                    //Item has been rotated
                     self._resizeItem(ID);
                 }
             }
-       };
+        };
         this.diagramDesigner.addEventListener(this.diagramDesigner.events.ON_COMPONENT_UPDATE, this._onComponentUpdate);
 
-        this._onComponentCreate = function(_canvas, ID) {
+        this._onComponentCreate = function (_canvas, ID) {
             if (self.diagramDesigner.itemIds.indexOf(ID) !== -1 && self._autorouterBoxes[ID] === undefined) {
                 self.insertBox(ID);
-            } else if(self.diagramDesigner.connectionIds.indexOf(ID) !== -1) {
+            } else if (self.diagramDesigner.connectionIds.indexOf(ID) !== -1) {
                 self.insertConnection(ID);
             }
         };
         this.diagramDesigner.addEventListener(this.diagramDesigner.events.ON_COMPONENT_CREATE, this._onComponentCreate);
 
-        this._onComponentResize = function(_canvas, ID) {
-            if(self._autorouterBoxes[ID.ID]) {
+        this._onComponentResize = function (_canvas, ID) {
+            if (self._autorouterBoxes[ID.ID]) {
                 self._resizeItem(ID.ID);
             } else {
                 self.insertBox(ID.ID);
@@ -66,51 +71,59 @@ define(['logManager',
         };
         this.diagramDesigner.addEventListener(this.diagramDesigner.events.ITEM_SIZE_CHANGED, this._onComponentResize);
 
-        this._onComponentDelete = function(_canvas, ID) {  // Boxes and lines
+        this._onComponentDelete = function (_canvas, ID) {  // Boxes and lines
             self.deleteItem(ID);
         };
         this.diagramDesigner.addEventListener(this.diagramDesigner.events.ON_COMPONENT_DELETE, this._onComponentDelete);
         //ON_UNREGISTER_SUBCOMPONENT
 
-        this._onItemPositionChanged = function(_canvas, eventArgs) {
-            if(self._autorouterBoxes[eventArgs.ID]) {
+        this._onItemPositionChanged = function (_canvas, eventArgs) {
+            if (self._autorouterBoxes[eventArgs.ID]) {
                 var x = self.diagramDesigner.items[eventArgs.ID].getBoundingBox().x,
                     y = self.diagramDesigner.items[eventArgs.ID].getBoundingBox().y;
 
                 self._invokeAutoRouterMethod('move', [eventArgs.ID, {x: x, y: y}]);
             }
         };
-        this.diagramDesigner.addEventListener(this.diagramDesigner.events.ITEM_POSITION_CHANGED, this._onItemPositionChanged);
+        this.diagramDesigner.addEventListener(this.diagramDesigner.events.ITEM_POSITION_CHANGED,
+            this._onItemPositionChanged);
 
-        this._onClear = function(_canvas, eventArgs) {
+        this._onClear = function () {
             self._clearGraph();
         };
         this.diagramDesigner.addEventListener(this.diagramDesigner.events.ON_CLEAR, this._onClear);
 
-        this._onUnregisterSubcomponent = function(sender, ids) {
+        this._onUnregisterSubcomponent = function (sender, ids) {
             var longid = ids.objectID + DESIGNERITEM_SUBCOMPONENT_SEPARATOR + ids.subComponentID;
-                if(self._autorouterBoxes[longid]) {
-                    self.deleteItem(longid);
-                }
+            if (self._autorouterBoxes[longid]) {
+                self.deleteItem(longid);
+            }
         };
-        this.diagramDesigner.addEventListener(this.diagramDesigner.events.ON_UNREGISTER_SUBCOMPONENT, this._onUnregisterSubcomponent);
+        this.diagramDesigner.addEventListener(this.diagramDesigner.events.ON_UNREGISTER_SUBCOMPONENT,
+            this._onUnregisterSubcomponent);
     };
 
     ConnectionRouteManager3.prototype.destroy = function () {
-        this.diagramDesigner.removeEventListener(this.diagramDesigner.events.ON_COMPONENT_CREATE, this._onComponentCreate);
-        this.diagramDesigner.removeEventListener(this.diagramDesigner.events.ON_COMPONENT_UPDATE, this._onComponentUpdate);
-        this.diagramDesigner.removeEventListener(this.diagramDesigner.events.ITEM_SIZE_CHANGED, this._onComponentResize);
-        this.diagramDesigner.removeEventListener(this.diagramDesigner.events.ON_COMPONENT_DELETE, this._onComponentDelete);
-        this.diagramDesigner.removeEventListener(this.diagramDesigner.events.ITEM_POSITION_CHANGED, this._onItemPositionChanged);
+        this.diagramDesigner.removeEventListener(this.diagramDesigner.events.ON_COMPONENT_CREATE,
+            this._onComponentCreate);
+        this.diagramDesigner.removeEventListener(this.diagramDesigner.events.ON_COMPONENT_UPDATE,
+            this._onComponentUpdate);
+        this.diagramDesigner.removeEventListener(this.diagramDesigner.events.ITEM_SIZE_CHANGED,
+            this._onComponentResize);
+        this.diagramDesigner.removeEventListener(this.diagramDesigner.events.ON_COMPONENT_DELETE,
+            this._onComponentDelete);
+        this.diagramDesigner.removeEventListener(this.diagramDesigner.events.ITEM_POSITION_CHANGED,
+            this._onItemPositionChanged);
         this.diagramDesigner.removeEventListener(this.diagramDesigner.events.ON_CLEAR, this._onClear);
-        this.diagramDesigner.removeEventListener(this.diagramDesigner.events.ON_UNREGISTER_SUBCOMPONENT, this._onUnregisterSubcomponent);
+        this.diagramDesigner.removeEventListener(this.diagramDesigner.events.ON_UNREGISTER_SUBCOMPONENT,
+            this._onUnregisterSubcomponent);
     };
 
     ConnectionRouteManager3.prototype.redrawConnections = function (idList) {
 
-        if(!this._initialized) {
+        if (!this._initialized) {
             this._initializeGraph();
-        }else{
+        } else {
             this._refreshConnData(idList);
         }
 
@@ -118,7 +131,7 @@ define(['logManager',
         if (ASYNC) {
             // Create callback function
             var self = this;
-            var callback = function(){
+            var callback = function () {
                 self.renderConnections();
             };
             this._invokeAutoRouterMethod('routeAsync', [{callback: callback}]);
@@ -141,16 +154,15 @@ define(['logManager',
             realPathPoints;
 
         for (var i = idList.length; i--;) {
-            if(this._autorouterPaths[idList[i]]) {
+            if (this._autorouterPaths[idList[i]]) {
                 pathPoints = this._invokeAutoRouterMethod('getPathPoints', [idList[i]]);
             } else {
                 pathPoints = [];
             }
 
-            realPathPoints = [];
-            for(var j = 0; j < pathPoints.length; j++) {
-                realPathPoints.push({'x': pathPoints[j][0], 'y': pathPoints[j][1] });
-            }
+            realPathPoints = pathPoints.map(function (point) {
+                return {'x': point[0], 'y': point[1]};
+            });
 
             this.diagramDesigner.items[idList[i]].setConnectionRenderData(realPathPoints);
         }
@@ -163,7 +175,7 @@ define(['logManager',
         // Clear connection data and paths then re-add them
         var i = idList.length;
 
-        while(i--) {
+        while (i--) {
             this.deleteItem(idList[i]);
             this.insertConnection([idList[i]]);
         }
@@ -187,19 +199,14 @@ define(['logManager',
         var canvas = this.diagramDesigner,
             connIdList = canvas.connectionIds,
             itemIdList = canvas.itemIds,
-            i = itemIdList.length,
-            connId,
-            srcObjId,
-            srcSubCompId,
-            dstObjId,
-            dstSubCompId;
+            i = itemIdList.length;
 
-        while(i--) {
+        while (i--) {
             this.insertBox(itemIdList[i]);
         }
 
         i = connIdList.length;
-        while( i-- ) {
+        while (i--) {
             this.insertConnection(connIdList[i]);
         }
 
@@ -220,7 +227,6 @@ define(['logManager',
             dstConnAreas = canvas.items[dstObjId].getConnectionAreas(dstSubCompId, true, connMetaInfo),
             srcPorts = {},
             dstPorts = {},
-            portId,
             j;
 
         this._updatePort(srcObjId, srcSubCompId);//Adding ports for connection
@@ -228,33 +234,35 @@ define(['logManager',
 
         //Get available ports for this connection
         j = srcConnAreas.length;
-        while(j--) {
+        while (j--) {
             srcPorts[srcConnAreas[j].id] = sId;
         }
-        
+
         j = dstConnAreas.length;
-        while(j--) {
+        while (j--) {
             dstPorts[dstConnAreas[j].id] = tId;
         }
 
         //If it has both a src and dst
-        if(this._autorouterBoxes[sId].ports.length !== 0 && this._autorouterBoxes[tId].ports.length !== 0) {
-            this._invokeAutoRouterMethod('addPath', 
+        if (this._autorouterBoxes[sId].ports.length !== 0 && this._autorouterBoxes[tId].ports.length !== 0) {
+            this._invokeAutoRouterMethod('addPath',
                 [{src: srcPorts, dst: dstPorts}, connId]);
         }
 
         //Set custom points, if applicable
-        if(canvas.items[connId].segmentPoints.length > 0) {
-            this._invokeAutoRouterMethod('setPathCustomPoints', 
-                [{"path": connId, "points": canvas.items[connId].segmentPoints}]);
+        if (canvas.items[connId].segmentPoints.length > 0) {
+            var conn = canvas.items[connId],
+                customPoints = conn.segmentPoints.slice();
+            this._invokeAutoRouterMethod('setPathCustomPoints',
+                [{'path': connId, 'points': customPoints}]);
         }
 
-     };
+    };
 
     ConnectionRouteManager3.prototype.insertBox = function (objId) {
         var canvas = this.diagramDesigner,
             designerItem,
-            areas, 
+            areas,
             bBox,
             boxdefinition,
             isEnd,
@@ -266,19 +274,21 @@ define(['logManager',
 
         boxdefinition = {
             //BOX
-            "x1": bBox.x,
-            "y1": bBox.y,
-            "x2": bBox.x2,
-            "y2": bBox.y2,
+            'x1': bBox.x,
+            'y1': bBox.y,
+            'x2': bBox.x2,
+            'y2': bBox.y2,
 
             //PORTS
-            "ports": []
+            'ports': []
         };
 
         while (j < areas.length) {
             //Building up the ports object
-            boxdefinition.ports.push({ 'id': areas[j].id, 'area': [ [ areas[j].x1, areas[j].y1 ], [ areas[j].x2, areas[j].y2 ] ], 
-                    'angles': [ areas[j].angle1, areas[j].angle2 ] });
+            boxdefinition.ports.push({
+                'id': areas[j].id, 'area': [[areas[j].x1, areas[j].y1], [areas[j].x2, areas[j].y2]],
+                'angles': [areas[j].angle1, areas[j].angle2]
+            });
             j++;
         }
 
@@ -294,14 +304,16 @@ define(['logManager',
 
     ConnectionRouteManager3.prototype._resizeItem = function (objId) {
         var canvas = this.diagramDesigner,
-            isEnd = true, 
+            isEnd = true,
             connectionMetaInfo,
             designerItem = canvas.items[objId],
             newCoord = designerItem.getBoundingBox(),
-            newBox = {x1: newCoord.x, 
-                      x2: newCoord.x2, 
-                      y1: newCoord.y, 
-                      y2: newCoord.y2},
+            newBox = {
+                x1: newCoord.x,
+                x2: newCoord.x2,
+                y1: newCoord.y,
+                y2: newCoord.y2
+            },
             ports = [],
             connAreas = designerItem.getConnectionAreas(objId, isEnd, connectionMetaInfo),
             i;
@@ -310,34 +322,35 @@ define(['logManager',
         i = connAreas.length;
         while (i--) {
             // Building up the ConnectionAreas object
-            ports.push({id: connAreas[i].id, 
-                        area: [ [ connAreas[i].x1, connAreas[i].y1 ], [ connAreas[i].x2, connAreas[i].y2 ] ],
-                        angles: [connAreas[i].angle1, connAreas[i].angle2]});
+            ports.push({
+                id: connAreas[i].id,
+                area: [[connAreas[i].x1, connAreas[i].y1], [connAreas[i].x2, connAreas[i].y2]],
+                angles: [connAreas[i].angle1, connAreas[i].angle2]
+            });
         }
 
         // Update Box 
-        this._invokeAutoRouterMethod('setBoxRect',[objId, newBox]);
+        this._invokeAutoRouterMethod('setBoxRect', [objId, newBox]);
 
         // Update box ports
         for (i = ports.length; i--;) {
-            this._invokeAutoRouterMethod('updatePort',[objId, ports[i]]);
+            this._invokeAutoRouterMethod('updatePort', [objId, ports[i]]);
         }
 
     };
 
     ConnectionRouteManager3.prototype._updatePort = function (objId, subCompId) {
         var longid = objId + DESIGNERITEM_SUBCOMPONENT_SEPARATOR + subCompId,
-            canvas = this.diagramDesigner,
-            connectionMetaInfo = null;
+            canvas = this.diagramDesigner;
 
         if (subCompId !== undefined) { //Updating a port
             //We need to know if the box even exists...
-            if(!this._autorouterBoxes[longid]) { //If the port doesn't exist, create it
+            if (!this._autorouterBoxes[longid]) { //If the port doesn't exist, create it
                 this._createPort(objId, subCompId);
-            } else{
+            } else {
                 //TODO Adjust size, connection info
                 var newBox = this._createPortInfo(objId, subCompId);
-                this._invokeAutoRouterMethod('setBoxRect',[longid, newBox]);
+                this._invokeAutoRouterMethod('setBoxRect', [longid, newBox]);
             }
         } else { // Updating the box's connection areas
             var areas = canvas.items[objId].getConnectionAreas() || [],
@@ -349,31 +362,33 @@ define(['logManager',
 
             for (j = areas.length; j--;) {
                 //Building up the ports object
-                connInfo.push({ 'id': areas[j].id, 'area': [ [ areas[j].x1, areas[j].y1 ], [ areas[j].x2, areas[j].y2 ] ],
-                                'angles': [ areas[j].angle1, areas[j].angle2 ] });
+                connInfo.push({
+                    'id': areas[j].id, 'area': [[areas[j].x1, areas[j].y1], [areas[j].x2, areas[j].y2]],
+                    'angles': [areas[j].angle1, areas[j].angle2]
+                });
                 newIds[areas[j].id] = true;
             }
 
             // Update each AutoRouter port
             for (j = connInfo.length; j--;) {
-                this._invokeAutoRouterMethod('updatePort',[objId, connInfo[j]]);
+                this._invokeAutoRouterMethod('updatePort', [objId, connInfo[j]]);
             }
 
             for (j = boxObject.ports.length; j--;) {
                 id = boxObject.ports[j].id;
                 if (!newIds[id]) {
-                    this._invokeAutoRouterMethod('removePort',[boxObject.ports[j]]);  // Not sure FIXME
+                    this._invokeAutoRouterMethod('removePort', [boxObject.ports[j]]);  // Not sure FIXME
                 }
             }
         }
-     };
+    };
 
     ConnectionRouteManager3.prototype._createPort = function (objId, subCompId) {
         var longid = objId + DESIGNERITEM_SUBCOMPONENT_SEPARATOR + subCompId,
             newBox = this._createPortInfo(objId, subCompId);
 
         this._invokeAutoRouterMethod('addBox', [newBox, longid]);
-        this._invokeAutoRouterMethod('setComponent',[objId, longid]);
+        this._invokeAutoRouterMethod('setComponent', [objId, longid]);
     };
 
     ConnectionRouteManager3.prototype._createPortInfo = function (objId, subCompId) {
@@ -384,28 +399,31 @@ define(['logManager',
         //      - Determine the box
         //          - Use the connection angle
         //  - Set the box as a component of the parent
-        var longid = objId + DESIGNERITEM_SUBCOMPONENT_SEPARATOR + subCompId,
-            canvas = this.diagramDesigner,
+        var canvas = this.diagramDesigner,
             connectionMetaInfo = null,
             areas = canvas.items[objId].getConnectionAreas(subCompId, true, connectionMetaInfo) || [],
             j = areas.length,
-            newBox = { 'x1': null, 
-                'x2': null, 
-                'y1': null, 
+            newBox = {
+                'x1': null,
+                'x2': null,
+                'y1': null,
                 'y2': null,
-                'ports': [] };
+                'ports': []
+            };
 
         while (j--) {
-            var angles = [ areas[j].angle1, areas[j].angle2 ],
+            var angles = [areas[j].angle1, areas[j].angle2],
                 x1 = Math.min(areas[j].x1, areas[j].x2),
                 x2 = Math.max(areas[j].x1, areas[j].x2),
                 y1 = Math.min(areas[j].y1, areas[j].y2),
                 y2 = Math.max(areas[j].y1, areas[j].y2);
 
-            newBox.ports.push({ 'id': areas[j].id, 'area': [ [ x1, y1 ], [ x2, y2 ] ],
-                    'angles': angles });
+            newBox.ports.push({
+                'id': areas[j].id, 'area': [[x1, y1], [x2, y2]],
+                'angles': angles
+            });
 
-            if(angles) {
+            if (angles) {
                 var a1 = angles[0], //min angle
                     a2 = angles[1], //max angle
                     rightAngle = 0,
@@ -429,12 +447,12 @@ define(['logManager',
                     y2 += 5;
                 }
 
-            }else{
-                if(x2 - x1 < 3) {
+            } else {
+                if (x2 - x1 < 3) {
                     x2 += 3;
                 }
 
-                if(y2 - y1 < 3) {
+                if (y2 - y1 < 3) {
                     y2 += 3;
                 }
             }

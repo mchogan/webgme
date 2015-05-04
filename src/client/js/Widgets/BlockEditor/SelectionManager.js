@@ -1,13 +1,11 @@
-/*globals define*/
-/*
- * Copyright (C) 2013 Vanderbilt University, All rights reserved.
- *
+/*globals define, WebGMEGlobal*/
+/*jshint browser: true*/
+
+/**
  * @author brollb / https://github/brollb
  */
 
-define(['logManager',
-        'clientUtil'], function (logManager,
-                                 clientUtil) {
+define(['js/logger', 'js/util'], function (Logger, clientUtil) {
 
     "use strict";
 
@@ -18,7 +16,8 @@ define(['logManager',
         MOUSE_EVENT_POSTFIX = "SelectionManager";
 
     SelectionManager = function (options) {
-        this.logger = (options && options.logger) || logManager.create(((options && options.loggerName) || "SelectionManager"));
+        var loggerName = options && options.loggerName || 'gme:Widgets:BlockEditor:SelectionManager';
+        this.logger = (options && options.logger) || Logger.create(loggerName, WebGMEGlobal.gmeConfig.client.log);
 
         this._blockEditor = options ? options.blockEditor : null;
 
@@ -92,11 +91,11 @@ define(['logManager',
     };
 
     SelectionManager.prototype.onSelectionCommandClicked = function (command, selectedIds) {
-        this.logger.warning("SelectionManager.prototype.onSelectionCommandClicked IS NOT OVERRIDDEN IN HOST COMPONENT. command: '" + command + "', selectedIds: " + selectedIds);
+        this.logger.warn("SelectionManager.prototype.onSelectionCommandClicked IS NOT OVERRIDDEN IN HOST COMPONENT. command: '" + command + "', selectedIds: " + selectedIds);
     };
 
     SelectionManager.prototype.onSelectionChanged = function (selectedIDs) {
-        this.logger.warning("SelectionManager.prototype.onSelectionChanged IS NOT OVERRIDDEN IN HOST COMPONENT. selectedIDs: " + selectedIDs);
+        this.logger.warn("SelectionManager.prototype.onSelectionChanged IS NOT OVERRIDDEN IN HOST COMPONENT. selectedIDs: " + selectedIDs);
     };
 
 
@@ -134,11 +133,13 @@ define(['logManager',
 
             this._drawSelectionRubberBand();
 
-            params = {"addToExistingSelection": this._rubberbandSelection.addToExistingSelection,
+            params = {
+                "addToExistingSelection": this._rubberbandSelection.addToExistingSelection,
                 "x": Math.min(this._rubberbandSelection.x, this._rubberbandSelection.x2),
                 "x2": Math.max(this._rubberbandSelection.x, this._rubberbandSelection.x2),
                 "y": Math.min(this._rubberbandSelection.y, this._rubberbandSelection.y2),
-                "y2": Math.max(this._rubberbandSelection.y, this._rubberbandSelection.y2)};
+                "y2": Math.max(this._rubberbandSelection.y, this._rubberbandSelection.y2)
+            };
 
             this._selectItemsByRubberBand(params);
 
@@ -188,18 +189,18 @@ define(['logManager',
 
         this.logger.debug("setSelection: " + id);
 
-        if(this._selectedElement !== id){
+        if (this._selectedElement !== id) {
             changed = true;
         }
 
-        if(this._selectedElement){
+        if (this._selectedElement) {
             item = items[this._selectedElement];
             if (item && $.isFunction(item.onDeselect)) {
                 item.onDeselect();
             }
         }
 
-        if(id){
+        if (id) {
             this._selectedElement = id;
             item = items[this._selectedElement];
 
@@ -218,7 +219,7 @@ define(['logManager',
     /*********************** COMPONENT DELETE HANDLER *******************/
     SelectionManager.prototype._onComponentDelete = function (componentId) {
         //items are already deleted, we just need to remove them from the selectedIdList (if there)
-        if (componentId === this._selectedElement){
+        if (componentId === this._selectedElement) {
             this._selectedElement = null;
             this.onSelectionChanged(this._selectedElement);
         }
@@ -228,7 +229,7 @@ define(['logManager',
 
     /*********************** SHOW SELECTION OUTLINE *********************************/
     var SELECTION_OUTLINE_BASE = $('<div/>', {
-        "class" : "selection-outline"
+        "class": "selection-outline"
     });
     SelectionManager.prototype.showSelectionOutline = function () {
         var bBox = this._getSelectionBoundingBox(),
@@ -274,10 +275,12 @@ define(['logManager',
                 this._blockEditor.skinParts.$itemsContainer.append(this._blockEditor.skinParts.$selectionOutline);
             }
 
-            this._blockEditor.skinParts.$selectionOutline.css({ "left": bBox.x,
+            this._blockEditor.skinParts.$selectionOutline.css({
+                "left": bBox.x,
                 "top": bBox.y,
                 "width": bBox.w,
-                "height": bBox.h });
+                "height": bBox.h
+            });
 
             this._renderSelectionActions();
         } else {
@@ -315,15 +318,17 @@ define(['logManager',
             if (items[id]) {
 
                 if (!bBox) {
-                    bBox = { "x": this._blockEditor._actualSize.w,
+                    bBox = {
+                        "x": this._blockEditor._actualSize.w,
                         "y": this._blockEditor._actualSize.h,
                         "x2": 0,
-                        "y2": 0};
+                        "y2": 0
+                    };
                 }
 
                 current = [items[id]];
                 while (current.length) {  // Create the box from box and all sibling pointers
-                    for (var c = current.length-1; c >= 0; c--) {  // Create the box from box and all sibling pointers
+                    for (var c = current.length - 1; c >= 0; c--) {  // Create the box from box and all sibling pointers
                         childBBox = current[c].getBoundingBox();
 
                         if (childBBox.x < bBox.x) {
@@ -340,8 +345,8 @@ define(['logManager',
                         }
 
                         ptrs = Object.keys(current[c].ptrs);
-                        for (var i = ptrs.length-1; i >= 0; i--) {
-                            child = current[c].ptrs[ptrs[i]]; 
+                        for (var i = ptrs.length - 1; i >= 0; i--) {
+                            child = current[c].ptrs[ptrs[i]];
                             if (child) {
                                 next.push(child);
                             }
@@ -360,10 +365,10 @@ define(['logManager',
     /************* RENDER COMMAND BUTTONS ON SELECTION OUTLINE ************************/
 
     var DELETE_BUTTON_BASE = $('<div/>', {
-        "class" : "s-btn delete",
-        "command" : "delete"
+        "class": "s-btn delete",
+        "command": "delete"
     });
-    
+
     DELETE_BUTTON_BASE.html('<i class="glyphicon glyphicon-remove"></i>');
 
 

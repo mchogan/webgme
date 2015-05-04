@@ -1,18 +1,17 @@
-/*globals define*/
-
+/*globals define, $*/
+/*jshint browser: true*/
 /**
  * @author rkereskenyi / https://github.com/rkereskenyi
  * @author nabana / https://github.com/nabana
  */
 
-
-define(['loaderCircles',
+define(['js/Loader/LoaderCircles',
     'text!./templates/ImportDialog.html',
-    'css!./styles/ImportDialog.css'], function (
-        LoaderCircles,
-        importDialogTemplate) {
+    'css!./styles/ImportDialog.css'
+], function (LoaderCircles,
+             importDialogTemplate) {
 
-    "use strict";
+    'use strict';
 
     var ImportDialog,
         MAX_FILE_SIZE = 100000000;
@@ -58,20 +57,20 @@ define(['loaderCircles',
 
         this._uploadedFileName = this._dialog.find('.uploaded-file-name');
 
-        this._loader = new LoaderCircles({"containerElement": this._dialog});
+        this._loader = new LoaderCircles({containerElement: this._dialog});
 
         // attach handlers
 
         this._btnAttach.on('click', function (e) {
-                e.stopPropagation();
-                e.preventDefault();
+            e.stopPropagation();
+            e.preventDefault();
 
-                self._fileInput.click();
+            self._fileInput.click();
         });
 
 
         // file select
-        this._fileInput.on("change", function (event) {
+        this._fileInput.on('change', function (event) {
             event.stopPropagation();
             event.preventDefault();
             self._fileSelectHandler(event.originalEvent);
@@ -95,7 +94,7 @@ define(['loaderCircles',
             self._fileDropTarget.removeClass('hover');
         });
 
-        this._fileDropTarget.on("drop", function (event) {
+        this._fileDropTarget.on('drop', function (event) {
             event.stopPropagation();
             event.preventDefault();
             self._fileSelectHandler(event.originalEvent);
@@ -124,20 +123,20 @@ define(['loaderCircles',
         if (file && file.length > 0) {
             file = file[0];
             if (file.size > MAX_FILE_SIZE) {
-                self._displayMessage(file.name + ':<br><br>FILE SITE IS TOO BIG...', true);
+                self._displayMessage(file.name + ':<br><br>FILE SIZE IS TOO BIG...', true);
             } else {
                 //try to json parse it's content
                 var reader = new FileReader();
-                reader.onloadstart = function() {
+                reader.onloadstart = function () {
                     loader.start();
                 };
 
-                reader.onloadend = function() {
+                reader.onloadend = function () {
                     loader.stop();
                 };
 
-                reader.onload = function(e) {
-                    if (e.target && e.target.result){
+                reader.onload = function (e) {
+                    if (e.target && e.target.result) {
                         try {
                             parsedJSONFileContent = JSON.parse(e.target.result);
                         } catch (expp) {
@@ -151,7 +150,8 @@ define(['loaderCircles',
                     if (parsedJSONFileContent === undefined) {
                         self._displayMessage('INVALID FILE FORMAT...', true);
                     } else {
-                        self._displayMessage('File has been parsed successfully, click \'Import...\' to start importing.', false);
+                        self._displayMessage('File has been parsed successfully, click \'Import...\'' +
+                                             ' to start importing.', false);
                         btnImport.disable(false);
                         btnImport.on('click', function (event) {
                             event.preventDefault();
@@ -180,7 +180,7 @@ define(['loaderCircles',
         } else {
             this._importErrorLabel.addClass('alert-success');
         }
-        
+
         this._importErrorLabel.html(msg);
         this._importErrorLabel.hide();
         this._importErrorLabel.fadeIn();

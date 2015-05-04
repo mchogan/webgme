@@ -5,7 +5,7 @@
  */
 //these tests intended to ensure that every used feature of mongodb and its used client is work as expected
 
-var tGlobals = require('../../_globals.js');
+var testFixture = require('../../_globals.js');
 describe('mongo database', function () {
     'use strict';
     var db,
@@ -41,12 +41,16 @@ describe('mongo database', function () {
         };
 
     before(function (done) {
-        tGlobals.mongodb.MongoClient.connect('mongodb://127.0.0.1/mongotest', {
-            'w': 1,
-            'native-parser': true,
-            'auto_reconnect': true,
-            'poolSize': 20,
-            socketOptions: {keepAlive: 1}
+        testFixture.mongodb.MongoClient.connect('mongodb://127.0.0.1/mongotest', {
+            db: {
+                'w': 1,
+                'native_parser': true
+            },
+            server: {
+                'auto_reconnect': true,
+                'poolSize': 20,
+                'socketOptions': {'keepAlive': 1}
+            }
         }, function (err, d) {
             if (!err && d) {
                 db = d;

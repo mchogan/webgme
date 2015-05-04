@@ -1,16 +1,22 @@
-/*globals define, _, requirejs, WebGMEGlobal*/
+/*globals define, $, _*/
+/*jshint browser: true, camelcase: false*/
 
-define(['js/DragDrop/DragHelper',
-    'js/Widgets/DiagramDesigner/DiagramDesignerWidget'], function (DragHelper,
-                                                             DiagramDesignerWidget) {
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
 
-    "use strict";
+define([
+    'js/DragDrop/DragHelper',
+    'js/Widgets/DiagramDesigner/DiagramDesignerWidget'
+], function (DragHelper, DiagramDesignerWidget) {
+
+    'use strict';
 
     var ModelEditorWidget;
 
     ModelEditorWidget = function (container, params) {
         params = params || {};
-        params.loggerName = "ModelEditorWidget";
+        params.loggerName = 'gme:Widgets:ModelEditor:ModelEditorWidget';
 
         params.tabsEnabled = true;
         params.addTabs = false;
@@ -19,7 +25,7 @@ define(['js/DragDrop/DragHelper',
 
         DiagramDesignerWidget.call(this, container, params);
 
-        this.logger.debug("ModelEditorWidget ctor");
+        this.logger.debug('ModelEditorWidget ctor');
     };
 
     _.extend(ModelEditorWidget.prototype, DiagramDesignerWidget.prototype);

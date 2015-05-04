@@ -1,7 +1,11 @@
-/*globals define, _, $, console, angular, WebGMEGlobal*/
+/*globals define, _, WebGMEGlobal*/
+/*jshint browser: true */
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
 
-define(['logManager',
-    'clientUtil',
+define(['js/logger',
+    'js/util',
     'js/Constants',
     'js/Utils/GMEConcepts',
     'js/NodePropertyNames',
@@ -10,30 +14,31 @@ define(['logManager',
     './MetaEditorControl.DiagramDesignerWidgetEventHandlers',
     './MetaRelations',
     './MetaEditorConstants',
-    'js/Utils/PreferencesHelper'], function (logManager,
-                                                        util,
-                                                        CONSTANTS,
-                                                        GMEConcepts,
-                                                        nodePropertyNames,
-                                                        REGISTRY_KEYS,
-                                                        DiagramDesignerWidgetConstants,
-                                                        MetaEditorControlDiagramDesignerWidgetEventHandlers,
-                                                        MetaRelations,
-                                                        MetaEditorConstants,
-                                                        PreferencesHelper) {
+    'js/Utils/PreferencesHelper'
+], function (Logger,
+             util,
+             CONSTANTS,
+             GMEConcepts,
+             nodePropertyNames,
+             REGISTRY_KEYS,
+             DiagramDesignerWidgetConstants,
+             MetaEditorControlDiagramDesignerWidgetEventHandlers,
+             MetaRelations,
+             MetaEditorConstants,
+             PreferencesHelper) {
 
-    "use strict";
+    'use strict';
 
     var MetaEditorControl,
-        GME_ID = "GME_ID",
-        META_DECORATOR = "MetaDecorator",
+        META_DECORATOR = 'MetaDecorator',
         WIDGET_NAME = 'DiagramDesigner',
         META_RULES_CONTAINER_NODE_ID = MetaEditorConstants.META_ASPECT_CONTAINER_ID;
 
     MetaEditorControl = function (options) {
         var self = this;
 
-        this.logger = options.logger || logManager.create(options.loggerName || "MetaEditorControl");
+        this.logger = options.logger || Logger.create(options.loggerName || 'gme:Panels:MetaEditor:MetaEditorControl',
+            WebGMEGlobal.gmeConfig.client.log);
 
         this._client = options.client;
 
@@ -41,13 +46,13 @@ define(['logManager',
         this.diagramDesigner = options.widget;
 
         if (this._client === undefined) {
-            this.logger.error("ModelEditorControl's client is not specified...");
-            throw ("ModelEditorControl can not be created");
+            this.logger.error('MetaEditorControl\'s client is not specified...');
+            throw ('MetaEditorControl can not be created');
         }
 
         if (this.diagramDesigner === undefined) {
-            this.logger.error("ModelEditorControl's DiagramDesigner is not specified...");
-            throw ("ModelEditorControl can not be created");
+            this.logger.error('MetaEditorControl\'s DiagramDesigner is not specified...');
+            throw ('MetaEditorControl can not be created');
         }
 
         //in METAEDITOR mode DRAG & COPY is not enabled
@@ -59,7 +64,7 @@ define(['logManager',
         this._filteredOutConnectionDescriptors = {};
 
         //local variable holding info about the currently opened node
-        this.currentNodeInfo = {"id": null, "members" : [] };
+        this.currentNodeInfo = {id: null, members: []};
 
         this._metaAspectMembersAll = [];
         this._metaAspectMembersPerSheet = {};
@@ -77,7 +82,7 @@ define(['logManager',
 
         //let the decorator-manager download the required decorator
         this._client.decoratorManager.download([META_DECORATOR], WIDGET_NAME, function () {
-            self.logger.debug("MetaEditorControl ctor finished");
+            self.logger.debug('MetaEditorControl ctor finished');
 
             //load meta container node
             //give the UI time to render first before start using it's features
@@ -92,7 +97,7 @@ define(['logManager',
 
         this.metaAspectContainerNodeID = META_RULES_CONTAINER_NODE_ID;
 
-        this.logger.debug("_loadMetaAspectContainerNode: '" + this.metaAspectContainerNodeID + "'");
+        this.logger.debug('_loadMetaAspectContainerNode: "' + this.metaAspectContainerNodeID + '"');
 
         this._initializeSelectedSheet();
 
@@ -103,7 +108,7 @@ define(['logManager',
 
         //put new node's info into territory rules
         this._selfPatterns = {};
-        this._selfPatterns[this.metaAspectContainerNodeID] = { "children": 0 };
+        this._selfPatterns[this.metaAspectContainerNodeID] = {children: 0};
 
         //create and set territory
         this._territoryId = this._client.addUI(this, function (events) {
@@ -119,7 +124,7 @@ define(['logManager',
         var i = events ? events.length : 0,
             e;
 
-        this.logger.debug("_eventCallback '" + i + "' items");
+        this.logger.debug('_eventCallback "' + i + '" items');
 
         this.diagramDesigner.beginUpdate();
 
@@ -135,6 +140,8 @@ define(['logManager',
                 case CONSTANTS.TERRITORY_EVENT_UNLOAD:
                     this._onUnload(e.eid);
                     break;
+                default:
+                    break;
             }
         }
 
@@ -142,7 +149,7 @@ define(['logManager',
 
         this.diagramDesigner.hideProgressbar();
 
-        this.logger.debug("_eventCallback '" + events.length + "' items - DONE");
+        this.logger.debug('_eventCallback "' + events.length + '" items - DONE');
     };
 
     //might not be the best approach
@@ -179,7 +186,8 @@ define(['logManager',
         if (gmeID === this.metaAspectContainerNodeID) {
             //the opened model has been deleted....
             //most probably a project / branch / whatever change
-            this.logger.debug('The currently opened aspect has been deleted --- GMEID: "' + this.metaAspectContainerNodeID + '"');
+            this.logger.debug('The currently opened aspect has been deleted --- GMEID: "' +
+                              this.metaAspectContainerNodeID + '"');
             setTimeout(function () {
                 self._loadMetaAspectContainerNode();
             }, 10);
@@ -190,8 +198,6 @@ define(['logManager',
     /**********************************************************/
     /*       END OF --- LOAD / UPDATE / UNLOAD HANDLER        */
     /**********************************************************/
-
-
 
 
     /**********************************************************/
@@ -218,7 +224,8 @@ define(['logManager',
             gmeID,
             metaAspectSetMembers = aspectNode.getMemberIds(MetaEditorConstants.META_ASPECT_SET_NAME),
             territoryChanged = false,
-            selectedSheetMembers;
+            selectedSheetMembers,
+            positionsUpdated;
 
         //this._metaAspectMembersAll contains all the currently known members of the meta aspect
         //update current member list
@@ -226,18 +233,23 @@ define(['logManager',
         len = this._metaAspectMembersAll.length;
         this._metaAspectMembersCoordinatesGlobal = {};
         while (len--) {
-            gmeID =  this._metaAspectMembersAll[len];
-            this._metaAspectMembersCoordinatesGlobal[gmeID] = aspectNode.getMemberRegistry(MetaEditorConstants.META_ASPECT_SET_NAME, gmeID, REGISTRY_KEYS.POSITION);
+            gmeID = this._metaAspectMembersAll[len];
+            this._metaAspectMembersCoordinatesGlobal[gmeID] = aspectNode.getMemberRegistry(
+                MetaEditorConstants.META_ASPECT_SET_NAME,
+                gmeID,
+                REGISTRY_KEYS.POSITION);
         }
 
         //process the sheets
-        var positionsUpdated = this._processMetaAspectSheetsRegistry();
+        positionsUpdated = this._processMetaAspectSheetsRegistry();
 
         this.logger.debug('_metaAspectMembersAll: \n' + JSON.stringify(this._metaAspectMembersAll));
-        this.logger.debug('_metaAspectMembersCoordinatesGlobal: \n' + JSON.stringify(this._metaAspectMembersCoordinatesGlobal));
+        this.logger.debug('_metaAspectMembersCoordinatesGlobal: \n' +
+                          JSON.stringify(this._metaAspectMembersCoordinatesGlobal));
 
         this.logger.debug('_metaAspectMembersPerSheet: \n' + JSON.stringify(this._metaAspectMembersPerSheet));
-        this.logger.debug('_metaAspectMembersCoordinatesPerSheet: \n' + JSON.stringify(this._metaAspectMembersCoordinatesPerSheet));
+        this.logger.debug('_metaAspectMembersCoordinatesPerSheet: \n' +
+                          JSON.stringify(this._metaAspectMembersCoordinatesPerSheet));
 
         //check to see if the territory needs to be changed
         //the territory contains the nodes that are on the currently opened sheet
@@ -256,7 +268,7 @@ define(['logManager',
         diff = _.difference(selectedSheetMembers, this._selectedMetaAspectSheetMembers);
         len = diff.length;
         while (len--) {
-            this._metaAspectMemberPatterns[diff[len]] = { "children": 0 };
+            this._metaAspectMemberPatterns[diff[len]] = {children: 0};
             territoryChanged = true;
         }
 
@@ -267,7 +279,7 @@ define(['logManager',
         len = diff.length;
         while (len--) {
             gmeID = diff[len];
-            objDesc = {'position': {'x': 100, 'y': 100}};
+            objDesc = {position: {x: 100, y: 100}};
 
             if (this._metaAspectMembersCoordinatesPerSheet[this._selectedMetaAspectSet][gmeID]) {
                 objDesc.position.x = this._metaAspectMembersCoordinatesPerSheet[this._selectedMetaAspectSet][gmeID].x;
@@ -303,7 +315,7 @@ define(['logManager',
         //component loaded
         if (this._GMENodes.indexOf(gmeID) === -1) {
             //aspect's member has been loaded
-            objDesc = {'position' : { 'x': 100, 'y': 100}};
+            objDesc = {position: {x: 100, y: 100}};
 
             if (this._metaAspectMembersCoordinatesPerSheet[this._selectedMetaAspectSet][gmeID]) {
                 objDesc.position.x = this._metaAspectMembersCoordinatesPerSheet[this._selectedMetaAspectSet][gmeID].x;
@@ -316,9 +328,12 @@ define(['logManager',
             objDesc.control = this;
             objDesc.metaInfo = {};
             objDesc.metaInfo[CONSTANTS.GME_ID] = gmeID;
-            //each meta specific registry customization will be stored in the MetaContainer node's main META SET (MetaEditorConstants.META_ASPECT_SET_NAME)
-            objDesc.preferencesHelper = PreferencesHelper.getPreferences([{'containerID': this.metaAspectContainerNodeID,
-                                                                            'setID': MetaEditorConstants.META_ASPECT_SET_NAME }]);
+            //each meta specific registry customization will be stored in the MetaContainer node's main META SET
+            // (MetaEditorConstants.META_ASPECT_SET_NAME)
+            objDesc.preferencesHelper = PreferencesHelper.getPreferences([{
+                containerID: this.metaAspectContainerNodeID,
+                setID: MetaEditorConstants.META_ASPECT_SET_NAME
+            }]);
 
             uiComponent = this.diagramDesigner.createDesignerItem(objDesc);
 
@@ -350,15 +365,17 @@ define(['logManager',
         gmeDstID = gmeID;
         if (this._connectionWaitingListByDstGMEID && this._connectionWaitingListByDstGMEID.hasOwnProperty(gmeDstID)) {
             for (gmeSrcID in this._connectionWaitingListByDstGMEID[gmeDstID]) {
-                if (this._connectionWaitingListByDstGMEID[gmeDstID].hasOwnProperty(gmeSrcID)){
+                if (this._connectionWaitingListByDstGMEID[gmeDstID].hasOwnProperty(gmeSrcID)) {
                     len = this._connectionWaitingListByDstGMEID[gmeDstID][gmeSrcID].length;
                     while (len--) {
                         connType = this._connectionWaitingListByDstGMEID[gmeDstID][gmeSrcID][len][0];
                         connTexts = this._connectionWaitingListByDstGMEID[gmeDstID][gmeSrcID][len][1];
-                        c.push({'gmeSrcID': gmeSrcID,
-                                'gmeDstID': gmeDstID,
-                                'connType': connType,
-                                'connTexts': connTexts});
+                        c.push({
+                            gmeSrcID: gmeSrcID,
+                            gmeDstID: gmeDstID,
+                            connType: connType,
+                            connTexts: connTexts
+                        });
                     }
                 }
             }
@@ -370,15 +387,17 @@ define(['logManager',
         gmeSrcID = gmeID;
         if (this._connectionWaitingListBySrcGMEID && this._connectionWaitingListBySrcGMEID.hasOwnProperty(gmeSrcID)) {
             for (gmeDstID in this._connectionWaitingListBySrcGMEID[gmeSrcID]) {
-                if (this._connectionWaitingListBySrcGMEID[gmeSrcID].hasOwnProperty(gmeDstID)){
+                if (this._connectionWaitingListBySrcGMEID[gmeSrcID].hasOwnProperty(gmeDstID)) {
                     len = this._connectionWaitingListBySrcGMEID[gmeSrcID][gmeDstID].length;
                     while (len--) {
                         connType = this._connectionWaitingListBySrcGMEID[gmeSrcID][gmeDstID][len][0];
                         connTexts = this._connectionWaitingListBySrcGMEID[gmeSrcID][gmeDstID][len][1];
-                        c.push({'gmeSrcID': gmeSrcID,
-                            'gmeDstID': gmeDstID,
-                            'connType': connType,
-                            'connTexts': connTexts});
+                        c.push({
+                            gmeSrcID: gmeSrcID,
+                            gmeDstID: gmeDstID,
+                            connType: connType,
+                            connTexts: connTexts
+                        });
                     }
                 }
             }
@@ -419,14 +438,14 @@ define(['logManager',
 
             //CONTAINMENT
             len = this._nodeMetaContainment[gmeID].targets.length;
-            while(len--) {
+            while (len--) {
                 otherEnd = this._nodeMetaContainment[gmeID].targets[len];
                 this._removeConnection(gmeID, otherEnd, MetaRelations.META_RELATIONS.CONTAINMENT);
             }
 
             //POINTERS
             len = this._nodeMetaPointers[gmeID].combinedNames.length;
-            while(len--) {
+            while (len--) {
                 pointerName = this._nodeMetaPointers[gmeID].combinedNames[len];
                 otherEnd = this._nodeMetaPointers[gmeID][pointerName].target;
                 pointerName = this._nodeMetaPointers[gmeID][pointerName].name;
@@ -435,12 +454,14 @@ define(['logManager',
 
             //INHERITANCE
             if (this._nodeMetaInheritance[gmeID] && !_.isEmpty(this._nodeMetaInheritance[gmeID])) {
-                this._removeConnection(this._nodeMetaInheritance[gmeID], gmeID, MetaRelations.META_RELATIONS.INHERITANCE);
+                this._removeConnection(this._nodeMetaInheritance[gmeID],
+                    gmeID,
+                    MetaRelations.META_RELATIONS.INHERITANCE);
             }
 
             //POINTER LISTS
             len = this._nodeMetaSets[gmeID].combinedNames.length;
-            while(len--) {
+            while (len--) {
                 pointerName = this._nodeMetaSets[gmeID].combinedNames[len];
                 otherEnd = this._nodeMetaSets[gmeID][pointerName].target;
                 pointerName = this._nodeMetaSets[gmeID][pointerName].name;
@@ -455,7 +476,7 @@ define(['logManager',
             delete this._GMEID2ComponentID[gmeID];
 
             idx = this._GMENodes.indexOf(gmeID);
-            this._GMENodes.splice(idx,1);
+            this._GMENodes.splice(idx, 1);
 
             //check if there is any more connection present that's associated with this object
             //typically the connection end is this guy
@@ -465,8 +486,13 @@ define(['logManager',
             while (len--) {
                 connectionID = aConns.src[len];
                 //save the connection to the waiting list, since the destination is still there
-                this._saveConnectionToWaitingList(this._connectionListByID[connectionID].GMESrcId, this._connectionListByID[connectionID].GMEDstId, this._connectionListByID[connectionID].type, this._connectionListByID[connectionID].connTexts);
-                this._removeConnection(this._connectionListByID[connectionID].GMESrcId, this._connectionListByID[connectionID].GMEDstId, this._connectionListByID[connectionID].type);
+                this._saveConnectionToWaitingList(this._connectionListByID[connectionID].GMESrcId,
+                    this._connectionListByID[connectionID].GMEDstId,
+                    this._connectionListByID[connectionID].type,
+                    this._connectionListByID[connectionID].connTexts);
+                this._removeConnection(this._connectionListByID[connectionID].GMESrcId,
+                    this._connectionListByID[connectionID].GMEDstId,
+                    this._connectionListByID[connectionID].type);
             }
 
             len = aConns.dst.length;
@@ -474,8 +500,13 @@ define(['logManager',
                 connectionID = aConns.dst[len];
                 if (this._connectionListByID[connectionID]) {
                     //save the connection to the waiting list, since the destination is still there
-                    this._saveConnectionToWaitingList(this._connectionListByID[connectionID].GMESrcId, this._connectionListByID[connectionID].GMEDstId, this._connectionListByID[connectionID].type, this._connectionListByID[connectionID].connTexts);
-                    this._removeConnection(this._connectionListByID[connectionID].GMESrcId, this._connectionListByID[connectionID].GMEDstId, this._connectionListByID[connectionID].type);
+                    this._saveConnectionToWaitingList(this._connectionListByID[connectionID].GMESrcId,
+                        this._connectionListByID[connectionID].GMEDstId,
+                        this._connectionListByID[connectionID].type,
+                        this._connectionListByID[connectionID].connTexts);
+                    this._removeConnection(this._connectionListByID[connectionID].GMESrcId,
+                        this._connectionListByID[connectionID].GMEDstId,
+                        this._connectionListByID[connectionID].type);
                 }
             }
 
@@ -528,13 +559,14 @@ define(['logManager',
 
             if (this._filteredOutConnTypes.indexOf(connType) === -1) {
                 //connection type is not filtered out    
-                connDesc = { "srcObjId": this._GMEID2ComponentID[gmeSrcId],
-                             "srcSubCompId": undefined,
-                             "dstObjId": this._GMEID2ComponentID[gmeDstId],
-                             "dstSubCompId": undefined,
-                             "reconnectable": false,
-                             "name": "",
-                             "nameEdit": false
+                connDesc = {
+                    srcObjId: this._GMEID2ComponentID[gmeSrcId],
+                    srcSubCompId: undefined,
+                    dstObjId: this._GMEID2ComponentID[gmeDstId],
+                    dstSubCompId: undefined,
+                    reconnectable: false,
+                    name: '',
+                    nameEdit: false
                 };
 
                 //set visual properties
@@ -565,16 +597,20 @@ define(['logManager',
     };
 
 
-    MetaEditorControl.prototype._saveConnectionToWaitingList =  function (gmeSrcId, gmeDstId, connType, connTexts) {
+    MetaEditorControl.prototype._saveConnectionToWaitingList = function (gmeSrcId, gmeDstId, connType, connTexts) {
         if (this._GMENodes.indexOf(gmeSrcId) !== -1 && this._GMENodes.indexOf(gmeDstId) === -1) {
             //#1 - the destination object is missing from the screen
             this._connectionWaitingListByDstGMEID[gmeDstId] = this._connectionWaitingListByDstGMEID[gmeDstId] || {};
-            this._connectionWaitingListByDstGMEID[gmeDstId][gmeSrcId] = this._connectionWaitingListByDstGMEID[gmeDstId][gmeSrcId] || [];
+
+            this._connectionWaitingListByDstGMEID[gmeDstId][gmeSrcId] =
+                this._connectionWaitingListByDstGMEID[gmeDstId][gmeSrcId] || [];
+
             this._connectionWaitingListByDstGMEID[gmeDstId][gmeSrcId].push([connType, connTexts]);
         } else if (this._GMENodes.indexOf(gmeSrcId) === -1 && this._GMENodes.indexOf(gmeDstId) !== -1) {
             //#2 -  the source object is missing from the screen
             this._connectionWaitingListBySrcGMEID[gmeSrcId] = this._connectionWaitingListBySrcGMEID[gmeSrcId] || {};
-            this._connectionWaitingListBySrcGMEID[gmeSrcId][gmeDstId] = this._connectionWaitingListBySrcGMEID[gmeSrcId][gmeDstId] || [];
+            this._connectionWaitingListBySrcGMEID[gmeSrcId][gmeDstId] =
+                this._connectionWaitingListBySrcGMEID[gmeSrcId][gmeDstId] || [];
             this._connectionWaitingListBySrcGMEID[gmeSrcId][gmeDstId].push([connType, connTexts]);
         } else {
             //#3 - both gmeSrcId and gmeDstId is missing from the screen
@@ -588,13 +624,19 @@ define(['logManager',
         //save by SRC
         this._connectionListBySrcGMEID[gmeSrcId] = this._connectionListBySrcGMEID[gmeSrcId] || {};
         this._connectionListBySrcGMEID[gmeSrcId][gmeDstId] = this._connectionListBySrcGMEID[gmeSrcId][gmeDstId] || {};
-        this._connectionListBySrcGMEID[gmeSrcId][gmeDstId][connType] = this._connectionListBySrcGMEID[gmeSrcId][gmeDstId][connType] || [];
+
+        this._connectionListBySrcGMEID[gmeSrcId][gmeDstId][connType] =
+            this._connectionListBySrcGMEID[gmeSrcId][gmeDstId][connType] || [];
+
         this._connectionListBySrcGMEID[gmeSrcId][gmeDstId][connType].push(connComponentId);
-        
+
         //save by DST
         this._connectionListByDstGMEID[gmeDstId] = this._connectionListByDstGMEID[gmeDstId] || {};
         this._connectionListByDstGMEID[gmeDstId][gmeSrcId] = this._connectionListByDstGMEID[gmeDstId][gmeSrcId] || {};
-        this._connectionListByDstGMEID[gmeDstId][gmeSrcId][connType] = this._connectionListByDstGMEID[gmeDstId][gmeSrcId][connType] || [];
+
+        this._connectionListByDstGMEID[gmeDstId][gmeSrcId][connType] =
+            this._connectionListByDstGMEID[gmeDstId][gmeSrcId][connType] || [];
+
         this._connectionListByDstGMEID[gmeDstId][gmeSrcId][connType].push(connComponentId);
 
         //save by type
@@ -602,11 +644,13 @@ define(['logManager',
         this._connectionListByType[connType].push(connComponentId);
 
         //save by connectionID
-        this._connectionListByID[connComponentId] = { "GMESrcId": gmeSrcId,
-                                                      "GMEDstId": gmeDstId,
-                                                      "type": connType,
-                                                      "name": (connTexts && connTexts.name) ? connTexts.name : undefined,
-                                                      "connTexts": connTexts};
+        this._connectionListByID[connComponentId] = {
+            GMESrcId: gmeSrcId,
+            GMEDstId: gmeDstId,
+            type: connType,
+            name: (connTexts && connTexts.name) ? connTexts.name : undefined,
+            connTexts: connTexts
+        };
     };
     /****************************************************************************/
     /*  END OF --- CREATE A SPECIFIC TYPE OF CONNECTION BETWEEN 2 GME OBJECTS   */
@@ -632,7 +676,7 @@ define(['logManager',
         }
 
         if (!connectionPresent) {
-            return ;
+            return;
         }
 
         len = this._connectionListBySrcGMEID[gmeSrcId][gmeDstId][connType].length;
@@ -644,7 +688,7 @@ define(['logManager',
             //clear out the connectionID if this connection is not the representation of that pointer
             if (connType === MetaRelations.META_RELATIONS.POINTER &&
                 pointerName &&
-                pointerName !== "" &&
+                pointerName !== '' &&
                 this._connectionListByID[connectionID].name !== pointerName) {
                 connectionID = undefined;
             }
@@ -690,7 +734,7 @@ define(['logManager',
             //clear out the connectionID if this connection is not the representation of that pointer
             if (connType === MetaRelations.META_RELATIONS.POINTER &&
                 pointerName &&
-                pointerName !== "" &&
+                pointerName !== '' &&
                 this._connectionListByID[connectionID].name !== pointerName) {
                 connectionID = undefined;
             }
@@ -715,10 +759,10 @@ define(['logManager',
                     connDesc = this._connectionWaitingListByDstGMEID[gmeDstId][gmeSrcId][idx];
                     if (connDesc[0] === connType) {
                         if (connType !== MetaRelations.META_RELATIONS.POINTER ||
-                           (connType === MetaRelations.META_RELATIONS.POINTER &&
-                            pointerName &&
-                            pointerName !== "" &&
-                            connDesc[1].name === pointerName)) {
+                            (connType === MetaRelations.META_RELATIONS.POINTER &&
+                             pointerName &&
+                             pointerName !== '' &&
+                             connDesc[1].name === pointerName)) {
                             connDesc[1] = connTexts;
                         }
                     }
@@ -731,9 +775,9 @@ define(['logManager',
                     if (connDesc[0] === connType) {
                         if (connType !== MetaRelations.META_RELATIONS.POINTER ||
                             (connType === MetaRelations.META_RELATIONS.POINTER &&
-                                pointerName &&
-                                pointerName !== "" &&
-                                connDesc[1].name === pointerName)) {
+                             pointerName &&
+                             pointerName !== '' &&
+                             connDesc[1].name === pointerName)) {
                             connDesc[1] = connTexts;
                         }
                     }
@@ -750,7 +794,7 @@ define(['logManager',
     /**************************************************************************/
     /*  HANDLE OBJECT UPDATE  --- DISPLAY IT WITH ALL THE POINTERS / SETS / ETC */
     /**************************************************************************/
-    MetaEditorControl.prototype._processNodeUpdate = function(gmeID) {
+    MetaEditorControl.prototype._processNodeUpdate = function (gmeID) {
         var componentID,
             decClass,
             objDesc = {};
@@ -761,8 +805,10 @@ define(['logManager',
             decClass = this._client.decoratorManager.getDecoratorForWidget(META_DECORATOR, WIDGET_NAME);
 
             objDesc.decoratorClass = decClass;
-            objDesc.preferencesHelper = PreferencesHelper.getPreferences([{'containerID': this.metaAspectContainerNodeID,
-                'setID': MetaEditorConstants.META_ASPECT_SET_NAME }]);
+            objDesc.preferencesHelper = PreferencesHelper.getPreferences([{
+                containerID: this.metaAspectContainerNodeID,
+                setID: MetaEditorConstants.META_ASPECT_SET_NAME
+            }]);
 
             this.diagramDesigner.updateDesignerItem(componentID, objDesc);
 
@@ -786,19 +832,22 @@ define(['logManager',
             containmentOwnTypes = this._client.getOwnValidChildrenTypes(gmeID) || [],
             len,
             oldMetaContainment,
-            newMetaContainment = {'targets': []},
+            newMetaContainment = {targets: []},
             diff,
             containmentTarget,
             idx;
 
-        this._nodeMetaContainment[gmeID] = this._nodeMetaContainment[gmeID] || {'targets': []};
+        this._nodeMetaContainment[gmeID] = this._nodeMetaContainment[gmeID] || {targets: []};
         oldMetaContainment = this._nodeMetaContainment[gmeID];
 
         len = containmentMetaDescriptor.length;
-        while(len--) {
-            if(containmentOwnTypes.indexOf(containmentMetaDescriptor[len].id) !== -1){
+        while (len--) {
+            if (containmentOwnTypes.indexOf(containmentMetaDescriptor[len].id) !== -1) {
                 newMetaContainment.targets.push(containmentMetaDescriptor[len].id);
-                newMetaContainment[containmentMetaDescriptor[len].id] = {'multiplicity': ""+(containmentMetaDescriptor[len].min || 0)+".."+(containmentMetaDescriptor[len].max || '*')};
+                newMetaContainment[containmentMetaDescriptor[len].id] = {
+                    multiplicity: '' + (containmentMetaDescriptor[len].min || 0) + '..' +
+                    (containmentMetaDescriptor[len].max || '*')
+                };
             }
         }
 
@@ -807,13 +856,16 @@ define(['logManager',
         len = diff.length;
         while (len--) {
             containmentTarget = diff[len];
-            if (oldMetaContainment[containmentTarget].multiplicity !== newMetaContainment[containmentTarget].multiplicity) {
+            if (oldMetaContainment[containmentTarget].multiplicity !==
+                newMetaContainment[containmentTarget].multiplicity) {
                 //update accounting
                 oldMetaContainment[containmentTarget].multiplicity = newMetaContainment[containmentTarget].multiplicity;
 
                 //update connection text
-                this._updateConnectionText(gmeID, containmentTarget, MetaRelations.META_RELATIONS.CONTAINMENT, {'dstText': newMetaContainment[containmentTarget].multiplicity,
-                    'dstTextEdit': true});
+                this._updateConnectionText(gmeID, containmentTarget, MetaRelations.META_RELATIONS.CONTAINMENT, {
+                    dstText: newMetaContainment[containmentTarget].multiplicity,
+                    dstTextEdit: true
+                });
             }
         }
 
@@ -825,7 +877,7 @@ define(['logManager',
             this._removeConnection(gmeID, containmentTarget, MetaRelations.META_RELATIONS.CONTAINMENT);
 
             idx = oldMetaContainment.targets.indexOf(containmentTarget);
-            oldMetaContainment.targets.splice(idx,1);
+            oldMetaContainment.targets.splice(idx, 1);
             delete oldMetaContainment[containmentTarget];
         }
 
@@ -836,10 +888,12 @@ define(['logManager',
             containmentTarget = diff[len];
 
             oldMetaContainment.targets.push(containmentTarget);
-            oldMetaContainment[containmentTarget] = {'multiplicity': newMetaContainment[containmentTarget].multiplicity};
+            oldMetaContainment[containmentTarget] = {multiplicity: newMetaContainment[containmentTarget].multiplicity};
 
-            this._createConnection(gmeID, containmentTarget, MetaRelations.META_RELATIONS.CONTAINMENT, {'dstText': newMetaContainment[containmentTarget].multiplicity,
-                                                                                                        'dstTextEdit': true});
+            this._createConnection(gmeID, containmentTarget, MetaRelations.META_RELATIONS.CONTAINMENT, {
+                dstText: newMetaContainment[containmentTarget].multiplicity,
+                dstTextEdit: true
+            });
         }
     };
     /**********************************************************************************************/
@@ -847,7 +901,6 @@ define(['logManager',
     /**********************************************************************************************/
 
 
-    
     /*******************************************************************************/
     /*  DISPLAY META POINTER RELATIONS AS A CONNECTION FROM CONTAINER TO CONTAINED */
     /*******************************************************************************/
@@ -858,7 +911,7 @@ define(['logManager',
             pointerOwnMetaTypes,
             len,
             oldMetaPointers,
-            newMetaPointers = {'names': [], 'combinedNames': []},
+            newMetaPointers = {names: [], combinedNames: []},
             diff,
             pointerTarget,
             pointerName,
@@ -868,34 +921,39 @@ define(['logManager',
             ptrType = isSet === true ? MetaRelations.META_RELATIONS.SET : MetaRelations.META_RELATIONS.POINTER;
 
         if (isSet !== true) {
-            this._nodeMetaPointers[gmeID] = this._nodeMetaPointers[gmeID] || {'names': [], 'combinedNames': []};
+            this._nodeMetaPointers[gmeID] = this._nodeMetaPointers[gmeID] || {names: [], combinedNames: []};
             oldMetaPointers = this._nodeMetaPointers[gmeID];
         } else {
-            this._nodeMetaSets[gmeID] = this._nodeMetaSets[gmeID] || {'names': [], 'combinedNames': []};
+            this._nodeMetaSets[gmeID] = this._nodeMetaSets[gmeID] || {names: [], combinedNames: []};
             oldMetaPointers = this._nodeMetaSets[gmeID];
         }
 
         len = pointerNames.length;
         while (len--) {
-            pointerMetaDescriptor = this._client.getValidTargetItems(gmeID,pointerNames[len]);
-            pointerOwnMetaTypes = this._client.getOwnValidTargetTypes(gmeID,pointerNames[len]);
+            pointerMetaDescriptor = this._client.getValidTargetItems(gmeID, pointerNames[len]);
+            pointerOwnMetaTypes = this._client.getOwnValidTargetTypes(gmeID, pointerNames[len]);
 
 
             if (pointerMetaDescriptor) {
                 lenTargets = pointerMetaDescriptor.length;
                 while (lenTargets--) {
-                    if(pointerOwnMetaTypes.indexOf(pointerMetaDescriptor[lenTargets].id) !== -1){
-                        combinedName = pointerNames[len] + "_" + pointerMetaDescriptor[lenTargets].id;
+                    if (pointerOwnMetaTypes.indexOf(pointerMetaDescriptor[lenTargets].id) !== -1) {
+                        combinedName = pointerNames[len] + '_' + pointerMetaDescriptor[lenTargets].id;
 
                         newMetaPointers.names.push(pointerNames[len]);
 
                         newMetaPointers.combinedNames.push(combinedName);
 
-                        newMetaPointers[combinedName] = {'name': pointerNames[len],
-                            'target': pointerMetaDescriptor[lenTargets].id};
+                        newMetaPointers[combinedName] = {
+                            name: pointerNames[len],
+                            target: pointerMetaDescriptor[lenTargets].id
+                        };
 
                         if (isSet) {
-                            newMetaPointers[combinedName].multiplicity= ""+(pointerMetaDescriptor[lenTargets].min || 0)+".."+(pointerMetaDescriptor[lenTargets].max || '*');
+                            newMetaPointers[combinedName].multiplicity = '' +
+                                                                         (pointerMetaDescriptor[lenTargets].min || 0) +
+                                                                         '..' +
+                                                                         (pointerMetaDescriptor[lenTargets].max || '*');
                         }
 
                     }
@@ -914,9 +972,11 @@ define(['logManager',
 
                 oldMetaPointers[combinedName].multiplicity = newMetaPointers[combinedName].multiplicity;
 
-                this._updateConnectionText(gmeID, pointerTarget, ptrType, {'name': pointerName,
-                    'dstText': newMetaPointers[combinedName].multiplicity,
-                    'dstTextEdit': true});
+                this._updateConnectionText(gmeID, pointerTarget, ptrType, {
+                    name: pointerName,
+                    dstText: newMetaPointers[combinedName].multiplicity,
+                    dstTextEdit: true
+                });
             }
         }
 
@@ -931,7 +991,7 @@ define(['logManager',
             this._removeConnection(gmeID, pointerTarget, ptrType, pointerName);
 
             idx = oldMetaPointers.combinedNames.indexOf(combinedName);
-            oldMetaPointers.combinedNames.splice(idx,1);
+            oldMetaPointers.combinedNames.splice(idx, 1);
             delete oldMetaPointers[combinedName];
         }
 
@@ -945,19 +1005,22 @@ define(['logManager',
 
             oldMetaPointers.names.push(pointerName);
             oldMetaPointers.combinedNames.push(combinedName);
-            oldMetaPointers[combinedName] = {'name': newMetaPointers[combinedName].name,
-                                            'target': newMetaPointers[combinedName].target,
-                                            'multiplicity': newMetaPointers[combinedName].multiplicity};
+            oldMetaPointers[combinedName] = {
+                name: newMetaPointers[combinedName].name,
+                target: newMetaPointers[combinedName].target,
+                multiplicity: newMetaPointers[combinedName].multiplicity
+            };
 
-            this._createConnection(gmeID, pointerTarget, ptrType, {'name': pointerName,
-                                                                    'dstText': newMetaPointers[combinedName].multiplicity,
-                                                                    'dstTextEdit': true});
+            this._createConnection(gmeID, pointerTarget, ptrType, {
+                name: pointerName,
+                dstText: newMetaPointers[combinedName].multiplicity,
+                dstTextEdit: true
+            });
         }
     };
     /******************************************************************************************/
     /*  END OF --- DISPLAY META POINTER RELATIONS AS A CONNECTION FROM CONTAINER TO CONTAINED */
     /******************************************************************************************/
-
 
 
     /***********************************************************************************/
@@ -991,15 +1054,19 @@ define(['logManager',
     /****************************************************************************/
 
     MetaEditorControl.prototype._setNewConnectionType = function (connType) {
-        var connProps = MetaRelations.getLineVisualDescriptor(connType);
+        var connProps = MetaRelations.getLineVisualDescriptor(connType),
+            temp;
 
         if (this._connType !== connType) {
             this._connType = connType;
 
             if (connType === MetaRelations.META_RELATIONS.CONTAINMENT) {
                 //for METACONTAINMENT AND INHERITANCE flip the visual end arrow style for drawing only
-                var temp = connProps[DiagramDesignerWidgetConstants.LINE_START_ARROW];
-                connProps[DiagramDesignerWidgetConstants.LINE_START_ARROW] = connProps[DiagramDesignerWidgetConstants.LINE_END_ARROW];
+                temp = connProps[DiagramDesignerWidgetConstants.LINE_START_ARROW];
+
+                connProps[DiagramDesignerWidgetConstants.LINE_START_ARROW] =
+                    connProps[DiagramDesignerWidgetConstants.LINE_END_ARROW];
+
                 connProps[DiagramDesignerWidgetConstants.LINE_END_ARROW] = temp;
             }
 
@@ -1020,7 +1087,7 @@ define(['logManager',
         var sourceId = this._ComponentID2GMEID[params.src],
             targetId = this._ComponentID2GMEID[params.dst];
 
-        switch(this._connType) {
+        switch (this._connType) {
             case MetaRelations.META_RELATIONS.CONTAINMENT:
                 this._createContainmentRelationship(targetId, sourceId);
                 break;
@@ -1044,7 +1111,7 @@ define(['logManager',
             objectNode = this._client.getNode(objectID);
 
         if (containerNode && objectNode) {
-            this._client.updateValidChildrenItem(containerID,{id:objectID});
+            this._client.updateValidChildrenItem(containerID, {id: objectID});
         }
     };
 
@@ -1054,7 +1121,7 @@ define(['logManager',
             objectNode = this._client.getNode(objectID);
 
         if (containerNode && objectNode) {
-            this._client.removeValidChildrenItem(containerID,objectID);
+            this._client.removeValidChildrenItem(containerID, objectID);
         }
     };
 
@@ -1084,46 +1151,54 @@ define(['logManager',
             notAllowedPointerNames = notAllowedPointerNames.concat(MetaEditorConstants.RESERVED_POINTER_NAMES);
 
             //query pointer name from user
-            this.diagramDesigner.selectNewPointerName(existingPointerNames, notAllowedPointerNames, isSet, function (userSelectedPointerName) {
-                self._client.startTransaction();
-                pointerMetaDescriptor = self._client.getValidTargetItems(sourceID,userSelectedPointerName);
-                if(!pointerMetaDescriptor){
-                    if (isSet !== true) {
-                        //single pointer
-                        self._client.setPointerMeta(sourceID,userSelectedPointerName,{
-                            "min":1,
-                            "max":1,
-                            "items":[
-                                {
-                                    id:targetID,
-                                    "max":1
-                                }
-                            ]
-                        });
-                        self._client.makePointer(sourceID,userSelectedPointerName,null);
+            this.diagramDesigner.selectNewPointerName(existingPointerNames,
+                notAllowedPointerNames,
+                isSet,
+                function (userSelectedPointerName) {
+                    self._client.startTransaction();
+                    pointerMetaDescriptor = self._client.getValidTargetItems(sourceID, userSelectedPointerName);
+                    if (!pointerMetaDescriptor) {
+                        if (isSet !== true) {
+                            //single pointer
+                            self._client.setPointerMeta(sourceID, userSelectedPointerName, {
+                                min: 1,
+                                max: 1,
+                                items: [
+                                    {
+                                        id: targetID,
+                                        max: 1
+                                    }
+                                ]
+                            });
+                            self._client.makePointer(sourceID, userSelectedPointerName, null);
+                        } else {
+                            //pointer list
+                            self._client.setPointerMeta(sourceID, userSelectedPointerName, {
+                                items: [
+                                    {
+                                        id: targetID
+                                    }
+                                ]
+                            });
+                            self._client.createSet(sourceID, userSelectedPointerName);
+                        }
                     } else {
-                        //pointer list
-                        self._client.setPointerMeta(sourceID,userSelectedPointerName,{
-                            "items":[
+                        if (isSet !== true) {
+                            //single pointer
+                            self._client.updateValidTargetItem(sourceID,
+                                userSelectedPointerName,
                                 {
-                                    id:targetID
-                                }
-                            ]
-                        });
-                        self._client.createSet(sourceID,userSelectedPointerName);
+                                    id: targetID,
+                                    max: 1
+                                });
+                        } else {
+                            //pointer list
+                            self._client.updateValidTargetItem(sourceID, userSelectedPointerName, {id: targetID});
+                        }
                     }
-                } else {
-                    if (isSet !== true) {
-                        //single pointer
-                        self._client.updateValidTargetItem(sourceID,userSelectedPointerName,{id:targetID,max:1});
-                    } else {
-                        //pointer list
-                        self._client.updateValidTargetItem(sourceID,userSelectedPointerName,{id:targetID});
-                    }
-                }
 
-                self._client.completeTransaction();
-            });
+                    self._client.completeTransaction();
+                });
         }
     };
 
@@ -1136,38 +1211,41 @@ define(['logManager',
         //NOTE: this method is called from inside a transaction, don't need to start/complete one
 
         if (sourceNode && targetNode) {
-            this._client.removeValidTargetItem(sourceID,pointerName,targetID);
-            pointerMetaDescriptor = this._client.getValidTargetItems(sourceID,pointerName);
-            if(pointerMetaDescriptor && pointerMetaDescriptor.length === 0){
+            this._client.removeValidTargetItem(sourceID, pointerName, targetID);
+            pointerMetaDescriptor = this._client.getValidTargetItems(sourceID, pointerName);
+            if (pointerMetaDescriptor && pointerMetaDescriptor.length === 0) {
                 if (isSet === false) {
                     //single pointer
-                    this._client.deleteMetaPointer(sourceID,pointerName);
-                    this._client.delPointer(sourceID,pointerName);
+                    this._client.deleteMetaPointer(sourceID, pointerName);
+                    this._client.delPointer(sourceID, pointerName);
                 } else {
                     //pointer list
-                    this._client.deleteMetaPointer(sourceID,pointerName);
-                    this._client.deleteSet(sourceID,pointerName);
+                    this._client.deleteMetaPointer(sourceID, pointerName);
+                    this._client.deleteSet(sourceID, pointerName);
                 }
             }
         }
     };
 
 
-    MetaEditorControl.prototype._createInheritanceRelationship = function (parentID, objectID) {
+    MetaEditorControl.prototype._createInheritanceRelationship = function (/* parentID, objectID */) {
         //TEMPORARILY DO NOT ALLOW CREATING INHERITANCE RELATIONSHIP
         /*var parentNode = this._client.getNode(parentID),
-            objectNode = this._client.getNode(objectID),
-            objectBase;
+         objectNode = this._client.getNode(objectID),
+         objectBase;
 
-        if (parentNode && objectNode) {
-            objectBase = objectNode.getBaseId();
+         if (parentNode && objectNode) {
+         objectBase = objectNode.getBaseId();
 
-            if (objectBase && !_.isEmpty(objectBase)) {
-                this.logger.debug('InheritanceRelationship from "' + objectNode.getAttribute(nodePropertyNames.Attributes.name) + '" (' + objectID + ') to parent "' + objectBase + '" already exists, but overwriting to "' + parentNode.getAttribute(nodePropertyNames.Attributes.name) + '" (' + parentID + ')"');
-            }
+         if (objectBase && !_.isEmpty(objectBase)) {
+         this.logger.debug('InheritanceRelationship from "' +
+         objectNode.getAttribute(nodePropertyNames.Attributes.name) +
+          '" (' + objectID + ') to parent "' + objectBase + '" already exists, but overwriting to "' +
+          parentNode.getAttribute(nodePropertyNames.Attributes.name) + '" (' + parentID + ')"');
+         }
 
-            this._client.setBase(objectID, parentID);
-        }*/
+         this._client.setBase(objectID, parentID);
+         }*/
     };
 
 
@@ -1184,17 +1262,20 @@ define(['logManager',
                 if (baseNode) {
                     objectBaseId = baseNode.getAttribute(nodePropertyNames.Attributes.name) + ' (' + objectBaseId + ')';
                 }
-                /*this.logger.debug('Deleting InheritanceRelationship from "' + objectNode.getAttribute(nodePropertyNames.Attributes.name) + '" (' + objectID + ') to parent "' + objectBaseId + '"');
-                this._client.delBase(objectID);*/
+                /*this.logger.debug('Deleting InheritanceRelationship from "' +
+                objectNode.getAttribute(nodePropertyNames.Attributes.name) + '" (' + objectID + ') to parent "' +
+                 objectBaseId + '"');
+                 this._client.delBase(objectID);*/
                 //TEMPORARILY DO NOT ALLOW DELETING INHERITANCE RELATIONSHIP
-                this.logger.warning('Deleting InheritanceRelationship from "' + objectNode.getAttribute(nodePropertyNames.Attributes.name) + '" (' + objectID + ') to parent "' + objectBaseId + '" is not allowed...');
+                this.logger.warn('Deleting InheritanceRelationship from "' +
+                                 objectNode.getAttribute(nodePropertyNames.Attributes.name) + '" (' + objectID +
+                                 ') to parent "' + objectBaseId + '" is not allowed...');
             }
         }
     };
     /****************************************************************************/
     /*    END OF --- CREATE NEW CONNECTION BETWEEN TWO ITEMS                    */
     /****************************************************************************/
-
 
 
     /****************************************************************************/
@@ -1231,7 +1312,8 @@ define(['logManager',
     };
 
     MetaEditorControl.prototype._filterConnType = function (connType) {
-        var len = this._connectionListByType && this._connectionListByType.hasOwnProperty(connType) ? this._connectionListByType[connType].length : 0,
+        var len = this._connectionListByType &&
+                  this._connectionListByType.hasOwnProperty(connType) ? this._connectionListByType[connType].length : 0,
             connComponentId,
             gmeSrcId,
             gmeDstId,
@@ -1262,7 +1344,10 @@ define(['logManager',
     };
 
     MetaEditorControl.prototype._unfilterConnType = function (connType) {
-        var len = this._filteredOutConnectionDescriptors && this._filteredOutConnectionDescriptors.hasOwnProperty(connType) ? this._filteredOutConnectionDescriptors[connType].length : 0,
+        //FIXME: What does this mean?
+        var len = this._filteredOutConnectionDescriptors &&
+                  this._filteredOutConnectionDescriptors.hasOwnProperty(connType) ?
+                this._filteredOutConnectionDescriptors[connType].length : 0,
             gmeSrcId,
             gmeDstId,
             connTexts;
@@ -1296,15 +1381,24 @@ define(['logManager',
         if (connDesc.type === MetaRelations.META_RELATIONS.CONTAINMENT) {
             this._containmentRelationshipMultiplicityUpdate(connDesc.GMESrcId, connDesc.GMEDstId, oldValue, newValue);
         } else if (connDesc.type === MetaRelations.META_RELATIONS.POINTER) {
-            this._pointerRelationshipMultiplicityUpdate(connDesc.GMESrcId, connDesc.GMEDstId, connDesc.name, oldValue, newValue);
+            this._pointerRelationshipMultiplicityUpdate(connDesc.GMESrcId,
+                connDesc.GMEDstId,
+                connDesc.name,
+                oldValue,
+                newValue);
         } else if (connDesc.type === MetaRelations.META_RELATIONS.INHERITANCE) {
             //never can happen
         } else if (connDesc.type === MetaRelations.META_RELATIONS.SET) {
-            this._setRelationshipMultiplicityUpdate(connDesc.GMESrcId, connDesc.GMEDstId, connDesc.name, oldValue, newValue);
+            this._setRelationshipMultiplicityUpdate(connDesc.GMESrcId,
+                connDesc.GMEDstId,
+                connDesc.name,
+                oldValue,
+                newValue);
         }
     };
 
-    MetaEditorControl.prototype._containmentRelationshipMultiplicityUpdate = function (containerID, objectID, oldValue, newValue) {
+    MetaEditorControl.prototype._containmentRelationshipMultiplicityUpdate = function (containerID, objectID, oldValue,
+                                                                                       newValue) {
         var containerNode = this._client.getNode(containerID),
             objectNode = this._client.getNode(objectID),
             multiplicity,
@@ -1319,16 +1413,22 @@ define(['logManager',
             //valid values for containment are 1, x..*, x..y
             if (pattNum.test(value)) {
                 //#1: single digit number
-                result = {'min': parseInt(value, 10),
-                          'max': parseInt(value, 10)};
+                result = {
+                    min: parseInt(value, 10),
+                    max: parseInt(value, 10)
+                };
             } else if (pattMinToMax.test(value)) {
                 //#2: x..y
-                result = {'min': parseInt(value, 10),
-                    'max': parseInt(value.substring(value.indexOf('..') + 2), 10)};
+                result = {
+                    min: parseInt(value, 10),
+                    max: parseInt(value.substring(value.indexOf('..') + 2), 10)
+                };
             } else if (pattMinToMany.test(value)) {
                 //#3: x..*
-                result = {'min': parseInt(value, 10),
-                    'max': -1};
+                result = {
+                    min: parseInt(value, 10),
+                    max: -1
+                };
             }
 
             return result;
@@ -1342,13 +1442,16 @@ define(['logManager',
 
                 this._client.updateValidChildrenItem(containerID, multiplicity);
             } else {
-                this._updateConnectionText(containerID, objectID, MetaRelations.META_RELATIONS.CONTAINMENT, {'dstText': oldValue,
-                    'dstTextEdit': true});
+                this._updateConnectionText(containerID, objectID, MetaRelations.META_RELATIONS.CONTAINMENT, {
+                    dstText: oldValue,
+                    dstTextEdit: true
+                });
             }
         }
     };
 
-    MetaEditorControl.prototype._pointerRelationshipMultiplicityUpdate = function (sourceID, targetID, pointerName, oldValue, newValue) {
+    MetaEditorControl.prototype._pointerRelationshipMultiplicityUpdate = function (sourceID, targetID, pointerName,
+                                                                                   oldValue, newValue) {
         var sourceNode = this._client.getNode(sourceID),
             targetNode = this._client.getNode(targetID),
             multiplicityValid,
@@ -1356,17 +1459,21 @@ define(['logManager',
 
         multiplicityValid = function (value) {
             var result,
-                pattOne = "1",
-                pattZeroOne = "0..1";
+                pattOne = '1',
+                pattZeroOne = '0..1';
 
             //valid values for pointer are: 1, 0..1
             if (value === pattOne) {
                 //#1: single digit number
-                result = {'min': 1,
-                    'max': 1};
+                result = {
+                    min: 1,
+                    max: 1
+                };
             } else if (value === pattZeroOne) {
-                result = {'min': 0,
-                    'max': 1};
+                result = {
+                    min: 0,
+                    max: 1
+                };
             }
 
             return result;
@@ -1378,14 +1485,17 @@ define(['logManager',
                 multiplicity.id = targetID;
                 this._client.updateValidTargetItem(sourceID, pointerName, multiplicity);
             } else {
-                this._updateConnectionText(sourceID, targetID, MetaRelations.META_RELATIONS.POINTER, {'name': pointerName,
-                    'dstText': oldValue,
-                    'dstTextEdit': true});
+                this._updateConnectionText(sourceID, targetID, MetaRelations.META_RELATIONS.POINTER, {
+                    name: pointerName,
+                    dstText: oldValue,
+                    dstTextEdit: true
+                });
             }
         }
     };
 
-    MetaEditorControl.prototype._setRelationshipMultiplicityUpdate = function (sourceID, targetID, pointerName, oldValue, newValue) {
+    MetaEditorControl.prototype._setRelationshipMultiplicityUpdate = function (sourceID, targetID, pointerName,
+                                                                               oldValue, newValue) {
         var sourceNode = this._client.getNode(sourceID),
             targetNode = this._client.getNode(targetID),
             multiplicityValid,
@@ -1400,16 +1510,22 @@ define(['logManager',
             //valid value for pointer list are: 1, x..*, x..y
             if (pattNum.test(value)) {
                 //#1: single digit number
-                result = {'min': parseInt(value, 10),
-                    'max': parseInt(value, 10)};
+                result = {
+                    min: parseInt(value, 10),
+                    max: parseInt(value, 10)
+                };
             } else if (pattMinToMax.test(value)) {
                 //#2: x..y
-                result = {'min': parseInt(value, 10),
-                    'max': parseInt(value.substring(value.indexOf('..') + 2), 10)};
+                result = {
+                    min: parseInt(value, 10),
+                    max: parseInt(value.substring(value.indexOf('..') + 2), 10)
+                };
             } else if (pattMinToMany.test(value)) {
                 //#3: x..*
-                result = {'min': parseInt(value, 10),
-                    'max': -1};
+                result = {
+                    min: parseInt(value, 10),
+                    max: -1
+                };
             }
 
             return result;
@@ -1421,9 +1537,11 @@ define(['logManager',
                 multiplicity.id = targetID;
                 this._client.updateValidTargetItem(sourceID, pointerName, multiplicity);
             } else {
-                this._updateConnectionText(sourceID, targetID, MetaRelations.META_RELATIONS.SET, {'name': pointerName,
-                    'dstText': oldValue,
-                    'dstTextEdit': true});
+                this._updateConnectionText(sourceID, targetID, MetaRelations.META_RELATIONS.SET, {
+                    name: pointerName,
+                    dstText: oldValue,
+                    dstTextEdit: true
+                });
             }
         }
     };
@@ -1487,25 +1605,31 @@ define(['logManager',
         });
         this._toolbarItems.push(this._radioButtonGroupMetaRelationType);
 
-        this._radioButtonGroupMetaRelationType.addButton({ "title": "Containment",
-            "selected": true,
-            "data": { "connType": MetaRelations.META_RELATIONS.CONTAINMENT },
-            "icon": MetaRelations.createButtonIcon(16, MetaRelations.META_RELATIONS.CONTAINMENT)});
+        this._radioButtonGroupMetaRelationType.addButton({
+            title: 'Containment',
+            selected: true,
+            data: {connType: MetaRelations.META_RELATIONS.CONTAINMENT},
+            icon: MetaRelations.createButtonIcon(16, MetaRelations.META_RELATIONS.CONTAINMENT)
+        });
 
         /*this._radioButtonGroupMetaRelationType.addButton({ "title": "Inheritance",
-            "selected": false,
-            "data": { "connType": MetaRelations.META_RELATIONS.INHERITANCE },
-            "icon": MetaRelations.createButtonIcon(16, MetaRelations.META_RELATIONS.INHERITANCE)});*/
+         "selected": false,
+         "data": { "connType": MetaRelations.META_RELATIONS.INHERITANCE },
+         "icon": MetaRelations.createButtonIcon(16, MetaRelations.META_RELATIONS.INHERITANCE)});*/
 
-        this._radioButtonGroupMetaRelationType.addButton({ "title": "Pointer",
-            "selected": false,
-            "data": { "connType": MetaRelations.META_RELATIONS.POINTER },
-            "icon": MetaRelations.createButtonIcon(16, MetaRelations.META_RELATIONS.POINTER)});
+        this._radioButtonGroupMetaRelationType.addButton({
+            title: 'Pointer',
+            selected: false,
+            data: {connType: MetaRelations.META_RELATIONS.POINTER},
+            icon: MetaRelations.createButtonIcon(16, MetaRelations.META_RELATIONS.POINTER)
+        });
 
-        this._radioButtonGroupMetaRelationType.addButton({ "title": "Set",
-            "selected": false,
-            "data": { "connType": MetaRelations.META_RELATIONS.SET },
-            "icon": MetaRelations.createButtonIcon(16, MetaRelations.META_RELATIONS.SET)});
+        this._radioButtonGroupMetaRelationType.addButton({
+            title: 'Set',
+            selected: false,
+            data: {connType: MetaRelations.META_RELATIONS.SET},
+            icon: MetaRelations.createButtonIcon(16, MetaRelations.META_RELATIONS.SET)
+        });
 
         /************** END OF - CREATE META RELATION CONNECTION TYPES *****************/
 
@@ -1527,8 +1651,8 @@ define(['logManager',
         this._toolbarInitialized = true;
     };
 
-    MetaEditorControl.prototype._getAssociatedConnections =  function (objectID) {
-        var result = {'src': [], 'dst': []},
+    MetaEditorControl.prototype._getAssociatedConnections = function (objectID) {
+        var result = {src: [], dst: []},
             len,
             cID,
             checkConnections;
@@ -1617,8 +1741,10 @@ define(['logManager',
             this._metaAspectMembersCoordinatesPerSheet[setName] = {};
             j = this._metaAspectMembersPerSheet[setName].length;
             while (j--) {
-                gmeID =  this._metaAspectMembersPerSheet[setName][j];
-                this._metaAspectMembersCoordinatesPerSheet[setName][gmeID] = aspectNode.getMemberRegistry(setName, gmeID, REGISTRY_KEYS.POSITION);
+                gmeID = this._metaAspectMembersPerSheet[setName][j];
+                this._metaAspectMembersCoordinatesPerSheet[setName][gmeID] = aspectNode.getMemberRegistry(setName,
+                    gmeID,
+                    REGISTRY_KEYS.POSITION);
                 this._metaAspectSheetsPerMember[gmeID] = this._metaAspectSheetsPerMember[gmeID] || [];
                 this._metaAspectSheetsPerMember[gmeID].push(setName);
             }
@@ -1665,7 +1791,7 @@ define(['logManager',
         var len,
             self = this;
 
-        this.logger.debug("_initializeSelectedSheet");
+        this.logger.debug('_initializeSelectedSheet');
 
         //delete everything from model editor
         this.diagramDesigner.clear();
@@ -1710,8 +1836,11 @@ define(['logManager',
                 this.diagramDesigner.showProgressbar();
             }
             while (len--) {
-                this._selectedMetaAspectSheetMembers.push(this._metaAspectMembersPerSheet[this._selectedMetaAspectSet][len]);
-                this._metaAspectMemberPatterns[this._metaAspectMembersPerSheet[this._selectedMetaAspectSet][len]] = { "children": 0 };
+                this._selectedMetaAspectSheetMembers.push(
+                    this._metaAspectMembersPerSheet[this._selectedMetaAspectSet][len]);
+
+                this._metaAspectMemberPatterns[this._metaAspectMembersPerSheet[this._selectedMetaAspectSet][len]] =
+                {children: 0};
             }
         }
 

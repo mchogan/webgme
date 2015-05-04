@@ -1,26 +1,37 @@
-/*globals define, _, requirejs, WebGMEGlobal*/
+/*globals define, _, $, WebGMEGlobal*/
+/*jshint browser: true*/
+
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
 
 define(['./ButtonBase',
-        'js/Controls/iCheckBox',
-        './ToolbarItemBase'], function (buttonBase,
-                                            iCheckBox,
-                                            ToolbarItemBase) {
+    'js/Controls/iCheckBox',
+    'js/logger',
+    './ToolbarItemBase'
+], function (buttonBase,
+             ICheckBox,
+             Logger,
+             ToolbarItemBase) {
 
-    "use strict";
+    'use strict';
 
     var ToolbarDropDownButton,
-        EL_BASE = $('<div/>', {"class": "btn-group"}),
+        EL_BASE = $('<div/>', {class: 'btn-group'}),
         CARET_BASE = $('<span class="caret"></span>'),
         UL_BASE = $('<ul class="dropdown-menu"></ul>'),
         DIVIDER_BASE = $('<li class="divider"></li>'),
-        CHK_LI_BASE = $('<li/>', {'class': 'chkbox'}),
+        CHK_LI_BASE = $('<li/>', {class: 'chkbox'}),
         CHK_LI_A_BASE = $('<a href="#"></a>'),
         LI_BASE = $('<li></li>');
 
     ToolbarDropDownButton = function (params) {
-        this.el = EL_BASE.clone();
+        var oClickFn,
+            caret;
 
-        var oClickFn;
+        this.el = EL_BASE.clone();
+        this._logger = Logger.create('gme:ToolBar:ToolBarButtonDropDown:' + (new Date()).toISOString(),
+            WebGMEGlobal.gmeConfig.client.log);
         if (params.clickFn) {
             oClickFn = params.clickFn;
             params.clickFnEventCancel = false;
@@ -32,7 +43,7 @@ define(['./ButtonBase',
         //delete params.clickFn;
 
         this._dropDownBtn = buttonBase.createButton(params);
-        var caret = CARET_BASE.clone();
+        caret = CARET_BASE.clone();
 
         this._ulMenu = UL_BASE.clone();
 
@@ -42,10 +53,11 @@ define(['./ButtonBase',
 
         this._dropDownBtn.append(' ').append(caret);
 
-        this._dropDownBtn.addClass("dropdown-toggle");
-        this._dropDownBtn.attr('data-toggle', "dropdown");
+        this._dropDownBtn.addClass('dropdown-toggle');
+        this._dropDownBtn.attr('data-toggle', 'dropdown');
 
         this.el.append(this._dropDownBtn).append(this._ulMenu);
+        this._logger.debug('ctor');
     };
 
     _.extend(ToolbarDropDownButton.prototype, ToolbarItemBase.prototype);
@@ -55,6 +67,10 @@ define(['./ButtonBase',
     };
 
     ToolbarDropDownButton.prototype.enabled = function (enabled) {
+        if (!this.el) {
+            this._logger.error('trying to enable', enabled);
+            return;
+        }
         if (enabled === true) {
             this.el.find('.btn').disable(false);
         } else {
@@ -78,7 +94,7 @@ define(['./ButtonBase',
 
         btn = buttonBase.createButton(params);
 
-        li.append(btn.removeClass("btn btn-mini"));
+        li.append(btn.removeClass('btn btn-mini'));
 
         this._ulMenu.append(li);
     };
@@ -98,7 +114,7 @@ define(['./ButtonBase',
             a.append(params.text);
         }
 
-        checkBox = new iCheckBox(params);
+        checkBox = new ICheckBox(params);
         checkBox.el.addClass('pull-right');
         a.append(checkBox.el);
 
@@ -133,6 +149,7 @@ define(['./ButtonBase',
         this.el.remove();
         this.el.empty();
         this.el = undefined;
+        this._logger.debug('destroyed');
     };
 
     return ToolbarDropDownButton;

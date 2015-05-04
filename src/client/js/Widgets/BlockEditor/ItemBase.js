@@ -1,14 +1,15 @@
-/*globals define,_*/
-/*
+/*globals define, _, WebGMEGlobal*/
+/*jshint browser: true*/
+
+/**
  * @author brollb / https://github/brollb
- *
  */
 
-define(['logManager',
-    './ErrorDecorator'], function (logManager,
-                                   ErrorDecorator) {
+define(['js/logger',
+    './ErrorDecorator'
+], function (Logger, ErrorDecorator) {
 
-   "use strict";
+    "use strict";
 
     var ItemBase,
         HOVER_CLASS = "hover",
@@ -16,7 +17,7 @@ define(['logManager',
         ITEM_CLASS,
         EVENT_POSTFIX;
 
-    ItemBase = function(){
+    ItemBase = function () {
     };
 
     ItemBase.prototype.initialize = function (name, objId, canvas) {
@@ -48,11 +49,12 @@ define(['logManager',
 
         this._initializeUI();
 
-        this.logger = logManager.create(name + "_" + this.id);
+        this.logger = Logger.create('gme:Widgets:BlockEditor:ItemBase:' + name + '_' + this.id,
+            WebGMEGlobal.gmeConfig.client.log);
         this.logger.debug("Created");
     };
 
-    ItemBase.prototype.__initialize = function(){
+    ItemBase.prototype.__initialize = function () {
         //Override in inherited classes as needed
     };
 
@@ -78,10 +80,12 @@ define(['logManager',
 
             this._DecoratorClass = DecoratorClass;
 
-            this._decoratorInstance = new DecoratorClass({'host': this,
+            this._decoratorInstance = new DecoratorClass({
+                'host': this,
                 'preferencesHelper': preferencesHelper,
                 'aspect': aspect,
-                'decoratorParams': decoratorParams});
+                'decoratorParams': decoratorParams
+            });
             this._decoratorInstance.setControl(control);
             this._decoratorInstance.setMetaInfo(metaInfo);
         }
@@ -94,13 +98,15 @@ define(['logManager',
         //set additional CSS properties
         this.$el.attr({"id": this.id});
 
-        this.$el.css({ "position": "absolute",
+        this.$el.css({
+            "position": "absolute",
             "left": this.positionX,
-            "top": this.positionY });
+            "top": this.positionY
+        });
 
         this._attachUserInteractions();
 
-        if(this.canvas._makeDraggable !== undefined){
+        if (this.canvas._makeDraggable !== undefined) {
             this.canvas._makeDraggable(this);
         }
     };
@@ -110,23 +116,31 @@ define(['logManager',
             self = this,
             i;
 
-        this._events = {"mouseenter": { "fn": "onMouseEnter",
-            "stopPropagation": true,
-            "preventDefault": true,
-            "enabledInReadOnlyMode": true},
-            "mouseleave": { "fn": "onMouseLeave",
+        this._events = {
+            "mouseenter": {
+                "fn": "onMouseEnter",
                 "stopPropagation": true,
                 "preventDefault": true,
-                "enabledInReadOnlyMode": true},
-            "dblclick": { "fn": "onDoubleClick",
+                "enabledInReadOnlyMode": true
+            },
+            "mouseleave": {
+                "fn": "onMouseLeave",
                 "stopPropagation": true,
                 "preventDefault": true,
-                "enabledInReadOnlyMode": true}};
+                "enabledInReadOnlyMode": true
+            },
+            "dblclick": {
+                "fn": "onDoubleClick",
+                "stopPropagation": true,
+                "preventDefault": true,
+                "enabledInReadOnlyMode": true
+            }
+        };
 
-        handleEvent = function (event){
+        handleEvent = function (event) {
             var eventHandlerOpts = self._events[event.type],
-            handled = false,
-            enabled = true;
+                handled = false,
+                enabled = true;
 
             if (self.canvas.mode !== self.canvas.OPERATING_MODES.READ_ONLY &&
                 self.canvas.mode !== self.canvas.OPERATING_MODES.DESIGN) {
@@ -163,7 +177,7 @@ define(['logManager',
 
         for (i in this._events) {
             if (this._events.hasOwnProperty(i)) {
-                this.$el.on( i + '.' + EVENT_POSTFIX, null, null, handleEvent);
+                this.$el.on(i + '.' + EVENT_POSTFIX, null, null, handleEvent);
             }
         }
     };
@@ -173,7 +187,7 @@ define(['logManager',
 
         for (i in this._events) {
             if (this._events.hasOwnProperty(i)) {
-                this.$el.off( i + '.' + EVENT_POSTFIX);
+                this.$el.off(i + '.' + EVENT_POSTFIX);
             }
         }
     };
@@ -183,7 +197,7 @@ define(['logManager',
 
         this.$el.append(this._decoratorInstance.$el);
 
-        docFragment.appendChild( this.$el[0] );
+        docFragment.appendChild(this.$el[0]);
 
         this.logger.debug("ItemBase with id:'" + this.id + "' added to canvas.");
     };
@@ -195,7 +209,7 @@ define(['logManager',
             if (_.isFunction(this._decoratorInstance[fnName])) {
                 result = this._decoratorInstance[fnName](args);
             } else {
-                this.logger.warning("DecoratorInstance '" + $.type(this._decoratorInstance) + "' does not have a method with name '" + fnName + "'...");
+                this.logger.warn("DecoratorInstance '" + $.type(this._decoratorInstance) + "' does not have a method with name '" + fnName + "'...");
             }
         } else {
             this.logger.error("DecoratorInstance does not exist...");
@@ -257,12 +271,16 @@ define(['logManager',
             }
 
             if (positionChanged) {
-                this.$el.css({"left": this.positionX,
-                    "top": this.positionY });
+                this.$el.css({
+                    "left": this.positionX,
+                    "top": this.positionY
+                });
 
-                this.canvas.dispatchEvent(this.canvas.events.ITEM_POSITION_CHANGED, {"ID": this.id,
+                this.canvas.dispatchEvent(this.canvas.events.ITEM_POSITION_CHANGED, {
+                    "ID": this.id,
                     "x": this.positionX,
-                    "y": this.positionY});
+                    "y": this.positionY
+                });
             }
         }
     };
@@ -275,7 +293,7 @@ define(['logManager',
         this._callDecoratorMethod("onRenderSetLayoutInfo");
     };
 
-    ItemBase.prototype._remove = function() {
+    ItemBase.prototype._remove = function () {
         this._containerElement = null;
         this.$el.remove();
         this.$el.empty();
@@ -297,12 +315,14 @@ define(['logManager',
     };
 
     ItemBase.prototype.getBoundingBox = function () {
-        var bBox = {"x": this.positionX,
-                "y": this.positionY,
-                "width": this._width,
-                "height": this._height,
-                "x2": this.positionX + this._width,
-                "y2":  this.positionY + this._height};
+        var bBox = {
+            "x": this.positionX,
+            "y": this.positionY,
+            "width": this._width,
+            "height": this._height,
+            "x2": this.positionX + this._width,
+            "y2": this.positionY + this._height
+        };
 
         if (this.rotation !== 0) {
             var topLeft = this._rotatePoint(0, 0);
@@ -356,7 +376,7 @@ define(['logManager',
     };
 
     ItemBase.prototype.onDoubleClick = function (event) {
-        if (this.canvas.onItemBaseDoubleClick && _.isFunction(this.canvas.onItemBaseDoubleClick)){
+        if (this.canvas.onItemBaseDoubleClick && _.isFunction(this.canvas.onItemBaseDoubleClick)) {
             this.canvas.onItemBaseDoubleClick(this.id, event);
         }
     };
@@ -407,9 +427,11 @@ define(['logManager',
             }
 
             if (changed === true) {
-                this.canvas.dispatchEvent(this.canvas.events.ITEM_SIZE_CHANGED, {"ID": this.id,
+                this.canvas.dispatchEvent(this.canvas.events.ITEM_SIZE_CHANGED, {
+                    "ID": this.id,
                     "w": this._width,
-                    "h": this._height});
+                    "h": this._height
+                });
             }
         }
     };

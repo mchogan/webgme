@@ -1,28 +1,27 @@
-/*globals define*/
-
+/*globals define, WebGMEGlobal, $ */
+/*jshint browser: true*/
 /**
  * @author rkereskenyi / https://github.com/rkereskenyi
  * @author nabana / https://github.com/nabana
  */
 
 define([
-    'logManager',
+    'js/logger',
     'text!./templates/CommitDialog.html',
     'css!./styles/CommitDialog.css'
-], function (logManager,
-        commitDialogTemplate) {
+], function (Logger,
+             commitDialogTemplate) {
 
-    "use strict";
-
+    'use strict';
 
     var CommitDialog;
 
     CommitDialog = function (client) {
-        this._logger = logManager.create("CommitDialog");
+        this._logger = Logger.create('gme:Dialogs:Commit:CommitDialog', WebGMEGlobal.gmeConfig.client.log);
 
         this._client = client;
 
-        this._logger.debug("Created");
+        this._logger.debug('Created');
     };
 
     CommitDialog.prototype.show = function () {
@@ -82,9 +81,9 @@ define([
 
         this._btnCommit.on('click', function () {
             var val = self._txtMessage.val();
-            if (val !== "") {
+            if (val !== '') {
                 self._btnCommit.off('click').hide();
-                self._client.commitAsync({"message": val}, function () {
+                self._client.commitAsync({message: val}, function () {
                     self._dialog.modal('hide');
                 });
             }

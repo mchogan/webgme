@@ -1,22 +1,25 @@
-/*globals define, _, requirejs, WebGMEGlobal, Raphael*/
+/*globals define, WebGMEGlobal, $ */
+/*jshint browser: true*/
 
-define(['jquery',
-        'logManager'], function ( _jquery,
-                                  logManager) {
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
 
-    "use strict";
+define(['jquery', 'js/logger'], function (_jquery, Logger) {
+
+    'use strict';
 
     var PanelBase;
 
-    PanelBase = function (options, layoutManager) {
+    PanelBase = function (options /*, layoutManager */) {
         //this.logger --- logger instance for the Panel
-        var loggerName = "PanelBase";
+        var loggerName = 'gme:PanelBase:PanelBase';
 
         if (options && options[PanelBase.OPTIONS.LOGGER_INSTANCE_NAME]) {
-            loggerName = options[PanelBase.OPTIONS.LOGGER_INSTANCE_NAME];
+            loggerName = 'gme:' + options[PanelBase.OPTIONS.LOGGER_INSTANCE_NAME];
         }
 
-        this.logger = logManager.create(loggerName);
+        this.logger = Logger.create(loggerName, WebGMEGlobal.gmeConfig.client.log);
 
         this.$pEl = this.$el = $('<div/>');
 
@@ -24,7 +27,7 @@ define(['jquery',
         this._isReadOnly = false;
     };
 
-    PanelBase.OPTIONS = { "LOGGER_INSTANCE_NAME": "LOGGER_INSTANCE_NAME" };
+    PanelBase.OPTIONS = {LOGGER_INSTANCE_NAME: 'LOGGER_INSTANCE_NAME'};
 
     PanelBase.READ_ONLY_CLASS = 'read-only';
 
@@ -33,7 +36,7 @@ define(['jquery',
     PanelBase.prototype.setReadOnly = function (isReadOnly) {
         if (this._isReadOnly !== isReadOnly) {
             this._isReadOnly = isReadOnly;
-            this.logger.debug("ReadOnly mode changed to '" + isReadOnly + "'");
+            this.logger.debug('ReadOnly mode changed to "' + isReadOnly + '"');
             this.onReadOnlyChanged(this._isReadOnly);
         }
     };
@@ -53,8 +56,10 @@ define(['jquery',
     /***** END OF --- SET READ-ONLY MODE *********/
 
     PanelBase.prototype._getSize = function () {
-        this.size = {"width": this.$el.outerWidth(true),
-            "height": this.$el.outerHeight(true)};
+        this.size = {
+            width: this.$el.outerWidth(true),
+            height: this.$el.outerHeight(true)
+        };
     };
 
     /************** WIDGET-BASE INTERFACE *******************/
@@ -72,8 +77,10 @@ define(['jquery',
 
     /* METHOD CALLED WHEN THE PARENT CONTAINER SIZE HAS CHANGED AND WIDGET SHOULD RESIZE ITSELF ACCORDINGLY */
     PanelBase.prototype.setSize = function (width, height) {
-        this.size = {"width": width,
-            "height": height};
+        this.size = {
+            width: width,
+            height: height
+        };
 
         this.onResize(this.size.width, this.size.height);
     };
@@ -85,9 +92,21 @@ define(['jquery',
     PanelBase.prototype.afterAppend = function () {
         //get panel's offset
         this.offset = this.$el.offset();
-
         //get panel's size
         this._getSize();
+
+    };
+
+    PanelBase.prototype.setContainerUpdateFn = function (currentLayout, containerSizeUpdateFn) {
+        if (containerSizeUpdateFn) {
+            this.updateContainerSize = function () {
+                containerSizeUpdateFn.call(currentLayout);
+            };
+        } else {
+            this.updateContainerSize = function () {
+                this.logger.warn('updateContainerSize not implemented for container in current-layout');
+            };
+        }
     };
 
     return PanelBase;

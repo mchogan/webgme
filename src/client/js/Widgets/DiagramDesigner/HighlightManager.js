@@ -1,26 +1,34 @@
-/*globals define, _, requirejs, WebGMEGlobal, Raphael*/
+/*globals define, _, WebGMEGlobal*/
+/*jshint browser: true*/
 
-define(['logManager',
-    'js/Widgets/DiagramDesigner/DiagramDesignerWidget.Constants'], function (logManager,
-                                                                             DiagramDesignerWidgetConstants) {
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
 
-    "use strict";
+
+define([
+    'js/logger',
+    'js/Widgets/DiagramDesigner/DiagramDesignerWidget.Constants'
+], function (Logger, DiagramDesignerWidgetConstants) {
+
+    'use strict';
 
     var HighlightManager;
 
     HighlightManager = function (options) {
-        this.logger = logManager.create(((options && options.loggerName) || "HighlightManager"));
+        var loggerName = (options && options.loggerName) || 'gme:Widgets:DiagramDesigner:HighlightManager';
+        this.logger = (options && options.logger) || Logger.create(loggerName, WebGMEGlobal.gmeConfig.client.log);
 
         this._diagramDesigner = options ? options.diagramDesigner : null;
 
         if (this._diagramDesigner === undefined || this._diagramDesigner === null) {
-            this.logger.error("Trying to initialize a HighlightManager without a diagramDesigner...");
-            throw ("HighlightManager can not be created");
+            this.logger.error('Trying to initialize a HighlightManager without a diagramDesigner...');
+            throw ('HighlightManager can not be created');
         }
 
         this._highlightedElements = [];
 
-        this.logger.debug("HighlightManager ctor finished");
+        this.logger.debug('HighlightManager ctor finished');
     };
 
     HighlightManager.prototype.initialize = function (el) {
@@ -28,9 +36,11 @@ define(['logManager',
 
         this.$el = el;
 
-        this._diagramDesigner.addEventListener(this._diagramDesigner.events.ON_COMPONENT_DELETE, function (__diagramDesigner, componentId) {
-            self._onComponentDelete(componentId);
-        });
+        this._diagramDesigner.addEventListener(this._diagramDesigner.events.ON_COMPONENT_DELETE,
+            function (__diagramDesigner, componentId) {
+                self._onComponentDelete(componentId);
+            }
+        );
     };
 
     HighlightManager.prototype.activate = function () {
@@ -94,7 +104,8 @@ define(['logManager',
                     elementsToHighlight = _.union(elementsToHighlight, associatedIDs);
                     i = associatedIDs.length;
                     while (i--) {
-                        elementsToHighlight = _.union(elementsToHighlight, this._diagramDesigner._getItemsForConnection(associatedIDs[i]));
+                        elementsToHighlight = _.union(elementsToHighlight,
+                            this._diagramDesigner._getItemsForConnection(associatedIDs[i]));
                     }
                 } else if (this._diagramDesigner.connectionIds.indexOf(id) !== -1) {
                     associatedIDs = this._diagramDesigner._getItemsForConnection(id);
@@ -118,7 +129,8 @@ define(['logManager',
                     elementsToHighlight = _.union(elementsToHighlight, associatedIDs);
                     i = associatedIDs.length;
                     while (i--) {
-                        elementsToHighlight = _.union(elementsToHighlight, this._diagramDesigner._getItemsForConnection(associatedIDs[i]));
+                        elementsToHighlight = _.union(elementsToHighlight,
+                            this._diagramDesigner._getItemsForConnection(associatedIDs[i]));
                     }
                 } else if (this._diagramDesigner.connectionIds.indexOf(id) !== -1) {
                     associatedIDs = this._diagramDesigner._getItemsForConnection(id);

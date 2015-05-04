@@ -1,11 +1,14 @@
+/*globals define, WebGMEGlobal, $*/
+/*jshint browser: true*/
+
 /**
  * @author rkereskenyi / https://github.com/rkereskenyi
  */
 
 
-define(['logManager'], function (logManager) {
+define(['js/logger'], function (Logger) {
 
-    "use strict";
+    'use strict';
 
     var Aspect;
 
@@ -17,19 +20,22 @@ define(['logManager'], function (logManager) {
 
         //get logger instance for this component
         //some comment here
-        this.logger = logManager.create("Aspect_" + this.name);
-        this.logger.debug("Created");
+
+        this.logger = Logger.create('gme:decorators:MetaDecorator:DiagramDesigner:Aspect_' + this.name,
+            WebGMEGlobal.gmeConfig.client.log);
+        this.logger.debug('Created');
     };
 
-    Aspect.prototype._DOMAspectBase = $('<div class="aspect" data-name="__ID__"><span class="n"></span><span class="t"></span></div>');
+    Aspect.prototype._DOMAspectBase = $('<div class="aspect" data-name="__ID__"><span class="n"></span>' +
+    '<span class="t"></span></div>');
 
     Aspect.prototype._render = function () {
         this.$el = this._DOMAspectBase.clone();
-        this.$el.attr({"data-name": this.name,
-                      "title": this.name + ", types: " + this.itemNum});
+        this.$el.attr({'data-name': this.name,
+                      title: this.name + ', types: ' + this.itemNum});
 
-        this.$el.find(".n").text(this.name + ":");
-        this.$el.find(".t").text(this.itemNum);
+        this.$el.find('.n').text(this.name + ':');
+        this.$el.find('.t').text(this.itemNum);
     };
 
     Aspect.prototype.update = function (aspectDesc) {

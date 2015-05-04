@@ -1,29 +1,31 @@
 /*globals define, WebGMEGlobal, _*/
+/*jshint browser: true*/
 
 /**
  * @author rkereskenyi / https://github.com/rkereskenyi
  * @author nabana / https://github.com/nabana
  */
 
-define(['logManager',
-    'clientUtil',
+define(['js/logger',
+    'js/util',
     'js/NodePropertyNames',
     'js/RegistryKeys',
     'js/Constants',
     'js/Utils/DisplayFormat',
     'js/Dialogs/DecoratorSVGExplorer/DecoratorSVGExplorerDialog',
     'js/Controls/PropertyGrid/PropertyGridWidgets',
-    './PointerWidget'], function (logManager,
-                                        util,
-                                        nodePropertyNames,
-                                        REGISTRY_KEYS,
-                                        CONSTANTS,
-                                        displayFormat,
-                                        DecoratorSVGExplorerDialog,
-                                        PropertyGridWidgets,
-                                        PointerWidget) {
+    './PointerWidget'
+], function (Logger,
+             util,
+             nodePropertyNames,
+             REGISTRY_KEYS,
+             CONSTANTS,
+             displayFormat,
+             DecoratorSVGExplorerDialog,
+             PropertyGridWidgets,
+             PointerWidget) {
 
-    "use strict";
+    'use strict';
 
     var PropertyEditorController,
         META_REGISTRY_KEYS = [
@@ -31,22 +33,22 @@ define(['logManager',
             REGISTRY_KEYS.IS_ABSTRACT,
             REGISTRY_KEYS.VALID_PLUGINS,
             REGISTRY_KEYS.USED_ADDONS,
+            REGISTRY_KEYS.VALID_VISUALIZERS,
+            REGISTRY_KEYS.VALID_DECORATORS
         ],
         PREFERENCES_REGISTRY_KEYS = [REGISTRY_KEYS.DECORATOR,
             REGISTRY_KEYS.DISPLAY_FORMAT,
             REGISTRY_KEYS.SVG_ICON,
             REGISTRY_KEYS.PORT_SVG_ICON],
-        PROPERTY_GROUP_META = 'META',
-        PROPERTY_GROUP_PREFERENCES = 'Preferences',
-        PROPERTY_GROUP_ATTRIBUTES = 'Attributes',
-        PROPERTY_GROUP_POINTERS = 'Pointers',
+
         NON_RESETABLE_POINTRS = [CONSTANTS.POINTER_BASE, CONSTANTS.POINTER_SOURCE, CONSTANTS.POINTER_TARGET];
 
     PropertyEditorController = function (client, propertyGrid) {
         this._client = client;
         this._propertyGrid = propertyGrid;
-
-        //it should be sorted aplahbetically
+        this._logger = Logger.create('gme:Panels:PropertyEditor:PropertyEditorController',
+            WebGMEGlobal.gmeConfig.client.log);
+        //it should be sorted alphabetically
         this._propertyGrid.setOrdered(true);
 
         //set custom types here
@@ -54,28 +56,35 @@ define(['logManager',
 
         this._initEventHandlers();
 
-        this._logger = logManager.create("PropertyEditorController");
-        this._logger.debug("Created");
+        this._logger.debug('Created');
     };
 
     PropertyEditorController.prototype._initEventHandlers = function () {
         var self = this;
 
         WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_SELECTION, function (model, activeSelection) {
-            if (activeSelection) {
-                self._selectedObjectsChanged(activeSelection);
+            self._logger.debug('activeSelection changed', activeSelection);
+            var activeNodeId = WebGMEGlobal.State.getActiveObject();
+            if (activeSelection && activeSelection.length > 0) {
+                if (activeSelection.length === 1) {
+                    //https://github.com/webgme/webgme/issues/326
+                    if (self.startsWith(activeSelection[0], activeNodeId)) {
+                        self._selectedObjectsChanged(activeSelection);
+                    } else {
+                        self._logger.debug('Selected node is not a child or the activeNode', activeNodeId,
+                            activeSelection[0]);
+                    }
+                } else {
+                    self._selectedObjectsChanged(activeSelection);
+                }
             } else {
-                self._selectedObjectsChanged([]);
+                self._selectObjectsUsingActiveObject(activeNodeId);
             }
         });
 
         WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_OBJECT, function (model, activeObjectId) {
-            if (activeObjectId || activeObjectId === CONSTANTS.PROJECT_ROOT_ID) {
-                self._selectedObjectsChanged([activeObjectId]);
-            } else {
-                self._selectedObjectsChanged([]);
-            }
-
+            self._logger.debug('active object changed: ', activeObjectId);
+            self._selectObjectsUsingActiveObject(activeObjectId);
         });
 
         this._propertyGrid.onFinishChange(function (args) {
@@ -85,6 +94,14 @@ define(['logManager',
         this._propertyGrid.onReset(function (propertyName) {
             self._onReset(propertyName);
         });
+    };
+
+    PropertyEditorController.prototype._selectObjectsUsingActiveObject = function (activeObjectId) {
+        if (activeObjectId || activeObjectId === CONSTANTS.PROJECT_ROOT_ID) {
+            this._selectedObjectsChanged([activeObjectId]);
+        } else {
+            this._selectedObjectsChanged([]);
+        }
     };
 
     PropertyEditorController.prototype._selectedObjectsChanged = function (idList) {
@@ -101,10 +118,11 @@ define(['logManager',
         if (idList.length > 0) {
             i = idList.length;
             while (i--) {
-                patterns[idList[i]] = { "children": 0 };
+                patterns[idList[i]] = {children: 0};
             }
 
-            this._territoryId = this._client.addUI(this, function (/*events*/) {
+            this._territoryId = this._client.addUI(this, function (events) {
+                self._logger.debug('about to refresh property list', events);
                 self._refreshPropertyList();
             });
             this._client.updateTerritory(this._territoryId, patterns);
@@ -115,6 +133,7 @@ define(['logManager',
 
     PropertyEditorController.prototype._refreshPropertyList = function () {
         var propList = this._getCommonPropertiesForSelection(this._idList);
+        this._logger.debug('propList', this._idList, propList);
         this._propertyGrid.setPropertyList(propList);
     };
 
@@ -131,7 +150,7 @@ define(['logManager',
             commonPreferences = {},
             commonMeta = {},
             commonPointers = {},
-            noCommonValueColor = "#f89406",
+            noCommonValueColor = '#f89406',
             _getNodeAttributeValues, //fn
             _getNodeRegistryValues, //fn
             _filterCommon, //fn
@@ -143,9 +162,23 @@ define(['logManager',
             _isResetableAttribute,
             _isResetableRegistry,
             _isResetablePointer,
+            rootNode = _client.getNode(CONSTANTS.PROJECT_ROOT_ID),
+            validDecorators = null,
             decoratorNames = _client.getAvailableDecoratorNames();
 
-        decoratorNames.sort(function (a,b) {
+        if (rootNode && rootNode.getRegistry(REGISTRY_KEYS.VALID_DECORATORS)) {
+            validDecorators = rootNode.getRegistry(REGISTRY_KEYS.VALID_DECORATORS).split(' ');
+            this._logger.debug('validDecorators registered on root-node', validDecorators);
+            decoratorNames = decoratorNames.filter(function (avaliableDecorator) {
+                return validDecorators.indexOf(avaliableDecorator) > -1;
+            });
+        } else {
+            this._logger.debug('Could not get validDecorators from root-node');
+            if (!rootNode) {
+                this._logger.warn('rootNode was not avaliable');
+            }
+        }
+        decoratorNames.sort(function (a, b) {
             if (a.toLowerCase() < b.toLowerCase()) {
                 return -1;
             } else {
@@ -154,7 +187,7 @@ define(['logManager',
         });
 
         _getNodeAttributeValues = function (node) {
-            var result =  {},
+            var result = {},
                 attrNames = node.getAttributeNames(),
                 len = attrNames.length;
 
@@ -166,7 +199,7 @@ define(['logManager',
         };
 
         _getNodeRegistryValues = function (node, registryNames) {
-            var result =  {},
+            var result = {},
                 len = registryNames.length;
 
             while (--len >= 0) {
@@ -183,13 +216,17 @@ define(['logManager',
                 for (it in otherList) {
                     if (otherList.hasOwnProperty(it)) {
                         if (commonAttrMeta.hasOwnProperty(it)) {
-                            resultList[it] = { "value": otherList[it],
-                                "valueType": commonAttrMeta[it].type,
-                                "isCommon": true };
+                            resultList[it] = {
+                                value: otherList[it],
+                                valueType: commonAttrMeta[it].type,
+                                isCommon: true
+                            };
                         } else {
-                            resultList[it] = { "value": otherList[it],
-                                "valueType": typeof otherList[it],
-                                "isCommon": true };
+                            resultList[it] = {
+                                value: otherList[it],
+                                valueType: typeof otherList[it],
+                                isCommon: true
+                            };
                         }
                     }
                 }
@@ -247,7 +284,7 @@ define(['logManager',
             //if type is enum, the common types should be the intersection of the individual enum types
             while (len--) {
                 attrName = nodeAttributeNames[len];
-                attrMetaDescriptor = _client.getAttributeSchema(nodeId,attrName);
+                attrMetaDescriptor = _client.getAttributeSchema(nodeId, attrName);
                 if (commonAttrMeta.hasOwnProperty(attrName)) {
                     isCommon = true;
                     //this attribute already exist in the attribute meta map
@@ -259,7 +296,8 @@ define(['logManager',
                             if (isEnumCommon && isEnumAttrMeta) {
                                 //same type, both enum
                                 //get the intersection of the enum values
-                                commonEnumValues = _.intersection(commonAttrMeta[attrName].enum, attrMetaDescriptor.enum);
+                                commonEnumValues = _.intersection(commonAttrMeta[attrName].enum,
+                                    attrMetaDescriptor.enum);
 
                                 if (commonEnumValues.length !== commonAttrMeta[attrName].enum.length) {
                                     if (commonEnumValues.length === 0) {
@@ -348,8 +386,9 @@ define(['logManager',
 
                         if (ownAttrNames.indexOf(attrName) !== -1) {
                             //there are 1 options:
-                            //#1: the attribute is defined on this level, and that's why it is in the onwAttributeNames list
-                            //#2: the attribute is inherited and overridden on this level (but defined somewhere up in the hierarchy)
+                            //#1: the attribute is defined on this level, and that's why it is in the onwAttributeNames
+                            //#2: the attribute is inherited and overridden on this level
+                            //      (but defined somewhere up in the hierarchy)
                             if (baseNode) {
                                 resetable = baseNode.getAttributeNames().indexOf(attrName) !== -1;
                             } else {
@@ -386,8 +425,9 @@ define(['logManager',
 
                         if (ownRegistryNames.indexOf(regName) !== -1) {
                             //there are 1 options:
-                            //#1: the registry is defined on this level, and that's why it is in the ownRegistryNames list
-                            //#2: the registry is inherited and overridden on this level (but defined somewhere up in the hierarchy)
+                            //#1: the registry is defined on this level, and that's why it is in the ownRegistryNames
+                            //#2: the registry is inherited and overridden on this level
+                            //      (but defined somewhere up in the hierarchy)
                             if (baseNode) {
                                 resetable = baseNode.getRegistryNames().indexOf(regName) !== -1;
                             } else {
@@ -424,8 +464,9 @@ define(['logManager',
 
                         if (ownPointerNames.indexOf(pointerName) !== -1) {
                             //there are 1 options:
-                            //#1: the registry is defined on this level, and that's why it is in the ownRegistryNames list
-                            //#2: the registry is inherited and overridden on this level (but defined somewhere up in the hierarchy)
+                            //#1: the registry is defined on this level, and that's why it is in the ownRegistryNames
+                            //#2: the registry is inherited and overridden on this level
+                            //      (but defined somewhere up in the hierarchy)
                             if (baseNode) {
                                 resetable = baseNode.getPointerNames().indexOf(pointerName) !== -1;
                             } else {
@@ -450,8 +491,8 @@ define(['logManager',
                     keyParts,
                     doDisplay;
 
-                if (prefix !== "") {
-                    prefix += ".";
+                if (prefix !== '') {
+                    prefix += '.';
                 }
 
                 for (i in srcList) {
@@ -462,14 +503,16 @@ define(['logManager',
 
                         if (doDisplay) {
                             extKey = prefix + i;
-                            keyParts = i.split(".");
+                            keyParts = i.split('.');
 
-                            dstList[extKey] = { "name": keyParts[keyParts.length - 1],
-                                "value": srcList[i].value,
-                                "valueType": srcList[i].valueType,
-                                "options":  srcList[i].options};
+                            dstList[extKey] = {
+                                name: keyParts[keyParts.length - 1],
+                                value: srcList[i].value,
+                                valueType: srcList[i].valueType,
+                                options: srcList[i].options
+                            };
 
-                            if (i === "position.x" || i === "position.y") {
+                            if (i === 'position.x' || i === 'position.y') {
                                 dstList[extKey].minValue = 0;
                                 dstList[extKey].stepValue = 10;
                             }
@@ -479,8 +522,8 @@ define(['logManager',
                             }
 
                             if (srcList[i].isCommon === false) {
-                                dstList[extKey].value = "";
-                                dstList[extKey].options = {"textColor": noCommonValueColor};
+                                dstList[extKey].value = '';
+                                dstList[extKey].options = {textColor: noCommonValueColor};
                             }
 
                             //is it inherited??? if so, it can be reseted to the inherited value
@@ -530,45 +573,62 @@ define(['logManager',
             };
 
             if (selectedObjIDs.length === 1) {
-                propList[" ID"] = { "name": 'ID',
-                    "value": selectedObjIDs[0],
-                    "valueType": typeof selectedObjIDs[0],
-                    "isCommon": true,
-                    "readOnly": true};
+                propList[' ID'] = {
+                    name: 'ID',
+                    value: selectedObjIDs[0],
+                    valueType: typeof selectedObjIDs[0],
+                    isCommon: true,
+                    readOnly: true
+                };
 
                 cNode = _client.getNode(selectedObjIDs[0]);
                 if (cNode) {
-                    propList[" GUID"] = { "name": 'GUID',
-                        "value": cNode.getGuid(),
-                        "valueType": typeof selectedObjIDs[0],
-                        "isCommon": true,
-                        "readOnly": true};
+                    propList[' GUID'] = {
+                        name: 'GUID',
+                        value: cNode.getGuid(),
+                        valueType: typeof selectedObjIDs[0],
+                        isCommon: true,
+                        readOnly: true
+                    };
                 }
             }
 
-            propList[PROPERTY_GROUP_ATTRIBUTES] = { "name": PROPERTY_GROUP_ATTRIBUTES,
-                "text": PROPERTY_GROUP_ATTRIBUTES,
-                "value": undefined};
+            propList[CONSTANTS.PROPERTY_GROUP_ATTRIBUTES] = {
+                name: CONSTANTS.PROPERTY_GROUP_ATTRIBUTES,
+                text: CONSTANTS.PROPERTY_GROUP_ATTRIBUTES,
+                value: undefined
+            };
 
-            propList[PROPERTY_GROUP_PREFERENCES] = { "name": PROPERTY_GROUP_PREFERENCES,
-                "text": PROPERTY_GROUP_PREFERENCES,
-                "value": undefined};
+            propList[CONSTANTS.PROPERTY_GROUP_PREFERENCES] = {
+                name: CONSTANTS.PROPERTY_GROUP_PREFERENCES,
+                text: CONSTANTS.PROPERTY_GROUP_PREFERENCES,
+                value: undefined
+            };
 
-            propList[PROPERTY_GROUP_META] = { "name": PROPERTY_GROUP_META,
-                "text": PROPERTY_GROUP_META,
-                "value": undefined};
+            propList[CONSTANTS.PROPERTY_GROUP_META] = {
+                name: CONSTANTS.PROPERTY_GROUP_META,
+                text: CONSTANTS.PROPERTY_GROUP_META,
+                value: undefined
+            };
 
-            propList[PROPERTY_GROUP_POINTERS] = { "name": PROPERTY_GROUP_POINTERS,
-                "text": PROPERTY_GROUP_POINTERS,
-                "value": undefined};
+            propList[CONSTANTS.PROPERTY_GROUP_POINTERS] = {
+                name: CONSTANTS.PROPERTY_GROUP_POINTERS,
+                text: CONSTANTS.PROPERTY_GROUP_POINTERS,
+                value: undefined
+            };
 
-            _addItemsToResultList(commonAttrs, PROPERTY_GROUP_ATTRIBUTES, propList, true, false, false);
+            _addItemsToResultList(commonAttrs, CONSTANTS.PROPERTY_GROUP_ATTRIBUTES, propList, true, false, false);
 
-            _addItemsToResultList(commonPreferences, PROPERTY_GROUP_PREFERENCES, propList, false, true, false);
+            _addItemsToResultList(commonPreferences,
+                CONSTANTS.PROPERTY_GROUP_PREFERENCES,
+                propList,
+                false,
+                true,
+                false);
 
-            _addItemsToResultList(commonMeta, PROPERTY_GROUP_META, propList, false, true, false);
+            _addItemsToResultList(commonMeta, CONSTANTS.PROPERTY_GROUP_META, propList, false, true, false);
 
-            _addItemsToResultList(commonPointers, PROPERTY_GROUP_POINTERS, propList, false, false, true);
+            _addItemsToResultList(commonPointers, CONSTANTS.PROPERTY_GROUP_POINTERS, propList, false, false, true);
         }
 
         return propList;
@@ -589,15 +649,16 @@ define(['logManager',
         while (--i >= 0) {
             gmeID = selectedObjIDs[i];
 
-            keyArr = args.id.split(".");
+            keyArr = args.id.split('.');
             setterFn = undefined;
             getterFn = undefined;
-            if (keyArr[0] === PROPERTY_GROUP_ATTRIBUTES) {
-                setterFn = "setAttributes";
-                getterFn = "getEditableAttribute";
-            } else if (keyArr[0] === PROPERTY_GROUP_PREFERENCES || keyArr[0] === PROPERTY_GROUP_META) {
-                setterFn = "setRegistry";
-                getterFn = "getEditableRegistry";
+            if (keyArr[0] === CONSTANTS.PROPERTY_GROUP_ATTRIBUTES) {
+                setterFn = 'setAttributes';
+                getterFn = 'getEditableAttribute';
+            } else if (keyArr[0] === CONSTANTS.PROPERTY_GROUP_PREFERENCES ||
+                       keyArr[0] === CONSTANTS.PROPERTY_GROUP_META) {
+                setterFn = 'setRegistry';
+                getterFn = 'getEditableRegistry';
             }
 
             if (setterFn && getterFn) {
@@ -611,7 +672,7 @@ define(['logManager',
                 propPointer = propObject;
                 keyArr.splice(0, 1);
 
-                if(keyArr.length < 1){
+                if (keyArr.length < 1) {
                     //simple value so just set it
                     propObject = args.newValue;
                 } else {
@@ -644,14 +705,16 @@ define(['logManager',
         while (--i >= 0) {
             gmeID = selectedObjIDs[i];
 
-            keyArr = propertyName.split(".");
+            keyArr = propertyName.split('.');
             delFn = undefined;
-            if (keyArr[0] === PROPERTY_GROUP_ATTRIBUTES) {
-                delFn = "delAttributes";
-            } else if (keyArr[0] === PROPERTY_GROUP_PREFERENCES || keyArr[0] === PROPERTY_GROUP_META) {
-                delFn = "delRegistry";
-            } else if (keyArr[0] === PROPERTY_GROUP_POINTERS && NON_RESETABLE_POINTRS.indexOf(keyArr[1]) === -1) {
-                delFn = "delPointer";
+            if (keyArr[0] === CONSTANTS.PROPERTY_GROUP_ATTRIBUTES) {
+                delFn = 'delAttributes';
+            } else if (keyArr[0] === CONSTANTS.PROPERTY_GROUP_PREFERENCES ||
+                       keyArr[0] === CONSTANTS.PROPERTY_GROUP_META) {
+                delFn = 'delRegistry';
+            } else if (keyArr[0] === CONSTANTS.PROPERTY_GROUP_POINTERS &&
+                       NON_RESETABLE_POINTRS.indexOf(keyArr[1]) === -1) {
+                delFn = 'delPointer';
             }
 
             if (delFn) {
@@ -662,6 +725,13 @@ define(['logManager',
             }
         }
         this._client.completeTransaction();
+    };
+
+    PropertyEditorController.prototype.startsWith = function (str, start) {
+        if (start === '') {
+            return true;
+        }
+        return start.length > 0 && str.substring(0, start.length) === start;
     };
 
     return PropertyEditorController;

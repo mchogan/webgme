@@ -1,5 +1,5 @@
 /*globals require*/
-/*jshint node:true, mocha:true*/
+/*jshint node:true, mocha:true, expr:true*/
 /**
  * @author lattmann / https://github.com/lattmann
  */
@@ -7,16 +7,17 @@
 var testFixture = require('../../_globals.js');
 
 describe('CoreTree', function () {
-    "use strict";
+    'use strict';
 
-    var should = require('chai').should(),
+    var gmeConfig = testFixture.getGmeConfig(),
+        should = require('chai').should(),
         requirejs = require('requirejs'),
 
         CoreTree = requirejs('common/core/coretree'),
 
     // TODO: replace with in memory storage
 
-        storage = new testFixture.StorageLocal({}),
+        storage = new testFixture.Storage({globConf: gmeConfig, logger: testFixture.logger.fork('CoreTree:storage')}),
 
         coreTree;
 
@@ -33,7 +34,10 @@ describe('CoreTree', function () {
                     return;
                 }
 
-                coreTree = new CoreTree(project);
+                coreTree = new CoreTree(project, {
+                    globConf: gmeConfig,
+                    logger: testFixture.logger.fork('CoreTree:core')
+                });
                 done();
             });
         });
@@ -120,8 +124,7 @@ describe('CoreTree', function () {
 
         it('should return with the path of the child', function () {
             var root = {parent: null, relid: null},
-                child = {parent: root, relid: '1'},
-                grandChild = {parent: child, relid: '2'};
+                child = {parent: root, relid: '1'};
 
             coreTree.getPath(child).should.be.equal('/1');
         });

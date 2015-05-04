@@ -1,37 +1,48 @@
-/*
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author kecso / https://github.com/kecso
  */
 
 define([
-        "core/corerel",
-        'core/setcore',
-        'core/guidcore',
-        'core/nullpointercore',
-        'core/coreunwrap',
-        'core/coretype',
-        'core/constraintcore',
-        'core/coretree',
-        'core/metacore',
-        'core/coretreeloader',
-        'core/corediff'],
-    function (CoreRel, Set, Guid, NullPtr, UnWrap, Type, Constraint, CoreTree, MetaCore, TreeLoader, CoreDiff)
-{
-    "use strict";
+    'common/core/corerel',
+    'common/core/setcore',
+    'common/core/guidcore',
+    'common/core/nullpointercore',
+    'common/core/coreunwrap',
+    'common/core/coretype',
+    'common/core/constraintcore',
+    'common/core/coretree',
+    'common/core/metacore',
+    'common/core/coretreeloader',
+    'common/core/corediff'
+], function (CoreRel, Set, Guid, NullPtr, UnWrap, Type, Constraint, CoreTree, MetaCore, TreeLoader, CoreDiff) {
+    'use strict';
 
-    function core(storage,options){
-        options = options || {};
-        options.usetype = options.usertype || 'nodejs';
-
-        var coreCon = new TreeLoader(new CoreDiff(new MetaCore(new Constraint(new Guid(new Set(new NullPtr(new Type(new NullPtr(new CoreRel(new CoreTree(storage, options)))))))))));
-
-        if(options.usertype === 'tasync'){
-            return coreCon;
-        } else {
-            return new UnWrap(coreCon);
+    function Core(storage, options) {
+        var core,
+            coreLayers = [];
+        coreLayers.push(CoreRel);
+        coreLayers.push(NullPtr);
+        coreLayers.push(Type);
+        coreLayers.push(NullPtr);
+        coreLayers.push(Set);
+        coreLayers.push(Guid);
+        coreLayers.push(Constraint);
+        coreLayers.push(MetaCore);
+        coreLayers.push(CoreDiff);
+        coreLayers.push(TreeLoader);
+        if (options.usertype !== 'tasync') {
+            coreLayers.push(UnWrap);
         }
+
+        core = coreLayers.reduce(function (inner, Class) {
+            return new Class(inner, options);
+        }, new CoreTree(storage, options));
+
+        return core;
     }
 
-    return core;
+    return Core;
 });
