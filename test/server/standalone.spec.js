@@ -12,11 +12,15 @@ describe('standalone server', function () {
         logger = testFixture.logger,
 
         should = testFixture.should,
+        expect = testFixture.expect,
         superagent = testFixture.superagent,
         mongodb = testFixture.mongodb,
         Q = testFixture.Q,
 
         agent = superagent.agent(),
+
+        http = require('http'),
+        fs = require('fs'),
 
         server,
         serverBaseUrl,
@@ -42,6 +46,113 @@ describe('standalone server', function () {
         });
     });
 
+    it('should start and start and stop', function (done) {
+        this.timeout(5000);
+        // we have to set the config here
+        var gmeConfig = testFixture.getGmeConfig();
+
+        server = WebGME.standaloneServer(gmeConfig);
+        server.start(function () {
+            server.start(function () {
+                server.stop(done);
+            });
+        });
+    });
+
+    it('should stop if not started', function (done) {
+        this.timeout(5000);
+        // we have to set the config here
+        var gmeConfig = testFixture.getGmeConfig();
+
+        server = WebGME.standaloneServer(gmeConfig);
+        server.stop(done);
+    });
+
+
+    it('should fail to start http server if port is in use', function (done) {
+        this.timeout(5000);
+        // we have to set the config here
+        var gmeConfig = testFixture.getGmeConfig(),
+            httpServer = http.createServer();
+
+        gmeConfig.server.port = gmeConfig.server.port + 1;
+
+        httpServer.listen(gmeConfig.server.port, function (err) {
+            expect(err).to.equal(undefined);
+
+            server = WebGME.standaloneServer(gmeConfig);
+            server.start(function (err) {
+                expect(err.code).to.equal('EADDRINUSE');
+                httpServer.close(done);
+            });
+        });
+    });
+
+    describe('[https]', function () {
+        var nodeTLSRejectUnauthorized;
+
+        before(function () {
+            nodeTLSRejectUnauthorized = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+            process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+        });
+
+        after(function () {
+            process.env.NODE_TLS_REJECT_UNAUTHORIZED = nodeTLSRejectUnauthorized;
+        });
+
+        it('should get main page with an https reverse proxy', function (done) {
+            var gmeConfig = testFixture.getGmeConfig(),
+                httpProxy = require('http-proxy'),
+                path = require('path'),
+                proxyServerPort = gmeConfig.server.port - 1,
+                proxy;
+
+            server = WebGME.standaloneServer(gmeConfig);
+            //
+            // Create the HTTPS proxy server in front of a HTTP server
+            //
+            proxy = new httpProxy.createServer({
+                target: {
+                    host: 'localhost',
+                    port: gmeConfig.server.port
+                },
+                ssl: {
+                    key: fs.readFileSync(path.join(__dirname, '..', 'certificates', 'sample-key.pem'), 'utf8'),
+                    cert: fs.readFileSync(path.join(__dirname, '..', 'certificates', 'sample-cert.pem'), 'utf8')
+                }
+            });
+
+            server.start(function (err) {
+                if (err) {
+                    done(err);
+                    return;
+                }
+                proxy.listen(proxyServerPort, function (err) {
+                    if (err) {
+                        done(err);
+                        return;
+                    }
+
+                    agent.get('https://localhost:' + proxyServerPort + '/index.html').end(function (err, res) {
+                        if (err) {
+                            done(err);
+                            return;
+                        }
+                        should.equal(res.status, 200, err);
+                        should.equal(/WebGME/.test(res.text), true, 'Index page response must contain WebGME');
+
+                        server.stop(function (err) {
+                            proxy.close(function (err1) {
+                                done(err || err1);
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    });
+
+
     scenarios = [{
         type: 'http',
         authentication: false,
@@ -49,9 +160,10 @@ describe('standalone server', function () {
         requests: [
             {code: 200, url: '/'},
             {code: 200, url: '/login'},
-            {code: 200, url: '/login/google/return', redirectUrl: '/'},
+            //{code: 200, url: '/login/google/return', redirectUrl: '/'},
             {code: 200, url: '/logout', redirectUrl: '/login'},
             {code: 200, url: '/bin/getconfig.js'},
+            {code: 200, url: '/gmeConfig.json'},
             {code: 200, url: '/package.json'},
             {code: 200, url: '/index.html'},
             {code: 200, url: '/docs/tutorial.html'},
@@ -70,17 +182,19 @@ describe('standalone server', function () {
                 code: 200,
                 url: '/decorators/DefaultDecorator/DiagramDesigner/DefaultDecorator.DiagramDesignerWidget.js'
             },
-            {code: 200, url: '/rest/unknown'},
-            {code: 200, url: '/rest/does_not_exist'},
-            {code: 200, url: '/rest/help'},
-            {code: 200, url: '/listAllDecorators'},
-            {code: 200, url: '/listAllPlugins'},
-            {code: 200, url: '/listAllVisualizerDescriptors'},
+            //{code: 200, url: '/rest/unknown'},
+            //{code: 200, url: '/rest/does_not_exist'},
+            //{code: 200, url: '/rest/help'},
+            {code: 200, url: '/api/decorators'},
+            {code: 200, url: '/api/plugins'},
+            {code: 200, url: '/api/visualizers'},
+            {code: 200, url: '/api/seeds'},
 
-            {code: 401, url: '/login/client/fail'},
+            //{code: 401, url: '/login/client/fail'},
 
             {code: 404, url: '/login/forge'},
-            {code: 404, url: '/extlib/does_not_exist'},
+            {code: 404, url: '/extlib/does_not_exist'}, // ending without a forward slash
+            {code: 404, url: '/extlib/does_not_exist/'}, // ending with a forward slash
             //{code: 404, url: '/pluginoutput/does_not_exist'},
             {code: 404, url: '/plugin'},
             {code: 404, url: '/plugin/'},
@@ -93,17 +207,20 @@ describe('standalone server', function () {
             {code: 404, url: '/rest'},
             {code: 404, url: '/rest/etf'},
             {code: 404, url: '/worker/simpleResult'},
-            {code: 404, url: '/login/client'},
             {code: 404, url: '/docs/'},
             {code: 404, url: '/index2.html'},
             {code: 404, url: '/does_not_exist'},
             {code: 404, url: '/does_not_exist.js'},
             {code: 404, url: '/asdf'},
 
-            {code: 410, url: '/getToken'},
-            {code: 410, url: '/checktoken/does_not_exist'},
+            //excluded extlib paths.
+            {code: 200, url: '/extlib/config/index.js'},
+            {code: 403, url: '/extlib/config/config.default.js'},
 
-            {code: 500, url: '/worker/simpleResult/bad_parameter'}
+            //{code: 410, url: '/getToken'},
+            //{code: 410, url: '/checktoken/does_not_exist'},
+
+            {code: 404, url: '/worker/simpleResult/bad_parameter'}
         ]
     }, {
         type: 'http',
@@ -121,30 +238,17 @@ describe('standalone server', function () {
             {code: 200, url: '/file.svg', redirectUrl: '/login'},
             {code: 200, url: '/file.json', redirectUrl: '/login'},
             {code: 200, url: '/file.map', redirectUrl: '/login'},
-            {code: 200, url: '/listAllPlugins', redirectUrl: '/login'},
-            {code: 200, url: '/listAllDecorators', redirectUrl: '/login'},
-            {code: 200, url: '/listAllVisualizerDescriptors', redirectUrl: '/login'},
 
             // should allow access without auth
             {code: 200, url: '/lib/require/require.min.js'},
             {code: 200, url: '/plugin/PluginResult.js'},
-            {code: 200, url: '/common/storage/cache.js'},
-            {code: 200, url: '/common/storage/client.js'},
-            {code: 200, url: '/common/blob/BlobClient.js'}
-        ]
-    }, {
-        type: 'https',
-        authentication: false,
-        port: 9001,
-        requests: [
-            {code: 200, url: '/'}
-        ]
-    }, {
-        type: 'https',
-        authentication: true,
-        port: 9001,
-        requests: [
-            {code: 200, url: '/', redirectUrl: '/login'}
+            {code: 200, url: '/common/storage/browserstorage.js'},
+            {code: 200, url: '/common/storage/constants.js'},
+            {code: 200, url: '/common/blob/BlobClient.js'},
+
+            {code: 401, url: '/api/plugins'},
+            {code: 401, url: '/api/decorators'},
+            {code: 401, url: '/api/visualizers'}
         ]
     }];
 
@@ -195,7 +299,6 @@ describe('standalone server', function () {
             before(function (done) {
                 // we have to set the config here
                 var dbConn,
-                    gmeauthDeferred,
                     userReady,
                     auth,
                     serverReady = Q.defer(),
@@ -205,23 +308,19 @@ describe('standalone server', function () {
                 gmeConfig.authentication.enable = scenario.authentication;
                 gmeConfig.authentication.allowGuests = false;
                 gmeConfig.authentication.guestAccount = 'guestUserName';
-                gmeConfig.server.https.enable = scenario.type === 'https';
-
-                // https://github.com/visionmedia/superagent/issues/205
-                process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
                 dbConn = Q.ninvoke(mongodb.MongoClient, 'connect', gmeConfig.mongo.uri, gmeConfig.mongo.options)
                     .then(function (db_) {
                         db = db_;
-                        return Q.all([
+                        return Q.allDone([
                             Q.ninvoke(db, 'collection', '_users')
                                 .then(function (collection_) {
                                     return Q.ninvoke(collection_, 'remove');
                                 }),
-                            Q.ninvoke(db, 'collection', '_organizations')
-                                .then(function (orgs_) {
-                                    return Q.ninvoke(orgs_, 'remove');
-                                }),
+                            //Q.ninvoke(db, 'collection', '_organizations')
+                            //    .then(function (orgs_) {
+                            //        return Q.ninvoke(orgs_, 'remove');
+                            //    }),
                             Q.ninvoke(db, 'collection', 'ClientCreateProject')
                                 .then(function (createdProject) {
                                     return Q.ninvoke(createdProject, 'remove');
@@ -243,45 +342,38 @@ describe('standalone server', function () {
                         ]);
                     });
 
-                gmeauthDeferred = Q.defer();
                 auth = gmeauth(null /* session */, gmeConfig);
-                auth.connect(function (err) {
-                    if (err) {
-                        logger.error(err);
-                        gmeauthDeferred.reject(err);
-                    } else {
-                        logger.debug('gmeAuth is ready');
-                        gmeauthDeferred.resolve(auth);
-                    }
-                });
-
-                userReady = gmeauthDeferred.promise.then(function (gmeauth_) {
-                    gmeauth = gmeauth_;
-                    return dbConn.then(function () {
-                        var account = gmeConfig.authentication.guestAccount;
-                        return gmeauth.addUser(account, account + '@example.com', account, true, {overwrite: true});
-                    }).then(function () {
-                        return gmeauth.addUser('user', 'user@example.com', 'plaintext', true, {overwrite: true});
-                    }).then(function () {
-                        return gmeauth.authorizeByUserId('user', 'project', 'create', {
-                            read: true,
-                            write: true,
-                            delete: false
-                        });
-                    }).then(function () {
-                        return gmeauth.authorizeByUserId('user', 'unauthorized_project', 'create', {
-                            read: false,
-                            write: false,
-                            delete: false
-                        });
-                    });
-                });
 
                 server = WebGME.standaloneServer(gmeConfig);
                 serverBaseUrl = server.getUrl();
                 server.start(serverReady.makeNodeResolver());
 
-                Q.all([serverReady, dbConn, userReady])
+                Q.allDone([serverReady, dbConn])
+                    .then(function () {
+                        return auth.connect();
+                    })
+                    .then(function (gmeauth_) {
+                        var account = gmeConfig.authentication.guestAccount;
+                        gmeauth = auth;
+                        return gmeauth.addUser(account, account + '@example.com', account, true, {overwrite: true});
+                    })
+                    .then(function () {
+                        return gmeauth.addUser('user', 'user@example.com', 'plaintext', true, {overwrite: true});
+                    })
+                    .then(function () {
+                        return gmeauth.authorizeByUserId('user', 'project', 'create', {
+                            read: true,
+                            write: true,
+                            delete: false
+                        });
+                    })
+                    .then(function () {
+                        return gmeauth.authorizeByUserId('user', 'unauthorized_project', 'create', {
+                            read: false,
+                            write: false,
+                            delete: false
+                        });
+                    })
                     .nodeify(done);
             });
 
@@ -343,52 +435,19 @@ describe('standalone server', function () {
 
     describe('http server with authentication turned on', function () {
 
-        var db,
-            collection,
-            gmeauth = require('../../src/server/middleware/auth/gmeauth'),
-            gmeConfig = testFixture.getGmeConfig(),
+        var safeStorage,
+            webgmeToken,
+            gmeAuth,
             logIn = function (callback) {
-                agent.post(serverBaseUrl + '/login?redirect=%2F')
-                    .type('form')
-                    .send({username: 'user'})
-                    .send({password: 'plaintext'})
-                    .end(function (err, res) {
-                        if (err) {
-                            return callback(err);
-                        }
-                        should.equal(res.status, 200);
-                        callback(err, res);
-                    });
+                testFixture.logIn(server, agent, 'user', 'plaintext').nodeify(callback);
             },
-            openSocketIo = function () {
-                var io = require('socket.io-client');
-                return Q.nfcall(logIn)
-                    .then(function (/*res*/) {
-                        var socket,
-                            socketReq = {url: serverBaseUrl},
-                            defer = Q.defer();
-
-                        agent.attachCookies(socketReq);
-
-                        socket = io.connect(serverBaseUrl,
-                            {
-                                'query': 'webGMESessionId=' + /webgmeSid=s:([^;]+)\./.exec(
-                                    decodeURIComponent(socketReq.cookies))[1],
-                                'transports': gmeConfig.socketIO.transports,
-                                'multiplex': false
-                            });
-
-                        socket.on('error', function (err) {
-                            logger.error(err);
-                            defer.reject(err || 'could not connect');
-                            socket.disconnect();
-                        });
-                        socket.on('connect', function () {
-                            defer.resolve(socket);
-                        });
-
-                        return defer.promise;
-                    });
+            openSocketIo = function (callback) {
+                return testFixture.openSocketIo(server, agent, 'user', 'plaintext')
+                    .then(function (result) {
+                        webgmeToken = result.webgmeToken;
+                        return result.socket;
+                    })
+                    .nodeify(callback);
             };
 
         beforeEach(function () {
@@ -398,104 +457,74 @@ describe('standalone server', function () {
         before(function (done) {
             // we have to set the config here
             var dbConn,
-                gmeauthDeferred,
-                auth,
-                userReady,
                 serverReady = Q.defer(),
+                project = 'project',
+                unauthorizedProject = 'unauthorized_project',
                 gmeConfig = testFixture.getGmeConfig();
 
             gmeConfig.authentication.enable = true;
             gmeConfig.authentication.allowGuests = false;
 
-            dbConn = Q.ninvoke(mongodb.MongoClient, 'connect', gmeConfig.mongo.uri, gmeConfig.mongo.options)
-                .then(function (db_) {
-                    db = db_;
-                    return Q.all([
-                        Q.ninvoke(db, 'collection', '_users')
-                            .then(function (collection_) {
-                                collection = collection_;
-                                return Q.ninvoke(collection, 'remove');
-                            }),
-                        Q.ninvoke(db, 'collection', '_organizations')
-                            .then(function (orgs_) {
-                                return Q.ninvoke(orgs_, 'remove');
-                            }),
-                        Q.ninvoke(db, 'collection', 'ClientCreateProject')
-                            .then(function (createdProject) {
-                                return Q.ninvoke(createdProject, 'remove');
-                            }),
-                        Q.ninvoke(db, 'collection', 'project')
-                            .then(function (project) {
-                                return Q.ninvoke(project, 'remove')
-                                    .then(function () {
-                                        return Q.ninvoke(project, 'insert', {_id: '*info', dummy: true});
-                                    });
-                            }),
-                        Q.ninvoke(db, 'collection', 'unauthorized_project')
-                            .then(function (project) {
-                                return Q.ninvoke(project, 'remove')
-                                    .then(function () {
-                                        return Q.ninvoke(project, 'insert', {_id: '*info', dummy: true});
-                                    });
-                            })
+            dbConn = testFixture.clearDBAndGetGMEAuth(gmeConfig)
+                .then(function (gmeAuth_) {
+                    gmeAuth = gmeAuth_;
+                    safeStorage = testFixture.getMongoStorage(logger, gmeConfig, gmeAuth);
+                    return safeStorage.openDatabase();
+
+                })
+                .then(function () {
+                    return Q.allDone([
+                        testFixture.importProject(safeStorage, {
+                            projectSeed: 'seeds/EmptyProject.webgmex',
+                            projectName: project,
+                            gmeConfig: gmeConfig,
+                            logger: logger
+                        }),
+                        testFixture.importProject(safeStorage, {
+                            projectSeed: 'seeds/EmptyProject.webgmex',
+                            projectName: unauthorizedProject,
+                            gmeConfig: gmeConfig,
+                            logger: logger
+                        })
                     ]);
                 });
-
-            gmeauthDeferred = Q.defer();
-            auth = gmeauth(null /* session */, gmeConfig);
-            auth.connect(function (err) {
-                if (err) {
-                    logger.error(err);
-                    gmeauthDeferred.reject(err);
-                } else {
-                    logger.debug('gmeAuth is ready');
-                    gmeauthDeferred.resolve(auth);
-                }
-            });
-
-            userReady = gmeauthDeferred.promise.then(function (gmeauth_) {
-                gmeauth = gmeauth_;
-                return dbConn.then(function () {
-                    return gmeauth.addUser('user', 'user@example.com', 'plaintext', true, {overwrite: true});
-                }).then(function () {
-                    return gmeauth.authorizeByUserId('user', 'project', 'create', {
-                        read: true,
-                        write: true,
-                        delete: false
-                    });
-                }).then(function () {
-                    return gmeauth.authorizeByUserId('user', 'unauthorized_project', 'create', {
-                        read: false,
-                        write: false,
-                        delete: false
-                    });
-                    //}).then(function () {
-                    //    return gmeauth.addUser(gmeConfig.authentication.guestAccount,
-                    //        gmeConfig.authentication.guestAccount +'@example.com',
-                    //        'plaintext',
-                    //        true,
-                    //        {overwrite: true});
-                });
-            });
 
             server = WebGME.standaloneServer(gmeConfig);
             serverBaseUrl = server.getUrl();
             server.start(serverReady.makeNodeResolver());
 
-            Q.all([serverReady, dbConn, userReady])
+            Q.allDone([serverReady, dbConn])
+                .then(function () {
+                    return gmeAuth.addUser('user', 'user@example.com', 'plaintext', true, {overwrite: true});
+                })
+                .then(function () {
+                    return gmeAuth.authorizeByUserId('user', testFixture.projectName2Id('project'),
+                        'create', {
+                            read: true,
+                            write: true,
+                            delete: false
+                        }
+                    );
+                })
+                .then(function () {
+                    return gmeAuth.authorizeByUserId('user', testFixture.projectName2Id('unauthorized_project'),
+                        'create', {
+                            read: false,
+                            write: false,
+                            delete: false
+                        }
+                    );
+                })
                 .nodeify(done);
         });
 
         after(function (done) {
-            db.close(true, function (err) {
+            server.stop(function (err) {
                 if (err) {
-                    done(err);
-                    return;
+                    logger.error(err);
                 }
-
-                server.stop(function (err) {
-                    done(err);
-                });
+                gmeAuth.unload()
+                    .nodeify(done);
             });
         });
 
@@ -523,9 +552,10 @@ describe('standalone server', function () {
                 }
                 res.redirects.should.deep.equal([serverBaseUrl + '/']);
 
-                agent.get(serverBaseUrl + '/gettoken')
+                agent.get(serverBaseUrl + '/api/user')
                     .end(function (err, res) {
-                        should.equal(res.status, 410);
+                        should.equal(res.status, 200);
+                        should.equal(res.body._id, 'user');
                         done();
                     });
             });
@@ -550,30 +580,31 @@ describe('standalone server', function () {
 
 
         it('should be able to open an authorized project', function (done) {
-            var projectName = 'project';
+            var projectName = 'project',
+                projectId = testFixture.projectName2Id(projectName);
             openSocketIo()
                 .then(function (socket) {
-                    return Q.ninvoke(socket, 'emit', 'openProject', projectName)
+                    return Q.ninvoke(socket, 'emit', 'openProject', {projectId: projectId, webgmeToken: webgmeToken})
                         .finally(function () {
                             socket.disconnect();
                         });
                 }).then(function () {
-                    return gmeauth.getProjectAuthorizationByUserId('user', projectName);
+                    return gmeAuth.getProjectAuthorizationByUserId('user', projectId);
                 }).then(function (authorized) {
                     authorized.should.deep.equal({read: true, write: true, delete: false});
                 }).nodeify(done);
         });
 
         it('should not be able to open an unauthorized project', function (done) {
-            var projectName = 'unauthorized_project';
+            var projectId = testFixture.projectName2Id('unauthorized_project');
             openSocketIo()
                 .then(function (socket) {
-                    return Q.ninvoke(socket, 'emit', 'openProject', projectName)
+                    return Q.ninvoke(socket, 'emit', 'openProject', {projectId: projectId, webgmeToken: webgmeToken})
                         .finally(function () {
                             socket.disconnect();
                         });
                 }).then(function () {
-                    return gmeauth.getProjectAuthorizationByUserId('user', projectName);
+                    return gmeAuth.getProjectAuthorizationByUserId('user', projectId);
                 }).then(function (authorized) {
                     authorized.should.deep.equal({read: true, write: true, delete: true});
                 }).nodeify(function (err) {
@@ -581,21 +612,53 @@ describe('standalone server', function () {
                         done(new Error('should have failed'));
                         return;
                     }
-                    ('' + err).should.contain('missing necessary user rights');
+                    ('' + err).should.contain('Not authorized to read project');
                     done();
                 });
         });
 
-        it('should grant perms to newly-created project', function (done) {
-            var projectName = 'ClientCreateProject';
+
+        it('should be able to export an authorized project /worker/simpleResult/:id/exported_branch', function (done) {
+            var projectName = 'project',
+                projectId = testFixture.projectName2Id(projectName),
+                command = {
+                    command: 'exportProjectToFile',
+                    projectId: projectId,
+                    branchName: 'master',
+                    path: '' // ROOT_PATH
+                };
             openSocketIo()
                 .then(function (socket) {
-                    return Q.ninvoke(socket, 'emit', 'openProject', projectName)
+                    command.webgmeToken = webgmeToken;
+                    return Q.ninvoke(socket, 'emit', 'simpleRequest', command)
+                        .finally(function () {
+                            socket.disconnect();
+                        });
+                })
+                .then(function (result) {
+                    expect(typeof result).to.equal('object');
+                    expect(result).to.have.property('hash');
+                    expect(typeof result.hash).to.equal('string');
+                    expect(result.downloadUrl).to.include('/rest/blob/download/');
+                })
+                .nodeify(done);
+        });
+
+        it('should grant perms to newly-created project', function (done) {
+            var projectName = 'ClientCreateProject',
+                projectId = testFixture.projectName2Id(projectName, 'user');
+
+            openSocketIo()
+                .then(function (socket) {
+                    return Q.ninvoke(socket, 'emit', 'createProject', {
+                        projectName: projectName,
+                        webgmeToken: webgmeToken
+                    })
                         .finally(function () {
                             socket.disconnect();
                         });
                 }).then(function () {
-                    return gmeauth.getProjectAuthorizationByUserId('user', projectName);
+                    return gmeAuth.getProjectAuthorizationByUserId('user', projectId);
                 }).then(function (authorized) {
                     authorized.should.deep.equal({read: true, write: true, delete: true});
                 }).nodeify(done);

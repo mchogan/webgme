@@ -1,0 +1,13 @@
+{
+  "_id": "webgme",
+  "projects": {},
+  "type": "Organization",
+  "admins": [
+    "pelleBlom"
+  ],
+  "info": {},
+  "users": [
+    "guest",
+    "pelleBlom"
+  ]
+}

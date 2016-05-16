@@ -7,49 +7,79 @@
 
 define([
     'js/logger',
+    'js/Constants',
     'angular',
     'js/Dialogs/Projects/ProjectsDialog',
     'js/Dialogs/Commit/CommitDialog',
+    'js/Dialogs/Merge/MergeDialog',
     'js/Dialogs/ProjectRepository/ProjectRepositoryDialog',
-    'isis-ui-components/simpleDialog/simpleDialog',
-    'text!js/Dialogs/Projects/templates/DeleteDialogTemplate.html'
-], function (Logger, ng, ProjectsDialog, CommitDialog, ProjectRepositoryDialog, ConfirmDialog, DeleteDialogTemplate) {
+    'js/Dialogs/Branches/BranchesDialog',
+    'js/Dialogs/ConfirmDelete/ConfirmDeleteDialog',
+    'js/Dialogs/ProjectRights/ProjectRightsDialog',
+    'js/Dialogs/ApplyCommitQueue/ApplyCommitQueueDialog',
+    'common/storage/util',
+    'js/Utils/SaveToDisk',
+    'q',
+    'js/Utils/ComponentSettings'
+], function (Logger,
+             CONSTANTS,
+             ng,
+             ProjectsDialog,
+             CommitDialog,
+             MergeDialog,
+             ProjectRepositoryDialog,
+             BranchesDialog,
+             ConfirmDeleteDialog,
+             ProjectRightsDialog,
+             ApplyCommitQueueDialog,
+             StorageUtil,
+             saveToDisk,
+             Q,
+             ComponentSettings) {
     'use strict';
 
-
-    angular.module('gme.ui.ProjectNavigator', []).run(function ($templateCache) {
-        $templateCache.put('DeleteDialogTemplate.html', DeleteDialogTemplate);
+    angular.module('gme.ui.ProjectNavigator', []).run(function () {
     });
-
 
     var ProjectNavigatorController;
 
-    ProjectNavigatorController = function ($scope, gmeClient, $simpleDialog, $timeout, $window) {
+    ProjectNavigatorController = function ($scope, gmeClient, $timeout, $window, $http) {
         var self = this;
         self.logger = Logger.create('gme:Panels:Header:ProjectNavigatorController', WebGMEGlobal.gmeConfig.client.log);
         self.$scope = $scope;
         self.$window = $window;
         self.gmeClient = gmeClient;
-        self.$simpleDialog = $simpleDialog;
+        //self.$simpleDialog = $simpleDialog;
         self.$timeout = $timeout;
+        self.$http = $http;
+
+        self.config = ProjectNavigatorController.getDefaultConfig();
+        ComponentSettings.resolveWithWebGMEGlobal(self.config, ProjectNavigatorController.getComponentId());
+        self.logger.debug('Resolved component-settings', self.config);
 
         // internal data representation for fast access to objects
         self.projects = {};
+
+        // navigation items in the navigator list
+        if (self.config.disableProjectActions === true) {
+            self.navIdProject = 0;
+            self.navIdBranch = 1;
+        } else {
+            self.navIdRoot = 0;
+            self.navIdProject = 1;
+            self.navIdBranch = 2;
+        }
+
         self.root = {
             id: 'root',
-            label: 'GME',
-//            isSelected: true,
-            itemClass: 'gme-root',
+            label: self.config.rootDisplayName,
+            itemClass: self.config.rootMenuClass,
             menu: []
         };
 
-        // navigation items in the navigator list
-        self.navIdRoot = 0;
-        self.navIdProject = 1;
-        self.navIdBranch = 2;
-
         self.requestedSelection = null;
 
+        self.userId = null;
         self.initialize();
     };
 
@@ -73,11 +103,15 @@ define([
         };
 
         if (self.gmeClient) {
-            manageProjects = newProject = function (/*data*/) {
+            manageProjects = function (/*data*/) {
                 var pd = new ProjectsDialog(self.gmeClient);
                 pd.show();
             };
-
+            newProject = function (data) {
+                var pd = new ProjectsDialog(self.gmeClient, true, data.newType);
+                pd.show();
+            };
+            self.userId = WebGMEGlobal.userInfo._id;
         } else {
             newProject = function (/*data*/) {
                 self.dummyProjectsGenerator('New Project ' + Math.floor(Math.random() * 10000), 4);
@@ -86,45 +120,48 @@ define([
             manageProjects = function (/*data*/) {
                 self.dummyProjectsGenerator('Manage projects ' + Math.floor(Math.random() * 10000), 4);
             };
+            self.userId = 'dummyUser';
         }
 
         // initialize root menu
         // projects id is mandatory
-        self.root.menu = [
-            {
-                id: 'top',
-                items: [
-                    {
-                        id: 'manageProject',
-                        label: 'Manage projects ...',
-                        iconClass: 'glyphicon glyphicon-folder-open',
-                        action: manageProjects,
-                        actionData: {}
-                    },
-                    {
-                        id: 'newProject',
-                        label: 'New project ...',
-                        iconClass: 'glyphicon glyphicon-plus',
-                        action: newProject,
-                        actionData: {}
-                    },
-                    {
-                        id: 'importProject',
-                        label: 'Import project ...',
-                        iconClass: 'glyphicon glyphicon-import',
-                        action: newProject,
-                        actionData: {}
-                    }
-                ]
-            },
-            {
-                id: 'projects',
-                label: 'Recent projects',
-                totalItems: 20,
-                items: [],
-                showAllItems: newProject
-            }
-        ];
+        if (self.config.disableProjectActions === false) {
+            self.root.menu = [
+                {
+                    id: 'top',
+                    items: [
+                        {
+                            id: 'manageProject',
+                            label: 'Manage projects ...',
+                            iconClass: 'glyphicon glyphicon-folder-open',
+                            action: manageProjects,
+                            actionData: {}
+                        },
+                        {
+                            id: 'newProject',
+                            label: 'New project ...',
+                            iconClass: 'glyphicon glyphicon-plus',
+                            action: newProject,
+                            actionData: {newType: 'seed'}
+                        },
+                        {
+                            id: 'importProject',
+                            label: 'Import project ...',
+                            iconClass: 'glyphicon glyphicon-import',
+                            action: newProject,
+                            actionData: {newType: 'import'}
+                        }
+                    ]
+                },
+                {
+                    id: 'projects',
+                    label: 'Recent projects',
+                    totalItems: 20,
+                    items: [],
+                    showAllItems: manageProjects
+                }
+            ];
+        }
 
         if (self.gmeClient) {
             self.initWithClient();
@@ -134,9 +171,7 @@ define([
 
         // only root is selected by default
         self.$scope.navigator = {
-            items: [
-                self.root
-            ],
+            items: self.config.disableProjectActions ? [] : [self.root],
             separator: true
         };
     };
@@ -151,64 +186,91 @@ define([
         var self = this;
 
         // register all event listeners on gmeClient
-
-        self.gmeClient.addEventListener(self.gmeClient.events.NETWORKSTATUS_CHANGED, function (/*client*/) {
-            if (self.gmeClient.getActualNetworkStatus() === self.gmeClient.networkStates.CONNECTED) {
+        self.gmeClient.addEventListener(CONSTANTS.CLIENT.NETWORK_STATUS_CHANGED, function (client, networkStatus) {
+            var projectId;
+            self.logger.debug('NETWORK_STATUS_CHANGED', networkStatus);
+            if (networkStatus === CONSTANTS.CLIENT.STORAGE.CONNECTED) {
                 // get project list
+                self.updateProjectList(function (err) {
+                    if (err) {
+                        self.logger.error('Failed to populate ProjectNavigator', err);
+                        return;
+                    }
+                    self.gmeClient.watchDatabase(function (emitter, data) {
+                        self.logger.debug('watchDatabase event', data);
+                        if (data.etype === CONSTANTS.CLIENT.STORAGE.PROJECT_CREATED) {
+                            //TODO: This call should get the rights..
+                            self.gmeClient.getBranches(data.projectId, function (err, branches) {
+                                if (err) {
+                                    if (err.message.indexOf('Not authorized to read project') > -1) {
+                                        // This is anticipated when someone else created the project.
+                                        self.logger.debug(err.message);
+                                    } else {
+                                        self.logger.error('Could not get branches for newly created project ' +
+                                            data.projectId);
+                                        self.logger.error(err);
+                                    }
+                                    return;
+                                }
+                                self.logger.debug('Got branches before joining room:', Object.keys(branches));
+                                //TODO: Should include rights, for now complete rights are assumed.
+                                self.addProject(data.projectId, null, {modifiedAt: (new Date()).toISOString()}, true,
+                                    function (err) {
+                                        if (err) {
+                                            self.logger.error(err);
+                                            return;
+                                        }
+                                        self.gmeClient.getBranches(data.projectId, function (err, branches) {
+                                            if (err) {
+                                                self.logger.error(err);
+                                                return;
+                                            }
+                                            self.logger.debug('Got branches after joining room:',
+                                                Object.keys(branches));
+                                            Object.keys(branches).forEach(function (branchId) {
+                                                self.addBranch(data.projectId, branchId,
+                                                    {branchHash: branches[branchId]});
+                                            });
+                                        });
+                                    }
+                                );
+                            });
+                        } else if (data.etype === CONSTANTS.CLIENT.STORAGE.PROJECT_DELETED) {
+                            self.removeProject(data.projectId);
+                        } else {
+                            self.logger.error('Unexpected event type', data.etype);
+                        }
+                    });
+                });
+            } else if (networkStatus === CONSTANTS.CLIENT.STORAGE.RECONNECTED) {
                 self.updateProjectList();
+            } else if (networkStatus === CONSTANTS.CLIENT.STORAGE.DISCONNECTED) {
+                if (self.projects) {
+                    for (projectId in self.projects) {
+                        if (self.projects.hasOwnProperty(projectId)) {
+                            self.gmeClient.unwatchProject(projectId, self.projects[projectId]._watcher);
+                        }
+                    }
+                }
             } else {
-                // get project list
-                self.logger.warn(self.gmeClient.getActualNetworkStatus() + ' network status is not handled yet.');
+                self.logger.error('Error network status, no actions done', networkStatus);
             }
 
         });
 
-        self.gmeClient.addEventListener(self.gmeClient.events.PROJECT_OPENED, function (client, projectId) {
-            self.logger.debug(self.gmeClient.events.PROJECT_OPENED, projectId);
+        self.gmeClient.addEventListener(CONSTANTS.CLIENT.PROJECT_OPENED, function (client, projectId) {
+            self.logger.debug(CONSTANTS.CLIENT.PROJECT_OPENED, projectId);
             self.selectProject({projectId: projectId});
         });
 
-        self.gmeClient.addEventListener(self.gmeClient.events.PROJECT_CLOSED, function (client, projectId) {
-            self.logger.debug(self.gmeClient.events.PROJECT_CLOSED, projectId);
+        self.gmeClient.addEventListener(CONSTANTS.CLIENT.PROJECT_CLOSED, function (client, projectId) {
+            self.logger.debug(CONSTANTS.CLIENT.PROJECT_CLOSED, projectId);
             self.selectProject({});
         });
 
-        self.gmeClient.addEventListener(self.gmeClient.events.SERVER_PROJECT_CREATED, function (client, projectId) {
-            self.logger.debug(self.gmeClient.events.SERVER_PROJECT_CREATED, projectId);
-            self.addProject(projectId);
-        });
-
-        self.gmeClient.addEventListener(self.gmeClient.events.SERVER_PROJECT_DELETED, function (client, projectId) {
-            self.logger.debug(self.gmeClient.events.SERVER_PROJECT_DELETED, projectId);
-            self.removeProject(projectId);
-        });
-
-        self.gmeClient.addEventListener(self.gmeClient.events.BRANCH_CHANGED, function (client, branchId) {
-            self.logger.debug(self.gmeClient.events.BRANCH_CHANGED, branchId);
-            self.selectBranch({projectId: self.gmeClient.getActiveProjectName(), branchId: branchId});
-        });
-
-        self.gmeClient.addEventListener(self.gmeClient.events.SERVER_BRANCH_CREATED, function (client, parameters) {
-            self.logger.debug(self.gmeClient.events.SERVER_BRANCH_CREATED, parameters);
-            self.addBranch(parameters.project, parameters.branch, parameters.commit);
-        });
-
-        self.gmeClient.addEventListener(self.gmeClient.events.SERVER_BRANCH_UPDATED, function (client, parameters) {
-            self.logger.debug(self.gmeClient.events.SERVER_BRANCH_UPDATED, parameters);
-            self.updateBranch(parameters.project, parameters.branch, parameters.commit);
-        });
-
-        self.gmeClient.addEventListener(self.gmeClient.events.SERVER_BRANCH_DELETED, function (client, parameters) {
-            var currentProject = self.$scope.navigator.items[self.navIdProject],
-                currentBranch = self.$scope.navigator.items[self.navIdBranch];
-            self.logger.debug(self.gmeClient.events.SERVER_BRANCH_DELETED, parameters);
-
-            self.removeBranch(parameters.project, parameters.branch);
-
-            if (currentBranch === parameters.branch && currentProject === parameters.project) {
-                self.selectProject(parameters.project);
-            }
-
+        self.gmeClient.addEventListener(CONSTANTS.CLIENT.BRANCH_CHANGED, function (client, branchId) {
+            self.logger.debug(CONSTANTS.CLIENT.BRANCH_CHANGED, branchId);
+            self.selectBranch({projectId: self.gmeClient.getActiveProjectId(), branchId: branchId});
         });
 
         angular.element(self.$window).on('keydown', function (e) {
@@ -220,12 +282,12 @@ define([
                     //TODO we should block UI until undo/redo is done
                     if (e.shiftKey) {
                         self.$timeout(function () {
-                            self.gmeClient.redo(self.gmeClient.getActualBranch(), function (/*err*/) {
+                            self.gmeClient.redo(self.gmeClient.getActiveBranchName(), function (/*err*/) {
                             });
                         });
                     } else {
                         self.$timeout(function () {
-                            self.gmeClient.undo(self.gmeClient.getActualBranch(), function (/*err*/) {
+                            self.gmeClient.undo(self.gmeClient.getActiveBranchName(), function (/*err*/) {
                             });
 
                         });
@@ -235,8 +297,8 @@ define([
             }
         });
 
-        self.gmeClient.addEventListener(self.gmeClient.events.UNDO_AVAILABLE, function (client, parameters) {
-            self.logger.debug(self.gmeClient.events.UNDO_AVAILABLE, parameters);
+        self.gmeClient.addEventListener(CONSTANTS.CLIENT.UNDO_AVAILABLE, function (client, parameters) {
+            self.logger.debug(CONSTANTS.CLIENT.UNDO_AVAILABLE, parameters);
             self.$timeout(function () {
 
                 if (self.$scope.navigator &&
@@ -252,8 +314,8 @@ define([
 
             });
         });
-        self.gmeClient.addEventListener(self.gmeClient.events.REDO_AVAILABLE, function (client, parameters) {
-            self.logger.debug(self.gmeClient.events.REDO_AVAILABLE, parameters);
+        self.gmeClient.addEventListener(CONSTANTS.CLIENT.REDO_AVAILABLE, function (client, parameters) {
+            self.logger.debug(CONSTANTS.CLIENT.REDO_AVAILABLE, parameters);
             self.$timeout(function () {
 
                 if (self.$scope.navigator &&
@@ -271,69 +333,165 @@ define([
         });
     };
 
-    ProjectNavigatorController.prototype.updateProjectList = function () {
-        var self = this;
+    ProjectNavigatorController.prototype.updateProjectList = function (callback) {
+        var self = this,
+            params = {
+                asObject: true,
+                rights: true,
+                branches: true,
+                info: true
+            };
+
         self.logger.debug('updateProjectList');
-        // FIXME: get read=only/viewable/available project?!
-        self.gmeClient.getFullProjectsInfoAsync(function (err, projectList) {
+        self.projects = {};
+
+        callback = callback || function (err) {
+                if (err) {
+                    self.logger.error(err);
+                }
+            };
+
+        self.gmeClient.getProjects(params, function (err, projectsData) {
             var projectId,
-                branchId;
+                branchId,
+                branchPromises = [];
 
             if (err) {
-                self.logger.error(err);
+                callback(err);
                 return;
             }
 
-            self.logger.debug('getFullProjectsInfoAsync', projectList);
+            function getBranchPromise(projectId, branchId, branchHash) {
+                var deferred = Q.defer();
+
+                self.gmeClient.getCommits(projectId, branchHash, 1, function (err, commits) {
+                    if (err) {
+                        self.logger.error(err);
+                        deferred.resolve({
+                            projectId: projectId,
+                            branchId: branchId,
+                            branchHash: branchHash,
+                            commitObject: null
+                        });
+                    } else if (commits.length !== 1) {
+                        self.logger.error(new Error('Could not get commit object', projectId, branchId, branchHash));
+                        deferred.resolve({
+                            projectId: projectId,
+                            branchId: branchId,
+                            branchHash: branchHash,
+                            commitObject: null
+                        });
+                    } else {
+                        deferred.resolve({
+                            projectId: projectId,
+                            branchId: branchId,
+                            branchHash: branchHash,
+                            commitObject: commits[0]
+                        });
+                    }
+                });
+
+                return deferred.promise;
+            }
+
+            self.logger.debug('getProjects', projectsData);
 
             // clear project list
             self.projects = {};
 
-            for (projectId in projectList) {
-                if (projectList.hasOwnProperty(projectId)) {
-                    self.addProject(projectId, projectList[projectId].rights, true);
-                    for (branchId in projectList[projectId].branches) {
-                        if (projectList[projectId].branches.hasOwnProperty(branchId)) {
-                            self.addBranch(projectId, branchId, projectList[projectId].branches[branchId], true);
+            for (projectId in projectsData) {
+                if (projectsData.hasOwnProperty(projectId)) {
+
+                    self.addProject(projectId, projectsData[projectId].rights, projectsData[projectId].info, true);
+
+                    for (branchId in projectsData[projectId].branches) {
+                        if (projectsData[projectId].branches.hasOwnProperty(branchId)) {
+                            branchPromises.push(getBranchPromise(projectId, branchId,
+                                projectsData[projectId].branches[branchId]));
                         }
                     }
                 }
             }
 
-            if (self.requestedSelection) {
-                self.selectBranch(self.requestedSelection);
-                self.requestedSelection = null;
-            } else {
-                self.update();
-            }
+            Q.all(branchPromises)
+                .then(function (results) {
+
+                    results.forEach(function (result) {
+                        self.addBranch(result.projectId, result.branchId, result, true);
+                    });
+
+                    if (self.requestedSelection) {
+                        self.selectBranch(self.requestedSelection);
+                        self.requestedSelection = null;
+                    } else {
+                        self.update();
+                    }
+
+                    callback(null);
+                })
+                .catch(function (err) {
+                    callback(err);
+                });
         });
     };
 
-    ProjectNavigatorController.prototype.addProject = function (projectId, rights, noUpdate) {
+    ProjectNavigatorController.prototype.addProject = function (projectId, rights, info, noUpdate, callback) {
         var self = this,
             i,
             showHistory,
             showAllBranches,
             deleteProject,
+            transferProject,
             selectProject,
-            refreshPage,
-            updateProjectList;
+            updateProjectList,
+            projectDisplayedName;
 
         rights = rights || {
-            delete: true,
-            read: true,
-            write: true
-        };
+                delete: true,
+                read: true,
+                write: true
+            };
 
         if (self.gmeClient) {
+
+            updateProjectList = function () {
+                self.updateProjectList.call(self);
+            };
+
             showHistory = function (data) {
+                self.showHistory(data);
+            };
+
+            deleteProject = function (data) {
+                var deleteProjectModal = new ConfirmDeleteDialog();
+                deleteProjectModal.show({deleteItem: data.projectId}, function () {
+                    self.gmeClient.deleteProject(data.projectId, function (err) {
+                        if (err) {
+                            self.logger.error('Failed deleting project', err);
+                        } else {
+                            if (data.projectId === self.gmeClient.getActiveProjectId()) {
+                                self.refreshPage();
+                            } else {
+                                self.removeProject(data.projectId);
+                            }
+                        }
+                    });
+                });
+            };
+
+            transferProject = function (data) {
+                var dialog = new ProjectRightsDialog(self.gmeClient, self.logger);
+                dialog.show({projectId: data.projectId});
+            };
+
+            showAllBranches = function (data) {
                 var prd;
-                if (self.gmeClient.getActiveProjectName() === data.projectId) {
-                    prd = new ProjectRepositoryDialog(self.gmeClient);
+                if (self.gmeClient.getActiveProjectId() === data.projectId) {
+                    prd = new BranchesDialog(self.gmeClient);
                     prd.show();
                 } else {
                     self.selectProject({projectId: projectId}, function (err) {
-                        var dialog = new ProjectRepositoryDialog(self.gmeClient);
+                        var dialog = new BranchesDialog(self.gmeClient);
 
                         if (err) {
                             // TODO: handle errors
@@ -343,46 +501,6 @@ define([
                         dialog.show();
                     });
                 }
-            };
-
-            refreshPage = function () {
-                document.location.href = window.location.href.split('?')[0];
-            };
-
-            updateProjectList = function () {
-                self.updateProjectList.call(self);
-            };
-
-            deleteProject = function (data) {
-                var deleteProjectModal;
-
-                self.$scope.thingName = 'project "' + data.projectId + '"';
-
-                deleteProjectModal = self.$simpleDialog.open({
-                    dialogTitle: 'Confirm delete',
-                    dialogContentTemplate: 'DeleteDialogTemplate.html',
-                    onOk: function () {
-                        var activeProjectId = self.gmeClient.getActiveProjectName();
-
-                        self.gmeClient.deleteProjectAsync(data.projectId, function (err) {
-                            if (err) {
-                                self.logger.error(err);
-                            } else {
-
-                                if (data.projectId === activeProjectId) {
-                                    refreshPage();
-                                }
-
-                            }
-                        });
-                    },
-                    scope: self.$scope
-                });
-
-            };
-
-            showAllBranches = function (data) {
-                self.logger.error('showAllBranches: gmeClient version is not implemented yet.', data);
             };
         } else {
             // test version
@@ -403,13 +521,18 @@ define([
             self.selectProject(data);
         };
 
+        projectDisplayedName = StorageUtil.getProjectDisplayedNameFromProjectId(projectId);
+
         // create a new project object
         self.projects[projectId] = {
             id: projectId,
-            label: projectId,
+            label: projectDisplayedName,
             iconClass: rights.write ? '' : 'glyphicon glyphicon-lock',
             iconPullRight: !rights.write,
+            projectIsReadOnly: !rights.write,
             disabled: !rights.read,
+            itemClass: self.config.projectMenuClass,
+            modifiedAt: info.modifiedAt,
             isSelected: false,
             branches: {},
             action: selectProject,
@@ -421,18 +544,8 @@ define([
                     id: 'top',
                     items: [
                         {
-                            id: 'deleteProject',
-                            label: 'Delete project',
-                            iconClass: 'glyphicon glyphicon-remove',
-                            disabled: !rights.delete,
-                            action: deleteProject,
-                            actionData: {
-                                projectId: projectId
-                            }
-                        },
-                        {
                             id: 'showHistory',
-                            label: 'Show history',
+                            label: 'Project history ...',
                             iconClass: 'glyphicon glyphicon-time',
                             disabled: !rights.read,
                             action: showHistory,
@@ -440,7 +553,6 @@ define([
                                 projectId: projectId
                             }
                         }
-
                     ]
                 },
                 {
@@ -449,14 +561,66 @@ define([
                     totalItems: 20,
                     items: [],
                     showAllItems: function () {
-                        showHistory({projectId: projectId});
+                        showAllBranches({projectId: projectId});
                     }
                 }
-            ]
+            ],
+            _watcher: function (emitter, data) {
+                var currentProject,
+                    currentBranch;
+                self.logger.debug('watchProject event', projectId, data);
+                if (data.etype === CONSTANTS.CLIENT.STORAGE.BRANCH_CREATED) {
+                    self.addBranch(projectId, data.branchName, {branchHash: data.newHash});
+                } else if (data.etype === CONSTANTS.CLIENT.STORAGE.BRANCH_DELETED) {
+                    self.removeBranch(projectId, data.branchName);
+
+                    currentProject = self.$scope.navigator.items[self.navIdProject];
+                    currentBranch = self.$scope.navigator.items[self.navIdBranch];
+                    if (currentBranch && currentBranch.id === data.branchName && currentProject.id === projectId) {
+                        self.gmeClient.selectCommit(self.gmeClient.getActiveCommitHash(), function (err) {
+                            if (err) {
+                                self.logger.error('cannot select latest commit', {metadata: {error: err}});
+                            }
+                            self.logger.debug('active branch deleted, switched to last viewed commit',
+                                {metadata: {commitHash: self.gmeClient.getActiveCommitHash()}});
+                        });
+                    }
+                } else if (data.etype === CONSTANTS.CLIENT.STORAGE.BRANCH_HASH_UPDATED) {
+                    self.updateBranch(projectId, data.branchName, data.newHash);
+                } else {
+                    self.logger.error('Unexpected event type', data.etype);
+                }
+            }
         };
 
-        if (!self.gmeClient) {
+        if (self.config.disableProjectActions === false) {
+            self.projects[projectId].menu[0].items.unshift({
+                id: 'transferProject',
+                label: 'Transfer project',
+                iconClass: 'glyphicon glyphicon-transfer',
+                disabled: !rights.delete,
+                action: transferProject,
+                actionData: {
+                    projectId: projectId
+                }
+            });
+            self.projects[projectId].menu[0].items.unshift({
+                id: 'deleteProject',
+                label: 'Delete project',
+                iconClass: 'glyphicon glyphicon-remove',
+                disabled: !rights.delete,
+                action: deleteProject,
+                actionData: {
+                    projectId: projectId
+                }
+            });
+        }
+
+        if (self.gmeClient) {
+            self.gmeClient.watchProject(projectId, self.projects[projectId]._watcher, callback);
+        } else {
             self.dummyBranchGenerator('Branch', 10, projectId);
+            callback(null);
         }
 
         for (i = 0; i < self.root.menu.length; i += 1) {
@@ -465,7 +629,8 @@ define([
             if (self.root.menu[i].id === 'projects') {
 
                 // convert indexed projects to an array
-                self.root.menu[i].items = self.mapToArray(self.projects, ['name', 'id']);
+                self.root.menu[i].items = self.mapToArray(self.projects, [
+                    {key: 'modifiedAt', reverse: true}, {key: 'id'}]);
                 break;
             }
         }
@@ -483,10 +648,14 @@ define([
             selectBranch,
             exportBranch,
             createBranch,
+            showBranchHistory,
             deleteBranch,
+            mergeBranch,
             createCommitMessage,
 
             deleteBranchItem,
+            mergeBranchItem,
+            applyCommitQueueItem,
             undoLastCommitItem,
             redoLastUndoItem;
 
@@ -502,45 +671,71 @@ define([
 
         if (self.gmeClient) {
             exportBranch = function (data) {
-                var url = self.gmeClient.getDumpURL({
-                    project: data.projectId,
-                    branch: data.branchId,
-                    output: data.projectId + '_' + data.branchId
-                });
-
-                if (url) {
-                    window.location = url;
-                } else {
-                    self.logger.error('Failed to get project dump url for ', data);
-                }
+                // By default the export contains assets.
+                self.gmeClient.exportProjectToFile(self.gmeClient.getActiveProjectId(),
+                    self.gmeClient.getActiveBranchName(),
+                    self.gmeClient.getActiveCommitHash(), true, function (err, result) {
+                        if (err) {
+                            self.logger.error('unable to save project', err);
+                        } else {
+                            saveToDisk.saveUrlToDisk(result.downloadUrl);
+                        }
+                    }
+                );
             };
 
-            createBranch = function (/*data*/) {
-                var prd = new ProjectRepositoryDialog(self.gmeClient);
-                prd.show();
+            showBranchHistory = createBranch = function (data) {
+                self.showHistory(data);
             };
 
             deleteBranch = function (data) {
-                var deleteBranchModal;
-
-                self.$scope.thingName = 'branch "' + data.branchId + '"';
-
-                deleteBranchModal = self.$simpleDialog.open({
-                    dialogTitle: 'Confirm delete',
-                    dialogContentTemplate: 'DeleteDialogTemplate.html',
-                    onOk: function () {
-                        self.gmeClient.deleteGenericBranchAsync(data.projectId,
-                            data.branchId,
-                            data.branchInfo,
-                            function (err) {
-                                if (err) {
-                                    self.logger.error(err);
-                                }
-                            });
-                    },
-                    scope: self.$scope
+                var deleteBranchModal = new ConfirmDeleteDialog(),
+                    deleteItem = StorageUtil.getProjectDisplayedNameFromProjectId(data.projectId) +
+                        '  ::  ' + data.branchId;
+                deleteBranchModal.show({deleteItem: deleteItem}, function () {
+                    self.gmeClient.deleteBranch(data.projectId,
+                        data.branchId,
+                        data.branchInfo.branchHash,
+                        function (err) {
+                            if (err) {
+                                self.logger.error('Failed deleting branch of project.',
+                                    data.projectId, data.branchId, err);
+                            } else {
+                                self.removeBranch(data.projectId, data.branchId);
+                            }
+                        }
+                    );
                 });
 
+            };
+
+            mergeBranch = function (data) {
+                if (data.projectId !== self.gmeClient.getActiveProjectId()) {
+                    // TODO: Should we use some notification here?
+                    // TODO: e.g. notification-footer or maybe the $.notify..
+                    self.logger.error(new Error('Cannot merge branch from a different project..'));
+                } else {
+                    self.gmeClient.autoMerge(data.projectId,
+                        data.branchId, self.$scope.navigator.items[self.navIdBranch].id,
+                        function (err, result) {
+                            var mergeDialog = new MergeDialog(self.gmeClient);
+                            if (err) {
+                                self.logger.error('merge of branch failed', err);
+                                mergeDialog.show(err);
+                                return;
+                            }
+
+                            if (result && result.conflict && result.conflict.items.length > 0) {
+                                //TODO create some user-friendly way to show this type of result
+                                self.logger.error('merge ended in conflicts', result);
+                                mergeDialog.show('merge ended in conflicts', result);
+                            } else {
+                                self.logger.debug('successful merge');
+                                mergeDialog.show(null, result);
+                            }
+                        }
+                    );
+                }
             };
 
             createCommitMessage = function (data) {
@@ -568,23 +763,12 @@ define([
             };
 
             deleteBranch = function (data) {
-                var deleteBranchModal;
+                var deleteBranchModal = new ConfirmDeleteDialog(),
+                    deleteItem = StorageUtil.getProjectDisplayedNameFromProjectId(data.projectId) +
+                        '  -  ' + data.branchId;
 
-                self.logger.debug('delete branch');
-
-                self.$scope.thingName = data.branchId;
-
-                deleteBranchModal = self.$simpleDialog.open({
-                    dialogTitle: 'Confirm delete',
-                    dialogContentTemplate: 'DeleteDialogTemplate.html',
-                    onOk: function () {
-                        self.removeBranch(data.projectId, data.branchId);
-                        //self.selectProject( data );
-                        // you cannot delete the actual branch so there is no need for re-selection
-                    },
-                    scope: self.$scope
+                deleteBranchModal.show({deleteItem: deleteItem}, function () {
                 });
-
             };
 
             createCommitMessage = function (data) {
@@ -596,17 +780,58 @@ define([
             self.selectBranch(data);
         };
 
-
         deleteBranchItem = {
             id: 'deleteBranch',
             label: 'Delete branch',
             iconClass: 'glyphicon glyphicon-remove',
-            disabled: false,
+            disabled: self.projects[projectId].projectIsReadOnly,
             action: deleteBranch,
             actionData: {
                 projectId: projectId,
                 branchId: branchId,
                 branchInfo: branchInfo
+            }
+        };
+
+        mergeBranchItem = {
+            id: 'mergeBranch',
+            label: 'Merge into current branch',
+            iconClass: 'fa fa-share-alt fa-rotate-90',
+            disabled: self.projects[projectId].projectIsReadOnly,
+            action: mergeBranch,
+            actionData: {
+                projectId: projectId,
+                branchId: branchId
+            }
+        };
+
+        applyCommitQueueItem = {
+            id: 'applyCommitQueue',
+            label: 'Apply commit queue ...',
+            iconClass: 'glyphicon glyphicon-fast-forward',
+            disabled: true,
+            action: function (data) {
+                self.gmeClient.getBranches(data.projectId, function (err, branches) {
+                    if (err) {
+                        self.logger.error(new Error('Failed getting branches before applying commitQueue'));
+                        return;
+                    }
+
+                    var dialog = new ApplyCommitQueueDialog(self.gmeClient, WebGMEGlobal.gmeConfig, branches);
+                    dialog.show(data, function (commitQueue, opts) {
+                        self.gmeClient.applyCommitQueue(commitQueue, opts, function (err, result) {
+                            if (err) {
+                                self.logger.error(err);
+                            }
+
+                            self.logger.debug('applyCommitQueue results', result);
+                        });
+                    });
+                });
+            },
+            actionData: {
+                projectId: projectId,
+                branchName: branchId
             }
         };
 
@@ -649,11 +874,11 @@ define([
             id: branchId,
             label: branchId,
             properties: {
-                hashTag: branchInfo || '#1234567890',
-                lastCommiter: 'petike',
-                lastCommitTime: new Date()
+                commitHash: branchInfo.branchHash,
+                commitObject: branchInfo.commitObject || {time: Date.now()}
             },
             isSelected: false,
+            itemClass: self.config.branchMenuClass,
             action: selectBranch,
             actionData: {
                 projectId: projectId,
@@ -666,10 +891,20 @@ define([
                         undoLastCommitItem,
                         redoLastUndoItem,
                         {
+                            id: 'branchHistory',
+                            label: 'Branch history ...',
+                            iconClass: 'glyphicon glyphicon-time',
+                            action: showBranchHistory,
+                            actionData: {
+                                projectId: projectId,
+                                branchId: branchId,
+                                branchInfo: branchInfo
+                            }
+                        },
+                        {
                             id: 'createBranch',
-                            label: 'Create branch',
+                            label: 'Create branch ...',
                             iconClass: 'glyphicon glyphicon-plus',
-//                            disabled: true,
                             action: createBranch,
                             actionData: {
                                 projectId: projectId,
@@ -678,6 +913,8 @@ define([
                             }
                         },
                         deleteBranchItem,
+                        mergeBranchItem,
+                        applyCommitQueueItem,
                         {
                             id: 'exportBranch',
                             label: 'Export branch',
@@ -685,7 +922,8 @@ define([
                             action: exportBranch,
                             actionData: {
                                 projectId: projectId,
-                                branchId: branchId
+                                branchId: branchId,
+                                commitHash: branchInfo.branchHash
                             }
                         }
                     ]
@@ -695,8 +933,10 @@ define([
         };
 
         self.projects[projectId].branches[branchId].deleteBranchItem = deleteBranchItem;
+        self.projects[projectId].branches[branchId].mergeBranchItem = mergeBranchItem;
         self.projects[projectId].branches[branchId].undoLastCommitItem = undoLastCommitItem;
         self.projects[projectId].branches[branchId].redoLastUndoItem = redoLastUndoItem;
+        self.projects[projectId].branches[branchId].applyCommitQueueItem = applyCommitQueueItem;
 
         for (i = 0; i < self.projects[projectId].menu.length; i += 1) {
 
@@ -705,7 +945,7 @@ define([
 
                 // convert indexed branches to an array
                 self.projects[projectId].menu[i].items = self.mapToArray(self.projects[projectId].branches,
-                    ['name', 'id']);
+                    [{key: 'properties.commitObject.time', reverse: true}, {key: 'id'}]);
                 break;
             }
         }
@@ -722,6 +962,7 @@ define([
             i;
 
         if (self.projects.hasOwnProperty(projectId)) {
+            self.gmeClient.unwatchProject(projectId, self.projects[projectId]._watcher);
             delete self.projects[projectId];
 
             for (i = 0; i < self.root.menu.length; i += 1) {
@@ -730,13 +971,14 @@ define([
                 if (self.root.menu[i].id === 'projects') {
 
                     // convert indexed projects to an array
-                    self.root.menu[i].items = self.mapToArray(self.projects);
+                    self.root.menu[i].items = self.mapToArray(self.projects, [
+                        {key: 'modifiedAt', reverse: true}, {key: 'id'}]);
                     break;
                 }
             }
 
-            if (projectId === self.gmeClient.getActiveProjectName()) {
-                self.selectProject({}); // redundant, we reload the entire page in postDelete
+            if (projectId === self.gmeClient.getActiveProjectId()) {
+                self.refreshPage();
             }
 
             self.update();
@@ -756,7 +998,8 @@ define([
                 if (self.projects[projectId].menu[i].id === 'branches') {
 
                     // convert indexed branches to an array
-                    self.projects[projectId].menu[i].items = self.mapToArray(self.projects[projectId].branches);
+                    self.projects[projectId].menu[i].items = self.mapToArray(self.projects[projectId].branches,
+                        [{key: 'properties.commitObject.time', reverse: true}, {key: 'id'}]);
                     break;
                 }
             }
@@ -777,8 +1020,14 @@ define([
             currentBranch = self.$scope.navigator.items[self.navIdBranch];
 
         callback = callback || function () {
-        };
+            };
 
+        //check if there is need for a change at all
+        if (currentProject && currentProject.id === projectId && currentBranch &&
+            (currentBranch.id === branchId || branchId === undefined || branchId === '')) {
+            callback(null);
+            return;
+        }
         // clear current selection
         if (currentProject) {
             currentProject.isSelected = false;
@@ -787,12 +1036,22 @@ define([
         if (currentBranch) {
             currentBranch.isSelected = false;
             currentBranch.deleteBranchItem.disabled = false;
+            currentBranch.mergeBranchItem.disabled = false;
+
+            currentBranch.undoLastCommitItem.disabled = true;
+            currentBranch.redoLastUndoItem.disabled = true;
+            currentBranch.applyCommitQueueItem.disabled = true;
+
+            if (currentProject && currentProject.projectIsReadOnly) {
+                currentBranch.deleteBranchItem.disabled = true;
+                currentBranch.mergeBranchItem.disabled = true;
+            }
         }
 
         if (projectId || projectId === '') {
             if (self.projects.hasOwnProperty(projectId) === false) {
                 self.logger.warn(projectId +
-                ' does not exist yet in the navigation bar, requesting selection to be loaded.');
+                    ' does not exist yet in the navigation bar, requesting selection to be loaded.');
                 self.requestedSelection = data;
                 // let's update the project list, in case the server did not notify us.
                 this.updateProjectList();
@@ -809,6 +1068,7 @@ define([
                 if (currentBranch) {
                     currentBranch.isSelected = true;
                     currentBranch.deleteBranchItem.disabled = true;
+                    currentBranch.mergeBranchItem.disabled = true;
                 }
 
                 return;
@@ -821,16 +1081,17 @@ define([
             self.projects[projectId].isSelected = true;
 
             if (self.gmeClient) {
-                if (projectId !== self.gmeClient.getActiveProjectName()) {
-                    self.gmeClient.selectProjectAsync(projectId, function (err) {
+                if (projectId !== self.gmeClient.getActiveProjectId()) {
+                    self.gmeClient.selectProject(projectId, null, function (err) {
                         if (err) {
                             self.logger.error(err);
                             callback(err);
                             return;
                         }
+                        //WebGMEGlobal.State.registerActiveObject(CONSTANTS.PROJECT_ROOT_ID);
 
-                        if (branchId && branchId !== self.gmeClient.getActualBranch()) {
-                            self.gmeClient.selectBranchAsync(branchId, function (err) {
+                        if (branchId && branchId !== self.gmeClient.getActiveBranchName()) {
+                            self.gmeClient.selectBranch(branchId, null, function (err) {
                                 if (err) {
                                     self.logger.error(err);
                                     callback(err);
@@ -865,10 +1126,15 @@ define([
                 self.projects[projectId].branches[branchId].isSelected = true;
 
                 self.projects[projectId].branches[branchId].deleteBranchItem.disabled = true;
+                self.projects[projectId].branches[branchId].mergeBranchItem.disabled = true;
+
+                if (self.projects[projectId].projectIsReadOnly === false) {
+                    self.projects[projectId].branches[branchId].applyCommitQueueItem.disabled = false;
+                }
 
                 if (self.gmeClient) {
-                    if (branchId !== self.gmeClient.getActualBranch()) {
-                        self.gmeClient.selectBranchAsync(branchId, function (err) {
+                    if (branchId !== self.gmeClient.getActiveBranchName()) {
+                        self.gmeClient.selectBranch(branchId, null, function (err) {
                             if (err) {
                                 self.logger.error(err);
                                 callback(err);
@@ -900,9 +1166,8 @@ define([
             this.projects[projectId].branches.hasOwnProperty(branchId)) {
 
             this.projects[projectId].branches[branchId].properties = {
-                hashTag: branchInfo || '#1234567890',
-                lastCommiter: 'petike',
-                lastCommitTime: new Date()
+                commitHash: branchInfo,
+                commitObject: null
             };
 
             this.update();
@@ -935,10 +1200,9 @@ define([
                 }
             }
 
-            self.addProject(id, rights);
+            self.addProject(id, rights, {});
         }
     };
-
 
     ProjectNavigatorController.prototype.dummyBranchGenerator = function (name, maxCount, projectId) {
         var self = this,
@@ -965,25 +1229,100 @@ define([
 
         values.sort(function (a, b) {
             var i,
+                reverse,
+                keys,
+                subA,
+                subB,
+                res = 0,
                 key;
 
             for (i = 0; i < orderBy.length; i += 1) {
-                key = orderBy[i];
-                if (a.hasOwnProperty(key) && b.hasOwnProperty(key)) {
-                    if (a[key] > b[key]) {
-                        return 1;
+                keys = orderBy[i].key.split('.');
+                reverse = orderBy[i].reverse === true ? -1 : 1;
+                key = keys.shift();
+                subA = a;
+                subB = b;
+
+                while (key) {
+                    if (subA === null || subB === null || typeof subA !== 'object' || typeof subB !== 'object') {
+                        break;
                     }
-                    if (a[key] < b[key]) {
-                        return -1;
+
+                    if (subA.hasOwnProperty(key) && subB.hasOwnProperty(key)) {
+                        if (keys.length === 0) {
+                            if (subA[key] > subB[key]) {
+                                res = 1 * reverse;
+                            }
+                            if (subA[key] < subB[key]) {
+                                res = -1 * reverse;
+                            }
+                            break;
+                        } else {
+                            subA = subA[key];
+                            subB = subB[key];
+                            key = keys.shift();
+                        }
+                    } else {
+                        // Move over to the i;
+                        break;
                     }
+                }
+                if (res !== 0) {
+                    break;
                 }
             }
 
             // a must be equal to b
-            return 0;
+            return res;
         });
 
         return values;
+    };
+
+    ProjectNavigatorController.prototype.showHistory = function (data) {
+        var self = this,
+            prd,
+            options = {
+                start: null,
+                branches: null
+            };
+
+        if (self.gmeClient.getActiveProjectId() === data.projectId) {
+            prd = new ProjectRepositoryDialog(self.gmeClient);
+            options.branches = Object.keys(self.projects[data.projectId].branches);
+            options.start = data.branchId || options.branches;
+            prd.show(options);
+        } else {
+            self.selectProject({projectId: data.projectId}, function (err) {
+                if (err) {
+                    self.logger.error('Could not show history', err);
+                    return;
+                }
+                prd = new ProjectRepositoryDialog(self.gmeClient);
+                options.branches = Object.keys(self.projects[data.projectId].branches);
+                options.start = data.branchId || options.branches;
+
+                prd.show(options);
+            });
+        }
+    };
+
+    ProjectNavigatorController.prototype.refreshPage = function () {
+        document.location.href = window.location.href.split('?')[0];
+    };
+
+    ProjectNavigatorController.getComponentId = function () {
+        return 'GenericUIProjectNavigatorController';
+    };
+
+    ProjectNavigatorController.getDefaultConfig = function () {
+        return {
+            disableProjectActions: false,
+            rootMenuClass: 'gme-root',
+            rootDisplayName: 'GME',
+            projectMenuClass: '',
+            branchMenuClass: ''
+        };
     };
 
     return ProjectNavigatorController;

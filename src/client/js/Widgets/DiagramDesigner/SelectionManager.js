@@ -33,6 +33,8 @@ define([
 
         this._selectedElements = [];
         this._rotationEnabled = true;
+        this._alignEnabled = true;
+        this._openEnabled = true;
 
         this.logger.debug('SelectionManager ctor finished');
     };
@@ -50,10 +52,10 @@ define([
         //enable SelectionManager specific DOM event listeners
         var self = this;
 
-        this._diagramDesigner.onItemMouseDown = function (itemId, eventDetails) {
+        this._diagramDesigner.onItemMouseDown = function (itemId, eventDetails, mouseMoved) {
             if (self._diagramDesigner.mode === self._diagramDesigner.OPERATING_MODES.READ_ONLY ||
                 self._diagramDesigner.mode === self._diagramDesigner.OPERATING_MODES.DESIGN) {
-                self._setSelection([itemId], self._isMultiSelectionModifierKeyPressed(eventDetails));
+                self._setSelection([itemId], self._isMultiSelectionModifierKeyPressed(eventDetails), mouseMoved);
             }
         };
 
@@ -326,17 +328,27 @@ define([
 
 
     /*********************** SET SELECTION *********************************/
-    SelectionManager.prototype._setSelection = function (idList, addToExistingSelection) {
-        var i,
+    SelectionManager.prototype._setSelection = function (idList, addToExistingSelection, mouseMoved) {
+        var self = this,
+            i,
             len = idList.length,
             item,
             items = this._diagramDesigner.items,
             itemId,
-            changed = false;
+            changed = false,
+            selectionCount = len,
+            onceRendered = function(item) {
+                if (idList.indexOf(item.id) > -1) {
+                    if (--selectionCount === 0) {
+                        // Update the selection box
+                        self.showSelectionOutline();
+                    }
+                }
+            };
 
         this.logger.debug('setSelection: ' + idList + ', addToExistingSelection: ' + addToExistingSelection);
 
-        if (len > 0) {
+        if (len > 0 && !mouseMoved) {
             // Check if the new selection has to be added to the existing selection.
             if (addToExistingSelection === true) {
                 // If not in the selection yet, add IDs to the selection.
@@ -352,7 +364,7 @@ define([
                     }
 
                     if ($.isFunction(item.onSelect)) {
-                        item.onSelect(true);
+                        item.onSelect(true, onceRendered);
                     }
                 }
 
@@ -368,7 +380,7 @@ define([
                         item = items[itemId];
 
                         if ($.isFunction(item.onSelect)) {
-                            item.onSelect(len > 1);
+                            item.onSelect(len > 1, onceRendered);
                         }
 
                         changed = true;
@@ -389,7 +401,7 @@ define([
                 if (this._selectedElements.length === 1) {
                     item = items[this._selectedElements[0]];
                     if ($.isFunction(item.onSelect)) {
-                        item.onSelect(false);
+                        item.onSelect(false, onceRendered);
                     }
                 }
             } else {
@@ -407,7 +419,7 @@ define([
                         this._selectedElements.push(itemId);
 
                         if ($.isFunction(item.onSelect)) {
-                            item.onSelect(true);
+                            item.onSelect(true, onceRendered);
                         }
                     }
                 } else {
@@ -422,7 +434,7 @@ define([
                         item = items[itemId];
 
                         if ($.isFunction(item.onSelect)) {
-                            item.onSelect(false);
+                            item.onSelect(false, onceRendered);
                         }
 
                         changed = true;
@@ -433,8 +445,6 @@ define([
 
 
         this.logger.debug('selected elements: ' + this._selectedElements);
-
-        this.showSelectionOutline();
 
         if (changed) {
             this.onSelectionChanged(this._selectedElements);
@@ -583,13 +593,13 @@ define([
         class: 's-btn delete',
         command: 'delete'
     });
-    DELETE_BUTTON_BASE.html('<i class="glyphicon glyphicon-remove"></i>');
+    DELETE_BUTTON_BASE.html('<i class="glyphicon glyphicon-remove" title="Delete"></i>');
 
     var CONTEXT_MENU_BUTTON_BASE = $('<div/>', {
         class: 's-btn contextmenu',
         command: 'contextmenu'
     });
-    CONTEXT_MENU_BUTTON_BASE.html('<i class="glyphicon glyphicon-list"></i>');
+    CONTEXT_MENU_BUTTON_BASE.html('<i class="glyphicon glyphicon-list" title="Action Menu"></i>');
 
     var MOVE_BUTTON_BASE = $('<div/>', {
         class: 's-btn move',
@@ -597,23 +607,42 @@ define([
     });
     MOVE_BUTTON_BASE.html('<i class="glyphicon glyphicon-move"></i>');
 
+    var OPEN_BUTTON_BASE = $('<div/>', {
+        class: 's-btn open',
+        command: 'open'
+    });
+    OPEN_BUTTON_BASE.html('<i class="glyphicon glyphicon-circle-arrow-down" title="Open"></i>');
+
+    var ALIGN_BUTTON_BASE = $('<div/>', {
+        class: 's-btn align',
+        command: 'align'
+    });
+    ALIGN_BUTTON_BASE.html('<i class="glyphicon glyphicon-th" title="Align Menu"></i>');
+
     SelectionManager.prototype._renderSelectionActions = function () {
         var self = this,
             deleteBtn,
+            openBtn,
             contextMenuBtn,
-            moveBtn;
-
-        if (this._diagramDesigner.getIsReadOnlyMode() === true) {
-            return;
-        }
+            alignBtn;
 
         if (this._diagramDesigner.getIsReadOnlyMode() !== true) {
             deleteBtn = DELETE_BUTTON_BASE.clone();
             this._diagramDesigner.skinParts.$selectionOutline.append(deleteBtn);
 
-            moveBtn = MOVE_BUTTON_BASE.clone();
-            this._diagramDesigner.skinParts.$selectionOutline.append(moveBtn);
-            this._diagramDesigner._makeDraggable({$el: moveBtn});
+            // FIXME: There is an issue with the x and y offset, try it with zoom and scroll, too.
+            // moveBtn = MOVE_BUTTON_BASE.clone();
+            // this._diagramDesigner.skinParts.$selectionOutline.append(moveBtn);
+            // this._diagramDesigner._makeDraggable({$el: moveBtn});
+            if (this._alignEnabled === true) {
+                alignBtn = ALIGN_BUTTON_BASE.clone();
+                this._diagramDesigner.skinParts.$selectionOutline.append(alignBtn);
+            }
+        }
+
+        if (this._openBtnEnabled === true && this._selectedElements.length === 1) {
+            openBtn = OPEN_BUTTON_BASE.clone();
+            this._diagramDesigner.skinParts.$selectionOutline.append(openBtn);
         }
 
         //context menu
@@ -643,13 +672,21 @@ define([
         });
 
     ROTATION_BUTTON_BASE.html('' +
-    '<i class="glyphicon glyphicon-repeat"><div class="popover right nowrap rotate-options">' +
+    '<i class="glyphicon glyphicon-repeat">' +
+    '<div class="popover right nowrap rotate-options">' +
     '<div class="arrow"></div><div class="popover-content narrow"><div class="btn-group">' +
-    '<a class="btn btn-small" id="rotate-left" title="Rotate left">' +
-    '<i class="glyphicon glyphicon-repeat flip-vertical"></i></a>' +
-    '<a class="btn  btn-small" id="rotate-right" title="Rotate right"><i class="glyphicon glyphicon-repeat"></i>' +
-    '</a><a class="btn  btn-small" id="rotate-reset" title="Reset rotation">' +
-    '<i class="glyphicon glyphicon-remove"></i></a></div></div></div></i>');
+    '<a class="btn btn-small" id="rotate-left" title="Rotate left by 90°">' +
+    '<i class="glyphicon glyphicon-repeat flip-vertical" id="icon-rotate-left"></i></a>' +
+    '<a class="btn  btn-small" id="rotate-right" title="Rotate right by 90°">' +
+    '<i class="glyphicon glyphicon-repeat" id="icon-rotate-right"></i></a>' +
+    '<a class="btn btn-small" id="rotate-toleft" title="Rotate left to the closest multiple of 90°">' +
+    '<i class="glyphicon glyphicon-retweet flip-vertical" id="icon-rotate-toleft"></i></a>' +
+    '<a class="btn  btn-small" id="rotate-toright" title="Rotate right to the closest multiple of 90°">' +
+    '<i class="glyphicon glyphicon-retweet" id="icon-rotate-toright"></i></a>' +
+    '<a class="btn  btn-small" id="rotate-reset" title="Set rotation to 0°">' +
+    '<i class="glyphicon glyphicon-minus" id="icon-rotate-reset"></i></a>' +
+    '<a class="btn  btn-small" id="rotate-clear" title="Clear rotation information - reset to inherited">' +
+    '<i class="glyphicon glyphicon-remove" id="icon-rotate-clear"></i></a></div></div></div></i>');
 
     var ROTATION_DEGREE_BASE = $('<div/>', {
         class: 'rotation-deg'
@@ -671,12 +708,15 @@ define([
             this._diagramDesigner.skinParts.$selectionOutline.on('mousedown.' + MOUSE_EVENT_POSTFIX, '.rotate',
                 function (event) {
                     var rotateBtn = $(this);
-                    self.logger.debug('selection rotate button mousedown');
+                    if ($(event.target).attr('id') === undefined) {
+                        self.logger.debug('selection rotate button mousedown');
 
-                    self._startSelectionRotate(rotateBtn, event);
+                        self._startSelectionRotate(rotateBtn, event);
 
-                    event.stopPropagation();
-                    event.preventDefault();
+                        event.stopPropagation();
+                        event.preventDefault();
+                    }
+
                 }
             );
 
@@ -702,6 +742,15 @@ define([
                         break;
                     case DiagramDesignerWidgetConstants.ROTATION_RESET:
                         deg = DiagramDesignerWidgetConstants.ROTATION_RESET;
+                        break;
+                    case DiagramDesignerWidgetConstants.ROTATION_TOLEFT:
+                        deg = DiagramDesignerWidgetConstants.ROTATION_TOLEFT;
+                        break;
+                    case DiagramDesignerWidgetConstants.ROTATION_TORIGHT:
+                        deg = DiagramDesignerWidgetConstants.ROTATION_TORIGHT;
+                        break;
+                    case DiagramDesignerWidgetConstants.ROTATION_CLEAR:
+                        deg = DiagramDesignerWidgetConstants.ROTATION_CLEAR;
                         break;
                 }
 
@@ -753,7 +802,7 @@ define([
 
         this._rotateAngle = deg;
 
-        this._rotationDegree.html((deg >= 0 ? '+' : '') + deg + '°');
+        this._rotationDegree.html((deg >= 0 ? '+' : '') + deg + '&deg;');
 
         this._diagramDesigner.skinParts.$selectionOutline.css({
             'transform-origin': '50% 50%',
@@ -801,6 +850,18 @@ define([
     SelectionManager.prototype.enableRotation = function (enabled) {
         if (this._rotationEnabled !== enabled) {
             this._rotationEnabled = enabled;
+        }
+    };
+
+    SelectionManager.prototype.enableAlign = function (enabled) {
+        if (this._alignEnabled !== enabled) {
+            this._alignEnabled = enabled;
+        }
+    };
+
+    SelectionManager.prototype.enableOpenButton = function (enabled) {
+        if (this._openBtnEnabled !== enabled) {
+            this._openBtnEnabled = enabled;
         }
     };
 

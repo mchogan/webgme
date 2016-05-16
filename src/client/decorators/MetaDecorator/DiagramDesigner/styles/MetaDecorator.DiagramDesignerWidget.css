@@ -9,9 +9,9 @@
   text-align: center; }
   .meta-decorator .name {
     white-space: nowrap;
-    font-size: 9px;
+    font-size: 11px;
     font-weight: bold;
-    text-transform: uppercase;
+    font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;
     text-align: center;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -112,6 +112,14 @@
     width: 15px;
     margin-top: 2px;
     border-radius: 5px; }
+.meta-decorator .meta-lock {
+  position: absolute;
+  top: 0;
+  left: 1px;
+  height: 15px;
+  width: 15px;
+  margin-top: 2px;
+  border-radius: 5px; }
   .meta-decorator.abstract .name {
     font-style: italic;
     color: #aaaaaa; }

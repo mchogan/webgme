@@ -3,13 +3,8 @@
     "id": "ModelEditor",
     "title": "Composition",
     "panel": "js/Panels/ModelEditor/ModelEditorPanel",
-    "DEBUG_ONLY": false
-  },
-  {
-    "id": "Block Editor",
-    "title": "Block Editor",
-    "panel": "js/Panels/BlockEditor/BlockEditorPanel",
-    "DEBUG_ONLY": true
+    "DEBUG_ONLY": false,
+    "default": true
   },
   {
     "id": "METAAspect",

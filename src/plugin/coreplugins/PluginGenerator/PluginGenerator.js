@@ -5,115 +5,43 @@
  *
  * @author pmeijer / https://github.com/pmeijer
  * @author lattmann / https://github.com/lattmann
+ * @module CorePlugins:PluginGenerator
  */
 
 define([
     'plugin/PluginConfig',
     'plugin/PluginBase',
+    'text!./metadata.json',
     'common/util/ejs',
     'plugin/PluginGenerator/PluginGenerator/Templates/Templates'
-], function (PluginConfig, PluginBase, ejs, TEMPLATES) {
+], function (PluginConfig, PluginBase, pluginMetadata, ejs, TEMPLATES) {
     'use strict';
 
-    var PluginGeneratorPlugin = function () {
+    pluginMetadata = JSON.parse(pluginMetadata);
+
+    function PluginGenerator() {
         // Call base class's constructor
         PluginBase.call(this);
+
+        this.pluginMetadata = pluginMetadata;
+
         this.currentConfig = null;
         this.pluginDir = '';
         this.testDir = '';
         this.filesToAdd = {};
-    };
+    }
 
-    PluginGeneratorPlugin.prototype = Object.create(PluginBase.prototype);
+    PluginGenerator.metadata = pluginMetadata;
 
-    PluginGeneratorPlugin.prototype.constructor = PluginGeneratorPlugin;
+    // Prototypical inheritance from PluginBase.
+    PluginGenerator.prototype = Object.create(PluginBase.prototype);
+    PluginGenerator.prototype.constructor = PluginGenerator;
 
-    PluginGeneratorPlugin.prototype.getName = function () {
-        return 'Plugin Generator';
-    };
-
-    PluginGeneratorPlugin.prototype.getVersion = function () {
-        return '0.1.1';
-    };
-
-    PluginGeneratorPlugin.prototype.getConfigStructure = function () {
-        return [
-            {
-                name: 'pluginID',
-                displayName: 'Unique plugin identifier',
-                regex: '^(?!(?:do|if|in|for|let|new|try|var|case|else|enum|eval|false|null|this|true|void' +
-                '|with|break|catch|class|const|super|throw|while|yield|delete|export|import|public|return|' +
-                'static|switch|typeof|default|extends|finally|package|private|continue|debugger|function|' +
-                'arguments|interface|protected|implements|instanceof)$)[a-zA-Z_$][0-9a-zA-Z_$]*',
-                regexMessage: 'No spaces and special characters allowed. This value is used as the name of the ' +
-                'generated plugin class.',
-                description: 'Unique ID for the plugin.',
-                value: 'NewPlugin',
-                valueType: 'string',
-                readOnly: false
-            },
-            {
-                name: 'pluginName',
-                displayName: 'Name',
-                description: 'Short readable plugin name; spaces are allowed',
-                value: 'New Plugin',
-                valueType: 'string',
-                readOnly: false
-            },
-            {
-                name: 'description',
-                displayName: 'Description',
-                description: 'Optional description of the plugin.',
-                value: '',
-                valueType: 'string',
-                readOnly: false
-            },
-            {
-                name: 'test',
-                displayName: 'Include testing script',
-                description: 'Generate template for unit-tests.',
-                value: true,
-                valueType: 'boolean',
-                readOnly: false
-            },
-            {
-                name: 'templateType',
-                displayName: 'Example template',
-                description: 'Ejs template for code generation, also illustrates how to save' +
-                ' artifacts using the blobClient.',
-                value: 'None',
-                valueType: 'string',
-                valueItems: [
-                    'None',
-                    'JavaScript',
-                    'Python',
-                    'CSharp'
-                ],
-                readOnly: false
-            },
-            {
-                name: 'configStructure',
-                displayName: 'Include Configuration Structure.',
-                description: 'Configuration structure will populate this GUI with controls.',
-                value: false,
-                valueType: 'boolean',
-                readOnly: false
-            },
-            {
-                name: 'core',
-                displayName: 'Include core example',
-                description: '',
-                value: false,
-                valueType: 'boolean',
-                readOnly: false
-            }
-        ];
-    };
-
-    PluginGeneratorPlugin.prototype.main = function (callback) {
+    PluginGenerator.prototype.main = function (callback) {
         var self = this,
             pluginFileContent,
             pluginFileName,
+            metadataFileContent,
             dirCommon,
             i,
             nbrOfFiles,
@@ -129,6 +57,7 @@ define([
         // Update date, projectName and paths
         self.currentConfig.date = new Date();
         self.currentConfig.projectName = self.projectName;
+        self.currentConfig.version = self.getVersion();
         dirCommon = '/plugins/' + self.projectName + '/' + self.currentConfig.pluginID + '/';
         self.pluginDir = 'src' + dirCommon;
         self.testDir = 'test' + dirCommon;
@@ -139,12 +68,16 @@ define([
                 ejs.render(TEMPLATES['unit_test.js.ejs'], self.currentConfig);
         }
         self.addTemplateFile();
-        self.addMetaFile();
+        if (self.currentConfig.meta) {
+            self.addMetaFile();
+        }
         // Add the plugin file.
         pluginFileContent = ejs.render(TEMPLATES['plugin.js.ejs'], self.currentConfig);
         pluginFileName = self.pluginDir + self.currentConfig.pluginID + '.js';
         self.filesToAdd[pluginFileName] = pluginFileContent;
-
+        // Add the metadata.json
+        metadataFileContent = ejs.render(TEMPLATES['metadata.json.ejs'], self.currentConfig);
+        self.filesToAdd[self.pluginDir + 'metadata.json'] = metadataFileContent;
 
         // Add the file at the end.
         self.logger.info(JSON.stringify(self.filesToAdd, null, 4));
@@ -172,7 +105,7 @@ define([
                         self.createMessage(null, 'Append "' + './src/plugins/' + self.projectName +
                         '" to "pluginBasePaths" in config.js.');
                         self.createMessage(self.rootNode, 'Select the root-node and add ' +
-                        self.currentConfig.pluginID + ' to the validPlugins attribute (separate with spaces).');
+                        self.currentConfig.pluginID + ' to the validPlugins under the META tab (separate with spaces).');
                         if (self.currentConfig.test) {
                             self.createMessage(null, 'For the necessary test setup and more examples of how ' +
                             'to write tests see https://github.com/webgme/webgme-boilerplate.');
@@ -191,7 +124,7 @@ define([
         }
     };
 
-    PluginGeneratorPlugin.prototype.addMetaFile = function () {
+    PluginGenerator.prototype.addMetaFile = function () {
         var self = this,
             i,
             metaNodes = [],
@@ -215,11 +148,12 @@ define([
         metaNodes.sort(compare);
         self.filesToAdd[self.pluginDir + 'meta.js'] = ejs.render(TEMPLATES['meta.js.ejs'], {
             metaNodes: metaNodes,
-            date: self.currentConfig.date
+            date: self.currentConfig.date,
+            version: self.currentConfig.version
         });
     };
 
-    PluginGeneratorPlugin.prototype.addTemplateFile = function () {
+    PluginGenerator.prototype.addTemplateFile = function () {
         var self = this,
             fileName,
             fileContent;
@@ -244,9 +178,9 @@ define([
         if (self.currentConfig.templateType) {
             self.filesToAdd[fileName] = fileContent;
             self.filesToAdd[self.pluginDir + 'Templates/combine_templates.js'] =
-                ejs.render(TEMPLATES['combine_templates.js.ejs']);
+                ejs.render(TEMPLATES['combine_templates.js.ejs'], self.currentConfig);
         }
     };
 
-    return PluginGeneratorPlugin;
+    return PluginGenerator;
 });

@@ -77,6 +77,10 @@ define([
                     value: self.name,
                     onChange: function (oldValue, newValue) {
                         self.__onNodeTitleChanged(oldValue, newValue);
+                    },
+                    onFinish: function () {
+                        self.skinParts.$name.text(self.formattedName);
+                        self.skinParts.$name.attr('title', self.formattedName);
                     }
                 });
             }
@@ -469,14 +473,15 @@ define([
         }
     };
 
-    ModelDecoratorDiagramDesignerWidget.prototype.__onMouseUp = function (/*event*/) {
+    ModelDecoratorDiagramDesignerWidget.prototype.__onMouseUp = function (event) {
         if (this.__onDragOver) {
             // TODO: this is still questionable if we should hack the jQeuryUI 's
             // TODO: draggable&droppable and use half of it only
             this.__onBackgroundDrop($.ui.ddmanager.current.helper);
             this.__onDragOver = false;
-            // This sometimes brings up the dropdown menu for the canvas-drop (typically near the border of the ref).
-            this.hostDesignerItem.canvas._enableDroppable(true);
+
+            // Temporarily suppress the drop action (i.e. the drop select menu) of the canvas.
+            this.hostDesignerItem.canvas.acceptDropTempDisabled = true;
         }
     };
 
@@ -521,8 +526,8 @@ define([
                 }
 
                 menu = new ContextMenu({
-                    'items': menuItems,
-                    'callback': function (key) {
+                    items: menuItems,
+                    callback: function (key) {
                         self._navigateToPointerTarget(ptrTargets[key]);
                     }
                 });

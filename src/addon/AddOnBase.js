@@ -2,221 +2,222 @@
 /*jshint node:true*/
 
 /**
- * @author kecso / https://github.com/kecso
+ * This is the base class that add-ons should inherit from.
+ * (Using the AddOnGenerator - the generated add-on will do that.)
+ * @author pmeijer / https://github.com/pmeijer
  */
 
-define([], function () {
+define([
+    'addon/AddOnUpdateResult',
+    'common/storage/constants'
+], function (AddOnUpdateResult, STORAGE_CONSTANTS) {
     'use strict';
-    var AddOnBase = function (Core, storage, gmeConfig) {
-        this._Core = Core;
-        this._storage = storage;
-        this.gmeConfig = gmeConfig;
-        this.core = null;
-        this.logger = null;
-        this.project = null;
-        this.branchName = '';
-        this.projectName = '';
-        this.commit = null;
 
+    /**
+     * BaseClass for AddOns which run on the server and act upon changes in a branch.
+     * Use the AddOnGenerator to generate a new AddOn that implements this class.
+     * @param {GmeLogger} logger
+     * @param {GmeConfig} gmeConfig
+     * @constructor
+     * @alias AddOnBase
+     */
+    function AddOnBase(logger, gmeConfig) {
+        /**
+         * @type {GmeConfig}
+         */
+        this.gmeConfig = gmeConfig;
+
+        /**
+         * @type {GmeLogger}
+         */
+        this.logger = logger;
+
+        // Set at configure
+        /**
+         * @type {Core}
+         */
+        this.core = null;
+
+        /**
+         * @type {Project}
+         */
+        this.project = null;
+
+        /**
+         * @type {string}
+         */
+        this.branchName = null;
+
+        /**
+         * @type {BlobClient}
+         */
+        this.blobClient = null;
+
+        this.initialized = false;
+
+        /**
+         * @type {AddOnUpdateResult}
+         */
+        this.updateResult = null;
+
+        this.logger.debug('ctor');
+    }
+
+    /**
+     * Configures the AddOn
+     * @param {object} configuration
+     * @param {function} callback
+     */
+    AddOnBase.prototype.configure = function (configuration) {
+        this.core = configuration.core;
+        this.project = configuration.project;
+        this.branchName = configuration.branchName;
+        this.blobClient = configuration.blobClient;
+        this.projectId = this.project.projectId;
     };
+
+    /**
+     * Readable name of this AddOn that can contain spaces.
+     * @returns {string}
+     */
     AddOnBase.prototype.getName = function () {
         throw new Error('implement this function in the derived class - getting type automatically is a bad idea,' +
-        'when the js scripts are minified names are useless.');
+            'when the js scripts are minified names are useless.');
     };
 
-    AddOnBase.prototype._eventer = function (ready) {
-        var lastGuid = '',
-            self = this,
-            isReady = false,
-            nextServerEvent = function (err, guid, parameters) {
-                lastGuid = guid || lastGuid;
-                self.logger.debug('next server event');
-                if (self.running === false) {
-                    self.logger.debug('event will not be processed; addon has already stopped', {metadata: arguments});
-                    return;
-                }
-                if (isReady === false) {
-                    self.logger.debug('eventer is ready');
-                    isReady = true;
-                    ready();
-                }
-                self.logger.debug('eventer', {metadata: arguments});
-                if (!err && parameters) {
-                    self.pendingEvents += 1;
-                    switch (parameters.type) { // FIXME use if else
-                        case 'PROJECT_CREATED':
-                        case 'PROJECT_DELETED':
-                        case 'BRANCH_CREATED':
-                        case 'BRANCH_DELETED':
-                            //TODO can be handled later
-                            self.pendingEvents -= 1;
-                            return self._storage.getNextServerEvent(lastGuid, nextServerEvent);
-                        case 'BRANCH_UPDATED':
-                            if (self.projectName === parameters.project && self.branchName === parameters.branch) {
-                                //setTimeout(function () {
+    /**
+     * Current version of this AddOn using semantic versioning.
+     * @returns {string}
+     */
+    AddOnBase.prototype.getVersion = function () {
+        return '0.1.0';
+    };
 
-                                self.project.loadObject(parameters.commit, function (err, commit) {
-                                    if (err || !commit) {
-                                        // FIXME: we should do something with the error.
-                                        self.pendingEvents -= 1;
-                                        return self._storage.getNextServerEvent(lastGuid, nextServerEvent);
-                                    }
+    /**
+     * A detailed description of this AddOn and its purpose. It can be one or more sentences.
+     * @returns {string}
+     */
+    AddOnBase.prototype.getDescription = function () {
+        return '';
+    };
 
-                                    self.commit = parameters.commit;
-                                    self.core.loadRoot(commit.root, function (err, root) {
-                                        if (err) {
-                                            // FIXME: we should do something with the error.
-                                            self.pendingEvents -= 1;
-                                            return self._storage.getNextServerEvent(lastGuid, nextServerEvent);
-                                        }
-                                        if (self.stopped) {
-                                            // do not call update if addon has stopped.
-                                            self.pendingEvents -= 1;
-                                            //return;
-                                        } else {
-                                            self.update(root, function (/*err*/) {
-                                                //TODO: error handling here?
-                                                self.pendingEvents -= 1;
-                                                return self._storage.getNextServerEvent(lastGuid, nextServerEvent);
-                                            });
-                                        }
-                                    });
-                                });
-                                //}, 400); // Intentional delay to test code,
-                                // for testing use 400 (success) and 1800 (failure)
-                            } else {
-                                return self._storage.getNextServerEvent(lastGuid, nextServerEvent);
-                            }
-                    }
-                } else {
-                    // FIXME: log error if any
-                    if (self.running) {
-                        setTimeout(function () {
-                            return self._storage.getNextServerEvent(lastGuid, nextServerEvent);
-                        }, 1000);
-                    }
-                }
+    /**
+     * This is invoked after each commit to the branch. AddOns are allowed to make changes on updates,
+     * but should not persist by themselves. The manager/monitor will persist after each AddOn has had its
+     * way (ordered by the "usedAddOn" registry in the rootNode).
+     *
+     * Changes made by AddOns do not trigger a new update for other addOns.
+     * @param {module:Core~Node} rootNode
+     * @param {module:Storage~CommitObject} commitObj
+     * @param {function(Error, AddOnUpdateResult)} callback
+     */
+    AddOnBase.prototype.update = function (rootNode, commitObj, callback) {
+        callback(new Error('The function is the main function of the addOn so it must be overwritten.'));
+    };
+
+    /**
+     * Called once when the AddOn is started for the first time.
+     * @param {object} rootNode
+     * @param {object} commitObj
+     * @param {function(Error, AddOnUpdateResult)} callback
+     */
+    AddOnBase.prototype.initialize = function (rootNode, commitObj, callback) {
+        callback(new Error('The function is the main function of the addOn so it must be overwritten.'));
+    };
+
+    /**
+     * Called by the manager/monitor after each commit to the branch.
+     * @param {object} rootNode
+     * @param {object} commitObj
+     * @param {function(Error, AddOnUpdateResult)} callback
+     * @private
+     */
+    AddOnBase.prototype._update = function (rootNode, commitObj, callback) {
+        this.updateResult = new AddOnUpdateResult(commitObj);
+
+        this.update(rootNode, commitObj, callback);
+    };
+
+    /**
+     * Called once by the manager/monitor when the AddOn is first started.
+     * @param {object} rootNode
+     * @param {object} commitObj
+     * @param {function(Error, AddOnUpdateResult)} callback
+     * @private
+     */
+    AddOnBase.prototype._initialize = function (rootNode, commitObj, callback) {
+        this.initialized = true;
+        this.updateResult = new AddOnUpdateResult(commitObj);
+
+        this.initialize(rootNode, commitObj, callback);
+    };
+
+    /**
+     * Creats or appends commit message for the current update-cycle.
+     * @param {string} msg
+     */
+    AddOnBase.prototype.addCommitMessage = function (msg) {
+        this.updateResult.addCommitMessage(this, msg);
+    };
+
+    /**
+     * Adds a notification to all sockets connected to the branch room. The notification will be sent after
+     * the update-callback has been invoked.
+     * @param {string|object} message - Message string or object containing message.
+     * @param {string} message.message - If object it must contain a message.
+     * @param {string} [message.severity='info'] - Severity level ('success', 'info', 'warn', 'error')
+     */
+    AddOnBase.prototype.addNotification = function (message) {
+        var self = this,
+            data = {
+                type: STORAGE_CONSTANTS.ADD_ON_NOTIFICATION,
+                notification: typeof message === 'string' ? {message: message} : message,
+                projectId: self.projectId,
+                branchName: self.branchName,
+                commitHash: self.updateResult.commitObj._id,
+                addOnName: self.getName(),
+                addOnVersion: self.getVersion()
             };
 
-        //setTimeout(function () {
-        self._storage.getNextServerEvent(lastGuid, nextServerEvent);
-        //}, 100); // for testing purposes only
+        self.updateResult.addNotification(self, data);
     };
 
-    AddOnBase.prototype.init = function (parameters, callback) {
-        var self = this;
-        // This is the part of the start process which should always be done,
-        // so this function should be always called from the start.
-        this.logger.debug('Initializing');
-        if (!(parameters.projectName && parameters.branchName && parameters.project)) {
-            callback(new Error('Failed to initialize'));
-            return;
-        }
-        this.project = parameters.project;
-        this.core = new this._Core(this.project, {globConf: this.gmeConfig, logger: this.logger.fork('core')});
-        this.projectName = parameters.projectName;
-        this.branchName = parameters.branchName;
-
-        this.running = false; // indicates if the start is called and the stop is not called yet.
-        this.stopped = false; // indicates when the addon stop function was called and it returned.
-        this.pendingEvents = 0;
-        // time to wait in ms for this amount after stop is called and before we kill the addon
-        this.waitTimeForPendingEvents = parameters.waitTimeForPendingEvents || 1500;
-
-        this.running = true;
-
-        //start the eventing
-        this._eventer(function (err) {
-            self.logger.debug('Ready');
-            callback(err);
-        });
+    // TODO: Query related
+    /**
+     * Structure of query parameters with names, descriptions, minimum, maximum values, default values and
+     * type definitions.
+     * @returns {object[]}
+     */
+    AddOnBase.prototype.getQueryParamsStructure = function () {
+        return [];
     };
 
-    AddOnBase.prototype.start = function (parameters, callback) {
-        var self = this;
-        //this is the initialization function it could be overwritten or use as it is
-        this.logger = parameters.logger;
-
-        this.init(parameters, function (err) {
-            if (err) {
-                self.running = false;
-                callback(err);
-                return;
-            }
-            if (self.running) {
-                callback(null);
-            } else {
-                callback(new Error('basic initialization failed, check parameters!'));
-            }
-        });
-
-    };
-
-    AddOnBase.prototype.stop = function (callback) {
-        var timeout = this.waitTimeForPendingEvents,
-            intervalLength = 100,
-            numInterval = Math.floor(timeout / intervalLength),
-            intervalId,
-            self = this;
-        this.running = false;
-
-        function stoppedOk(done) {
-            self.logger.debug('Stopped');
-            self.stopped = true;
-            done(null);
-        }
-
-        function stoppedErrorPendingRequests(err, done) {
-            self.logger.error('Stopped but there were still pending events.');
-            self.stopped = true;
-            done(err || new Error('Did not stop correctly'));
-        }
-
-        if (numInterval > 0) {
-            intervalId = setInterval(function () {
-                numInterval -= 1;
-                if (numInterval < 0) {
-                    clearInterval(intervalId);
-                    if (self.pendingEvents > 0) {
-                        stoppedErrorPendingRequests(null, callback);
-                    } else {
-                        stoppedOk(callback);
-                    }
-                } else {
-                    if (self.pendingEvents > 0) {
-                        // waiting
-                        self.logger.debug('Waiting for pending events', {
-                            metadata: {
-                                pendingEvents: self.pendingEvents,
-                                timeLeft: numInterval * intervalLength
-                            }
-                        });
-                    } else {
-                        // we are ok
-                        clearInterval(intervalId);
-
-                        stoppedOk(callback);
-                    }
-                }
-            }, intervalLength);
-        } else {
-            if (self.pendingEvents > 0) {
-                // waiting
-                stoppedErrorPendingRequests(null, callback);
-            } else {
-                // we are ok
-                stoppedOk(callback);
-            }
-        }
-    };
-
-    AddOnBase.prototype.update = function (root, callback) {
-        callback(new Error('The update function is a main point of an addOn\'s functionality so it must be' +
-        'overwritten.'));
-    };
-
-    AddOnBase.prototype.query = function (parameters, callback) {
+    /**
+     * Queries are typically invoked by users from a client. The AddOn is not suppose to make any changes to
+     * either the model's or the AddOn's state. (Since users can share a running instance of an AddOn).
+     * @param {string} commitHash - State of the invoker.
+     * @param {object} queryParams - Values based on the 'getQueryParametersStructure'.
+     * @param {function} callback - resolves with PluginResult.
+     */
+    AddOnBase.prototype.query = function (commitHash, queryParams, callback) {
         callback(new Error('The function is the main function of the addOn so it must be overwritten.'));
+    };
+
+    /**
+     * Returns the default values of the Query Parameters.
+     *
+     * @returns {object}
+     */
+    AddOnBase.prototype.getDefaultQueryParams = function () {
+        var paramStructure = this.getQueryParametersStructure(),
+            defaultParams = {},
+            i;
+
+        for (i = 0; i < paramStructure.length; i += 1) {
+            defaultParams[paramStructure[i].name] = paramStructure[i].value;
+        }
+
+        return defaultParams;
     };
 
     return AddOnBase;

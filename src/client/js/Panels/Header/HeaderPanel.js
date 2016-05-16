@@ -13,14 +13,16 @@ define([
     'js/Toolbar/Toolbar',
     './ProjectNavigatorController',
     './DefaultToolbar',
-    'js/Utils/WebGMEUrlManager'
+    'js/Utils/WebGMEUrlManager',
+    'js/Utils/ComponentSettings'
 ], function (PanelBase,
              ProjectTitleWidget,
              UserProfileWidget,
              toolbar,
              ProjectNavigatorController,
              DefaultToolbar,
-             WebGMEUrlManager) {
+             WebGMEUrlManager,
+             ComponentSettings) {
     'use strict';
 
     var HeaderPanel,
@@ -30,7 +32,7 @@ define([
         'gme.ui.headerPanel', [
             'isis.ui.dropdownNavigator',
             'gme.ui.ProjectNavigator'
-        ]).run(function ($rootScope, $location) {
+        ]).run(['$rootScope', '$location', function ($rootScope, $location) {
             // FIXME: this might not be the best place to put it...
             if (WebGMEGlobal && WebGMEGlobal.State) {
                 WebGMEGlobal.State.on('change', function () {
@@ -51,7 +53,7 @@ define([
                 // FIXME: this should be a hard error, we do not have a logger here.
                 console.error('WebGMEGlobal.State does not exist, cannot update url based on state changes.');
             }
-        });
+        }]);
 
     HeaderPanel = function (layoutManager, params) {
         var options = {};
@@ -62,6 +64,9 @@ define([
         __parent__.apply(this, [options]);
 
         this._client = params.client;
+
+        this._config = HeaderPanel.getDefaultConfig();
+        ComponentSettings.resolveWithWebGMEGlobal(this._config, HeaderPanel.getComponentId());
 
         //initialize UI
         this._initialize();
@@ -84,7 +89,8 @@ define([
         // TODO: would be nice to get the app as a parameter
         app = angular.module('gmeApp');
 
-        app.controller('ProjectNavigatorController', ProjectNavigatorController);
+        app.controller('ProjectNavigatorController', ['$scope', 'gmeClient', '$timeout', '$window', '$http',
+            ProjectNavigatorController]);
 
         //project title
         projectTitleEl = $(
@@ -96,16 +102,28 @@ define([
         navBarInner.append(projectTitleEl);
 
         //user info
-        navBarInner.append($('<div class="spacer pull-right"></div>'));
-        userProfileEl = $('<div/>', {class: 'inline pull-right', style: 'padding: 6px 0px;'});
-        this.defaultUserProfileWidget = new UserProfileWidget(userProfileEl, this._client);
-        navBarInner.append(userProfileEl);
+        if (this._config.disableUserProfile === false) {
+            navBarInner.append($('<div class="spacer pull-right"></div>'));
+            userProfileEl = $('<div/>', {class: 'inline pull-right', style: 'padding: 6px 0px;'});
+            this.defaultUserProfileWidget = new UserProfileWidget(userProfileEl, this._client);
+            navBarInner.append(userProfileEl);
+        }
 
         //toolbar
         toolBarEl = $('<div/>', {class: 'toolbar-container'});
         this.$el.append(toolBarEl);
         WebGMEGlobal.Toolbar = toolbar.createToolbar(toolBarEl);
         new DefaultToolbar(this._client);
+    };
+
+    HeaderPanel.getDefaultConfig = function () {
+        return {
+            disableUserProfile: false
+        };
+    };
+
+    HeaderPanel.getComponentId = function () {
+        return 'GenericUIPanelHeader';
     };
 
     return HeaderPanel;

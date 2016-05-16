@@ -12,7 +12,8 @@ define(['js/logger',
     'js/Utils/GMEConcepts',
     'js/Utils/GMEVisualConcepts',
     'js/DragDrop/DragHelper',
-    'js/Utils/PreferencesHelper'
+    'js/Utils/PreferencesHelper',
+    'js/Controls/AlignMenu'
 ], function (Logger,
              generateGuid,
              CONSTANTS,
@@ -21,7 +22,8 @@ define(['js/logger',
              GMEConcepts,
              GMEVisualConcepts,
              DragHelper,
-             PreferencesHelper) {
+             PreferencesHelper,
+             AlignMenu) {
 
     'use strict';
 
@@ -42,6 +44,8 @@ define(['js/logger',
 
         //initialize core collections and variables
         this._widget = options.widget;
+
+        this._alignMenu = new AlignMenu(this._widget.CONSTANTS, {});
 
         if (this._client === undefined) {
             this.logger.error('DiagramDesignerWidgetMultiTabMemberListControllerBase\'s client is not specified...');
@@ -130,6 +134,18 @@ define(['js/logger',
             this._widget.onUnregisterSubcomponent = function (objID, sCompID) {
                 self._onUnregisterSubcomponent(objID, sCompID);
             };
+
+            this._widget.onSelectionAlignMenu = function (selectedIds, mousePos) {
+                self._onSelectionAlignMenu(selectedIds, mousePos);
+            };
+
+            this._widget.onAlignSelection = function (selectedIds, type) {
+                self._onAlignSelection(selectedIds, type);
+            };
+
+            this._widget.onDesignerItemsMove = function (repositionDesc) {
+                self._onDesignerItemsMove(repositionDesc);
+            };
         };
 
     DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype.selectedObjectChanged = function (nodeId) {
@@ -183,21 +199,43 @@ define(['js/logger',
     };
 
     DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._stateActiveObjectChanged = function (model, activeObjectId) {
-        this.selectedObjectChanged(activeObjectId);
+        if (this._memberListContainerID === activeObjectId) {
+            // [patrik] added this check to avoid redrawing when becoming active in split panel mode.
+            this.logger.debug('Disregarding activeObject changed when it is already the same.');
+        } else {
+            this.selectedObjectChanged(activeObjectId);
+        }
+    };
+
+    DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._stateActiveTabChanged = function (model, tabId) {
+        if (this._selectedMemberListID !== this._tabIDMemberListID[tabId]) {
+            this._widget.selectTab(tabId + '');
+        }
     };
 
     DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._attachClientEventListeners = function () {
         this._detachClientEventListeners();
         WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_OBJECT, this._stateActiveObjectChanged, this);
+        WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_TAB, this._stateActiveTabChanged, this);
+
     };
 
     DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._detachClientEventListeners = function () {
         WebGMEGlobal.State.off('change:' + CONSTANTS.STATE_ACTIVE_OBJECT, this._stateActiveObjectChanged);
+        WebGMEGlobal.State.off('change:' + CONSTANTS.STATE_ACTIVE_TAB, this._stateActiveTabChanged);
+
     };
 
     DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype.onActivate = function () {
         this._attachClientEventListeners();
         this._displayToolbarItems();
+
+        //setting the active object to the container
+        if (typeof this._memberListContainerID === 'string') {
+            WebGMEGlobal.State.registerSuppressVisualizerFromNode(true);
+            WebGMEGlobal.State.registerActiveObject(this._memberListContainerID);
+            WebGMEGlobal.State.registerSuppressVisualizerFromNode(false);
+        }
     };
 
     DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype.onDeactivate = function () {
@@ -318,6 +356,13 @@ define(['js/logger',
 
                 this._widget.addMultipleTabsEnd();
 
+                //set tab based on the UI state
+                if (!selectedMemberListTabID &&
+                    WebGMEGlobal.State.getActiveTab() !== null && WebGMEGlobal.State.getActiveTab() !== undefined &&
+                    WebGMEGlobal.State.getActiveTab() < Object.keys(this._tabIDMemberListID).length) {
+                    selectedMemberListTabID = WebGMEGlobal.State.getActiveTab();
+                }
+
                 if (!selectedMemberListTabID) {
                     for (selectedMemberListTabID in this._tabIDMemberListID) {
                         if (this._tabIDMemberListID.hasOwnProperty(selectedMemberListTabID)) {
@@ -413,14 +458,14 @@ define(['js/logger',
          */
 
         this.logger.warn('DiagramDesignerWidgetMultiTabMemberListControllerBase.getOrderedMemberListInfo(memberList' +
-        'ContainerObject) is not overridden for object "' + memberListContainerObject + '", returning default...');
+            'ContainerObject) is not overridden for object "' + memberListContainerObject + '", returning default...');
 
         return undefined;
     };
 
     DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype.getMemberListSetsRegistryKey = function () {
         this.logger.warn('DiagramDesignerWidgetMultiTabMemberListControllerBase.getMemberListSetsRegistryKey is not ' +
-        'overridden, returning default value...');
+            'overridden, returning default value...');
         return undefined;
     };
 
@@ -431,6 +476,7 @@ define(['js/logger',
             this.logger.debug('_selectedMemberListID changed to : ' + this._selectedMemberListID);
 
             this._initializeSelectedMemberList();
+            WebGMEGlobal.State.registerActiveTab(tabID);
         }
     };
 
@@ -671,6 +717,7 @@ define(['js/logger',
 
         this._selectedMemberListMembers = [];
         this._delayedConnections = [];
+        this._delayedConnectionsAsItems = {};
 
         //remove current territory patterns
         if (this._selectedMemberListMembersTerritoryId) {
@@ -768,6 +815,15 @@ define(['js/logger',
         this.logger.debug('_dispatchEvents "' + events.length + '" items: ' + JSON.stringify(events));
 
         this._widget.beginUpdate();
+        //first call the updates of the decorators so they can pu out any port they use
+        j = Object.keys(this._GMEID2ComponentID || {});
+        for (i = 0; i < j.length; i += 1) {
+            if (this._widget.items[this._GMEID2ComponentID[j[i]]] &&
+                this._widget.items[this._GMEID2ComponentID[j[i]]]._decoratorInstance) {
+                this._widget.items[this._GMEID2ComponentID[j[i]]]._decoratorInstance.update();
+            }
+        }
+        //decorators have been updated we can move on
 
         /********** ORDER EVENTS BASED ON DEPENDENCY ************/
         /** 1: items first, no dependency **/
@@ -787,12 +843,11 @@ define(['js/logger',
                             this.logger.debug('Removing ' + e.eid + ' from delayed connections...');
                             this._delayedConnections.splice(j, 1);
 
-                            //TODO: connection as box
-                            //remove the box that represents this connections
-                            this._widget.deleteComponent(this._delayedConnectionsAsItems[
-                                this._delayedConnections[j].ID]);
+                            //TODO: find a better solution for removing connection, if
+                            // visualized as a box
+                            this._widget.deleteComponent(this._delayedConnectionsAsItems[e.eid]);
 
-                            delete this._delayedConnectionsAsItems[this._delayedConnections[j].ID];
+                            delete this._delayedConnectionsAsItems[e.eid];
                         }
                     }
                 } else if (e.etype === CONSTANTS.TERRITORY_EVENT_UPDATE &&
@@ -1109,7 +1164,7 @@ define(['js/logger',
                 this._ComponentID2GMEID[uiComponent.id] = gmeID;
 
                 territoryChanged = territoryChanged ||
-                this._updateDecoratorTerritoryQuery(uiComponent._decoratorInstance, false);
+                    this._updateDecoratorTerritoryQuery(uiComponent._decoratorInstance, false);
             } else {
 
                 srcDst = this._getAllSourceDestinationPairsForConnection(desc.srcID, desc.dstID);
@@ -1130,8 +1185,8 @@ define(['js/logger',
                             objDesc.srcSubCompId = sources[k].subCompId;
                             objDesc.dstObjId = destinations[l].objId;
                             objDesc.dstSubCompId = destinations[l].subCompId;
-                            objDesc.reconnectable = false;
-                            objDesc.editable = false;
+                            objDesc.reconnectable = desc.reconnectable === undefined ? false : desc.reconnectable;
+                            objDesc.editable = desc.editable === undefined ? false : desc.editable;
 
                             delete objDesc.source;
                             delete objDesc.target;
@@ -1234,8 +1289,8 @@ define(['js/logger',
                         objDesc.srcSubCompId = sources[k].subCompId;
                         objDesc.dstObjId = destinations[l].objId;
                         objDesc.dstSubCompId = destinations[l].subCompId;
-                        objDesc.reconnectable = true;
-                        objDesc.editable = true;
+                        objDesc.reconnectable = desc.reconnectable === undefined ? true : desc.reconnectable;
+                        objDesc.editable = desc.editable === undefined ? true : desc.editable;
 
                         delete objDesc.source;
                         delete objDesc.target;
@@ -1248,7 +1303,7 @@ define(['js/logger',
                             len -= 1;
                         } else {
                             this.logger.warn('Updating connections...Existing connections are less than the needed ' +
-                            'src-dst combo...');
+                                'src-dst combo...');
                             //let's create a connection
                             uiComponent = this._widget.createConnection(objDesc);
                             this.logger.debug('Connection: ' + uiComponent.id + ' for GME object: ' + gmeID);
@@ -1264,12 +1319,23 @@ define(['js/logger',
                     len += 1;
                     while (len--) {
                         componentID = this._GMEID2ComponentID[gmeID][len];
-                        this._widget.deleteComponent(componentID);
-                        this._GMEID2ComponentID[gmeID].splice(len, 1);
-                        delete this._ComponentID2GMEID[componentID];
+                        //TODO plain designer items associated with the connection should not be removed
+                        if (componentID.indexOf('C_') === 0) {
+                            this._widget.deleteComponent(componentID);
+                            this._GMEID2ComponentID[gmeID].splice(len, 1);
+                            delete this._ComponentID2GMEID[componentID];
+                        }
                     }
                 }
             }
+        } else if (this._selectedMemberListMembers.indexOf(gmeID) === -1 &&
+            this._GMEID2ComponentID[gmeID]) {
+            //item have been removed from the set but remained in the territory
+            this._onUpdatePortToItem(gmeID, true, desc);
+
+        } else if (this._selectedMemberListMembers.indexOf(gmeID) !== -1 && !this._GMEID2ComponentID[gmeID]) {
+            //the item have been added to the set but was already in the territory
+            this._onUpdatePortToItem(gmeID, false, desc);
         }
 
         //check if one of the decorators' is dependent on this
@@ -1296,9 +1362,9 @@ define(['js/logger',
 
                 if (this._widget.itemIds.indexOf(componentID) !== -1) {
                     territoryChanged = territoryChanged ||
-                    this._updateDecoratorTerritoryQuery(
-                        this._widget.items[componentID]._decoratorInstance,
-                        true);
+                        this._updateDecoratorTerritoryQuery(
+                            this._widget.items[componentID]._decoratorInstance,
+                            true);
                 }
 
                 //query the associated connections
@@ -1368,6 +1434,45 @@ define(['js/logger',
         return territoryChanged;
     };
 
+    DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._onUpdatePortToItem =
+        function (gmeID, remove, desc) {
+            var members = this._selectedMemberListMembers,
+                i,
+                node, src, dst,
+                connections = [];
+
+            for (i = 0; i < members.length; i += 1) {
+                node = this._client.getNode(members[i]);
+                if (node && node.isConnection()) {
+                    src = node.getPointer(SRC_POINTER_NAME).to;
+                    dst = node.getPointer(DST_POINTER_NAME).to;
+                    if (src === gmeID || dst === gmeID) {
+                        this._onUnload.call(this, members[i]);
+                        connections.push(members[i]);
+                    }
+                }
+            }
+
+            if (remove === true) {
+                this._onUnload(gmeID);
+            } else {
+                this._onLoad(gmeID, desc);
+            }
+
+            for (i = 0; i < connections.length; i += 1) {
+                node = this._client.getNode(connections[i]);
+                src = node.getPointer(SRC_POINTER_NAME).to;
+                dst = node.getPointer(DST_POINTER_NAME).to;
+                this._onLoad.call(this, connections[i], {
+                    isConnection: true,
+                    srcID: src,
+                    dstID: dst,
+                    reconnectable: false,
+                    editable: false
+                });
+            }
+        };
+
     DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype.registerComponentIDForPartID = function (componentID,
                                                                                                              partId) {
         this._componentIDPartIDMap[componentID] = this._componentIDPartIDMap[componentID] || [];
@@ -1395,6 +1500,7 @@ define(['js/logger',
     DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._checkComponentDependency = function (gmeID,
                                                                                                           eventType) {
         var len;
+
         if (this._componentIDPartIDMap && this._componentIDPartIDMap[gmeID]) {
             len = this._componentIDPartIDMap[gmeID].length;
             while (len--) {
@@ -1414,7 +1520,7 @@ define(['js/logger',
         for (gmeID in this._notifyPackage) {
             if (this._notifyPackage.hasOwnProperty(gmeID)) {
                 this.logger.debug('NotifyPartDecorator: ' + gmeID + ', componentIDs: ' +
-                JSON.stringify(this._notifyPackage[gmeID]));
+                    JSON.stringify(this._notifyPackage[gmeID]));
 
                 if (this._GMEID2ComponentID.hasOwnProperty(gmeID)) {
                     //src is a DesignerItem
@@ -1474,18 +1580,25 @@ define(['js/logger',
             memberListSetsRegistry,
             i,
             j,
+            oldIDList = this._tabIDMemberListID,
+            urlTab = WebGMEGlobal.State.getActiveTab(),
             setID;
 
-        if (memberListContainerID &&
+        if (typeof memberListContainerID === 'string' &&
             memberListSetsRegistryKey &&
             memberListSetsRegistryKey !== '') {
             memberListContainer = this._client.getNode(memberListContainerID);
             memberListSetsRegistry = memberListContainer.getEditableRegistry(memberListSetsRegistryKey) || [];
 
+            this._tabIDMemberListID = {};
             for (i = 0; i < newTabIDOrder.length; i += 1) {
                 //i is the new order number
                 //newTabIDOrder[i] is the tab identifier
-                setID = this._tabIDMemberListID[newTabIDOrder[i]];
+                if (urlTab === newTabIDOrder[i]) {
+                    WebGMEGlobal.State.registerActiveTab(i);
+                }
+                setID = oldIDList[newTabIDOrder[i]];
+                this._tabIDMemberListID[i] = setID;
                 for (j = 0; j < memberListSetsRegistry.length; j += 1) {
                     if (memberListSetsRegistry[j].SetID === setID) {
                         memberListSetsRegistry[j].order = i;
@@ -1502,9 +1615,8 @@ define(['js/logger',
                 }
             });
 
-            this._client.startTransaction();
+
             this._client.setRegistry(memberListContainerID, memberListSetsRegistryKey, memberListSetsRegistry);
-            this._client.completeTransaction();
         }
     };
 
@@ -1517,7 +1629,7 @@ define(['js/logger',
             i,
             setID;
 
-        if (memberListContainerID &&
+        if (typeof memberListContainerID === 'string' &&
             memberListSetsRegistryKey &&
             memberListSetsRegistryKey !== '') {
             memberListContainer = this._client.getNode(memberListContainerID);
@@ -1631,7 +1743,7 @@ define(['js/logger',
         };
 
         this.logger.warn('DiagramDesignerWidgetMultiTabMemberListControllerBase.getNewSetNamePrefixDesc ' +
-        'is not overridden, returning default value: ' + JSON.stringify(result));
+            'is not overridden, returning default value: ' + JSON.stringify(result));
         return result;
     };
 
@@ -1647,12 +1759,6 @@ define(['js/logger',
                 gmeIDs.indexOf(id) === -1) {
                 gmeIDs.push(id);
             }
-        }
-
-        //nobody is selected on the canvas
-        //set the active selection to the opened guy
-        if (gmeIDs.length === 0 && this._memberListContainerID) {
-            gmeIDs.push(this._memberListContainerID);
         }
 
         WebGMEGlobal.State.registerActiveSelection(gmeIDs);
@@ -1735,7 +1841,7 @@ define(['js/logger',
                                                                                                         metaInfo) {
         //store that a subcomponent with a given ID has been added to object with objID
         this._GMEID2Subcomponent[metaInfo[CONSTANTS.GME_ID]] = this._GMEID2Subcomponent[metaInfo[CONSTANTS.GME_ID]] ||
-        {};
+            {};
         this._GMEID2Subcomponent[metaInfo[CONSTANTS.GME_ID]][objID] = sCompID;
 
         this._Subcomponent2GMEID[objID] = this._Subcomponent2GMEID[objID] || {};
@@ -1791,6 +1897,50 @@ define(['js/logger',
         this._ComponentID2GMEID[uiComponent.id] = gmeID;
 
         this._delayedConnectionsAsItems[gmeID] = uiComponent.id;
+    };
+
+    DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._onSelectionAlignMenu = function (selectedIds,
+                                                                                                    mousePos) {
+        var menuPos = this._widget.posToPageXY(mousePos.mX, mousePos.mY),
+            self = this;
+
+        this._alignMenu.show(selectedIds, menuPos, function (key) {
+            self._onAlignSelection(selectedIds, key);
+        });
+    };
+
+    DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._onAlignSelection = function (selectedIds, type) {
+        var params = {
+            client: this._client,
+            modelId: this._memberListContainerID,
+            idMap: this._ComponentID2GMEID,
+            setName: this._selectedMemberListID,
+            coordinates: this._memberListMemberCoordinates[this._selectedMemberListID]
+        };
+
+        //TODO: Currently connections are always accounted for, regardless if they are displayed as boxes or not.
+        if (params.coordinates) {
+            this._alignMenu.alignSetSelection(params, selectedIds, type);
+        }
+    };
+
+    DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._onDesignerItemsMove = function (repositionDesc) {
+        var id;
+
+        this._client.startTransaction();
+        for (id in repositionDesc) {
+            if (repositionDesc.hasOwnProperty(id)) {
+                this._client.setMemberRegistry(this._memberListContainerID,
+                    this._ComponentID2GMEID[id],
+                    this._selectedMemberListID,
+                    REGISTRY_KEYS.POSITION,
+                    {
+                        x: repositionDesc[id].x,
+                        y: repositionDesc[id].y
+                    });
+            }
+        }
+        this._client.completeTransaction();
     };
 
     return DiagramDesignerWidgetMultiTabMemberListControllerBase;

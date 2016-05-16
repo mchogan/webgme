@@ -1,4 +1,4 @@
-/*globals define, $, _*/
+/*globals define, $, _, WebGMEGlobal*/
 /*jshint browser: true*/
 
 /**
@@ -12,14 +12,16 @@ define([
     'js/Utils/DisplayFormat',
     'js/Decorators/DecoratorWithPorts.Base',
     'js/Widgets/DiagramDesigner/DiagramDesignerWidget.Constants',
-    'text!./default.svg'
+    'text!./default.svg',
+    'common/regexp'
 ], function (CONSTANTS,
              nodePropertyNames,
              REGISTRY_KEYS,
              displayFormat,
              DecoratorBase,
              DiagramDesignerWidgetConstants,
-             DefaultSvgTemplate) {
+             DefaultSvgTemplate,
+             REGEXP) {
 
     'use strict';
 
@@ -30,13 +32,12 @@ define([
         BORDER_COLOR_CLASS = 'border-color',
         TEXT_COLOR_CLASS = 'text-color';
 
-
     /**
      * Contains downloaded svg elements from the server.
      * @type {{}}
      * @private
      */
-    //var svgCache = {};
+    var SVG_CACHE = {};
 
     /**
      * Svg element that can be used as a placeholder for the icon if the icon does not exist on the server.
@@ -45,9 +46,9 @@ define([
      */
     var defaultSVG = $(DefaultSvgTemplate);
 
-
     SVGDecoratorCore = function () {
         DecoratorBase.apply(this, []);
+        this.svgCache = SVG_CACHE;
     };
 
     _.extend(SVGDecoratorCore.prototype, DecoratorBase.prototype);
@@ -71,10 +72,7 @@ define([
                 }
             }
         }
-
-        this.svgCache = {};
     };
-
 
     /**** Override from *.WidgetDecoratorBase ****/
     SVGDecoratorCore.prototype.doSearch = function (searchDesc) {
@@ -146,7 +144,8 @@ define([
             noName = '(N/A)';
 
         if (nodeObj) {
-            this.name = nodeObj.getAttribute(nodePropertyNames.Attributes.name);
+            //this.name = nodeObj.getAttribute(nodePropertyNames.Attributes.name);
+            this.name = nodeObj.getFullyQualifiedName();
             this.formattedName = displayFormat.resolve(nodeObj);
         } else {
             this.name = '';
@@ -233,6 +232,9 @@ define([
         var svgIcon;
         //set new content
         this.$svgContent.empty();
+        this.$svgContent.removeClass();
+        this.$svgContent.addClass('svg-content');
+        this.$svgContent.addClass(svg.replace(REGEXP.INVALID_CSS_CHARS, '__'));
 
         //remove existing connectors (if any)
         this.$el.find('> .' + DiagramDesignerWidgetConstants.CONNECTOR_CLASS).remove();
@@ -300,7 +302,7 @@ define([
     };
 
     /***** PORT FUNCTIONALITY *****/
-        //Overridden in SVGDecorator.Ports.js
+    //Overridden in SVGDecorator.Ports.js
     SVGDecoratorCore.prototype._updatePorts = function () {
         //If no ports in model, does nothing
     };
@@ -310,7 +312,7 @@ define([
     };
 
     /***** CONNECTION FUNCTIONALITY *****/
-        //Overridden in SVGDecorator.Connection.js
+    //Overridden in SVGDecorator.Connection.js
     SVGDecoratorCore.prototype._discoverCustomConnectionAreas = function () {
         //If no connections in model, does nothing
     };

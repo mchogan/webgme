@@ -12,63 +12,95 @@ define(['js/Dialogs/PluginResults/PluginResultsDialog'], function (PluginResults
 
     PluginToolbar = function (client) {
         this._client = client;
-
+        this._results = [];
+        this.$btnExecutePlugin = null;
         this._initialize();
     };
 
     PluginToolbar.prototype._initialize = function () {
-        var toolbar = WebGMEGlobal.Toolbar,
+        var self = this,
+            toolbar = WebGMEGlobal.Toolbar,
             fillMenuItems,
-            $btnExecutePlugin,
             executePlugin,
             client = this._client,
             unreadResults = 0,
             BADGE_CLASS = 'label',
             showResults,
             setBadgeText,
-            results = [],
             badge;
 
         setBadgeText = function (text) {
-            $btnExecutePlugin.el.find('.' + BADGE_CLASS).text(text);
+            self.$btnExecutePlugin.el.find('.' + BADGE_CLASS).text(text);
         };
 
         fillMenuItems = function () {
-            var pluginNames = client.getAvailableInterpreterNames(),
-                i, executeClickFunction = function (data) {
-                    executePlugin(data.name);
-                };
+            var pluginIds = WebGMEGlobal.gmeConfig.plugin.displayAll ? WebGMEGlobal.allPlugins :
+                    client.filterPlugins(WebGMEGlobal.allPlugins, WebGMEGlobal.State.getActiveObject()),
+                executeClickFunction = function (data) {
+                    executePlugin(data);
+                },
+                projectAccess = client.getProjectAccess();
 
             //clear dropdown
-            $btnExecutePlugin.clear();
+            self.$btnExecutePlugin.clear();
 
             //add read menu if needed
-            if (results.length > 0) {
-                $btnExecutePlugin.addButton({
+            if (self._results.length > 0) {
+                self.$btnExecutePlugin.addButton({
                     title: 'Show results...',
                     text: 'Show results...',
                     clickFn: function () {
                         showResults();
                     }
                 });
-                $btnExecutePlugin.addDivider();
+                if (pluginIds.length > 0) {
+                    self.$btnExecutePlugin.addDivider();
+                }
             }
 
             //add plugin names
-            for (i = 0; i < pluginNames.length; i++) {
-                $btnExecutePlugin.addButton({
-                    title: 'Run ' + pluginNames[i],
-                    text: 'Run ' + pluginNames[i],
-                    data: {name: pluginNames[i]},
-                    clickFn: executeClickFunction
+            pluginIds.forEach(function (pluginId) {
+                var metadata = WebGMEGlobal.allPluginsMetadata[pluginId],
+                    params = {
+                        title: metadata.id + ' v' + metadata.version + ' - ' + metadata.description,
+                        text: metadata.name,
+                        data: metadata,
+                        clickFn: executeClickFunction,
+                        disabled: metadata.writeAccessRequired === true && projectAccess.write === false,
+                        icon: $('<i class="plugin-icon"/>')
+                    };
+
+                if (metadata.icon.src) {
+                    params.icon = $('<img/>', {
+                        src: ['/plugin', metadata.id, metadata.id, metadata.icon.src].join('/')
+                    });
+                    params.icon.addClass(metadata.icon.class);
+                } else if (metadata.icon.class) {
+                    params.icon.addClass(metadata.icon.class);
+                } else {
+                    params.icon.addClass('glyphicon glyphicon-cog');
+                }
+
+                params.icon.addClass('plugin-icon');
+
+                params.icon.css({
+                    width: '14px',
+                    'margin-right': '4px'
                 });
-            }
+
+                self.$btnExecutePlugin.addButton(params);
+            });
         };
 
-        executePlugin = function (name) {
-            WebGMEGlobal.InterpreterManager.run(name, null, function (result) {
+        executePlugin = function (data) {
+            WebGMEGlobal.InterpreterManager.configureAndRun(data, function (result) {
+                if (result === false) {
+                    // Aborted in dialog.
+                    return;
+                }
                 result.__unread = true;
-                results.splice(0, 0, result);
+                self._results.splice(0, 0, result);
+                self.$btnExecutePlugin.el.find('.btn').disable(false);
                 unreadResults += 1;
                 if (unreadResults > 0) {
                     setBadgeText(unreadResults);
@@ -78,13 +110,13 @@ define(['js/Dialogs/PluginResults/PluginResultsDialog'], function (PluginResults
 
         showResults = function () {
             var dialog = new PluginResultsDialog();
-            dialog.show(client, results);
+            dialog.show(client, self._results);
             unreadResults = 0;
             setBadgeText('');
         };
 
         /************** EXECUTE PLUG-IN BUTTON ****************/
-        $btnExecutePlugin = toolbar.addDropDownButton(
+        this.$btnExecutePlugin = toolbar.addDropDownButton(
             {
                 title: 'Execute plug-in',
                 icon: 'glyphicon glyphicon-play',
@@ -94,13 +126,17 @@ define(['js/Dialogs/PluginResults/PluginResultsDialog'], function (PluginResults
                 }
             });
 
-        $btnExecutePlugin.el.find('a > i').css({'margin-top': '0px'});
+        this.$btnExecutePlugin.el.find('a > i').css({'margin-top': '0px'});
 
         badge = BADGE_BASE.clone();
-        badge.insertAfter($btnExecutePlugin.el.find('a > i'));
+        badge.insertAfter(this.$btnExecutePlugin.el.find('a > i'));
         badge.css('margin-left', '3px');
     };
 
+    PluginToolbar.prototype.disableButtons = function (disable) {
+        disable = disable && this._results.length === 0;
+        this.$btnExecutePlugin.el.find('.btn').disable(disable);
+    };
 
     return PluginToolbar;
 });

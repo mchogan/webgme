@@ -7,24 +7,56 @@
 describe('Browser BlobClient', function () {
     'use strict';
     var BlobClient,
+        logger,
         Artifact;
 
     before(function (done) {
         this.timeout(5000);
-        requirejs(['blob/BlobClient', 'blob/Artifact'], function (BlobClient_, Artifact_) {
-            BlobClient = BlobClient_;
-            Artifact = Artifact_;
-            done();
-        });
+        requirejs(['blob/BlobClient', 'blob/Artifact', 'js/logger', 'text!gmeConfig.json'],
+            function (BlobClient_, Artifact_, Logger, gmeConfig) {
+                BlobClient = BlobClient_;
+                Artifact = Artifact_;
+                logger = Logger.create('BlobClient', JSON.parse(gmeConfig).client.log);
+                done();
+            }
+        );
     });
 
     it('should have putFile', function () {
-        var bc = new BlobClient();
+        var bc = new BlobClient({logger: logger});
         expect(bc.putFile).to.exist;
     });
 
+    it('getMetaDataUrl should be concatenation of origin and getRelativeMetaDataUrl', function () {
+        var bc = new BlobClient({logger: logger}),
+            relativeUrl = bc.getRelativeMetadataURL();
+
+        expect(bc.getMetadataURL()).to.equal(bc.origin + relativeUrl);
+    });
+
+    it('getViewURL should be concatenation of origin and getRelativeViewURL', function () {
+        var bc = new BlobClient({logger: logger}),
+            relativeUrl = bc.getRelativeViewURL('someHash', 'someSubPath');
+
+        expect(bc.getViewURL('someHash', 'someSubPath')).to.equal(bc.origin + relativeUrl);
+    });
+
+    it('getDownloadURL should be concatenation of origin and getRelativeDownloadURL', function () {
+        var bc = new BlobClient({logger: logger}),
+            relativeUrl = bc.getRelativeDownloadURL('someHash', 'someSubPath');
+
+        expect(bc.getDownloadURL('someHash', 'someSubPath')).to.equal(bc.origin + relativeUrl);
+    });
+
+    it('getCreateURL should be concatenation of origin and getRelativeCreateURL', function () {
+        var bc = new BlobClient({logger: logger}),
+            relativeUrl = bc.getRelativeCreateURL('someFileName', true);
+
+        expect(bc.getCreateURL('someFileName', true)).to.equal(bc.origin + relativeUrl);
+    });
+
     it('should create json', function (done) {
-        var bc = new BlobClient();
+        var bc = new BlobClient({logger: logger});
 
         bc.putFile('test.json', str2ab('{"1":2}'), function (err, hash) {
             if (err) {
@@ -48,8 +80,86 @@ describe('Browser BlobClient', function () {
         });
     });
 
+
+    it('getObjectAsString should create file from empty buffer and return as string', function (done) {
+        var bc = new BlobClient({logger: logger});
+
+        bc.putFile('test2.txt', new ArrayBuffer(0))
+            .then(function (hash) {
+                return bc.getObjectAsString(hash);
+            })
+            .then(function (res) {
+                expect(typeof res).to.equal('string');
+                expect(res).to.equal('');
+            })
+            .nodeify(done);
+    });
+
+    it('getObjectAsString should create json and return as string', function (done) {
+        var bc = new BlobClient({logger: logger}),
+            input = '{"1":2}';
+
+        bc.putFile('test.json', str2ab(input))
+            .then(function (hash) {
+                return bc.getObjectAsString(hash);
+            })
+            .then(function (res) {
+                expect(typeof res).to.equal('string');
+                expect(res).to.equal(input);
+            })
+            .nodeify(done);
+    });
+
+    it('getObjectAsString should putFile unicode and return as string', function (done) {
+        var bc = new BlobClient({logger: logger}),
+            input = '1111\nmu \u03BC\n1111\n\\U+10400 DESERET CAPITAL LETTER LONG I \uD801\uDC00';
+
+        bc.putFile('1111\u03BC222\uD801\uDC00.bin', input)
+            .then(function (hash) {
+                return bc.getObjectAsString(hash);
+            })
+            .then(function (res) {
+                expect(typeof res).to.equal('string');
+                expect(res).to.equal(input);
+            })
+            .nodeify(done);
+    });
+
+    it('getObjectAsJSON should raise exception on text file', function (done) {
+        var bc = new BlobClient({logger: logger});
+
+        bc.putFile('test2.txt', 'txtContent')
+            .then(function (hash) {
+                return bc.getObjectAsJSON(hash);
+            })
+            .then(function (/*res*/) {
+                throw new Error('Should have failed!');
+            })
+            .catch(function (err) {
+                expect(typeof err.message).to.equal('string');
+                // Different error message on different browsers (make sure it failed)..
+                expect(err.message).to.not.include('Should have failed!');
+            })
+            .nodeify(done);
+    });
+
+    it('getObjectAsJSON should create json and return as json', function (done) {
+        var bc = new BlobClient({logger: logger}),
+            input = '{"1":2}';
+
+        bc.putFile('test.json', str2ab(input))
+            .then(function (hash) {
+                return bc.getObjectAsJSON(hash);
+            })
+            .then(function (res) {
+                expect(typeof res).to.equal('object');
+                expect(res).to.deep.equal(JSON.parse(input));
+            })
+            .nodeify(done);
+    });
+
     it('should create huge json', function (done) {
-        var bc = new BlobClient(),
+        var bc = new BlobClient({logger: logger}),
             jsonObject = {},
             i, j;
 
@@ -82,7 +192,7 @@ describe('Browser BlobClient', function () {
     });
 
     function createZip(data, done) {
-        var bc = new BlobClient();
+        var bc = new BlobClient({logger: logger});
         bc.putFile('testzip.zip', data, function (err, hash) {
             if (err) {
                 return done(err);
@@ -109,7 +219,7 @@ describe('Browser BlobClient', function () {
     }
 
     it('should create strange filenames', function (done) {
-        var bc = new BlobClient();
+        var bc = new BlobClient({logger: logger});
 
         bc.putFile('te%s#t.json', str2ab('{"1":2}'), function (err, hash) {
             if (err) {
@@ -155,7 +265,7 @@ describe('Browser BlobClient', function () {
         it('should create zip from node-webkit File', function (done) {
             var f = new File('./npm_install.cmd', 'npm_install.cmd');
             //expect(Object.getOwnPropertyNames(f).join(' ')).to.equal(0);
-            var bc = new BlobClient();
+            var bc = new BlobClient({logger: logger});
             bc.putFile('npm_install.cmd', f, function (err/*, hash*/) {
                 if (err) {
                     return done(err);
@@ -166,7 +276,7 @@ describe('Browser BlobClient', function () {
     }
 
     it('should create metadata', function (done) {
-        var artifact = new Artifact('testartifact', new BlobClient());
+        var artifact = new Artifact('testartifact', new BlobClient({logger: logger}));
         artifact.addFiles({'file1': 'content1', 'file2': 'content2'}, function (err, hashes) {
             if (err) {
                 return done(err);
@@ -182,7 +292,7 @@ describe('Browser BlobClient', function () {
                 'j%s#on.json': '{1:2}',
                 'x#m%l.xml': '<doc/>'
             },
-            artifact = new BlobClient().createArtifact('xmlAndJson');
+            artifact = new BlobClient({logger: logger}).createArtifact('xmlAndJson');
         artifact.addFiles(filesToAdd, function (err/*, hashes*/) {
             if (err) {
                 done(new Error('Could not add files : err' + err.toString()));
@@ -192,7 +302,7 @@ describe('Browser BlobClient', function () {
                     done(new Error('Could not save artifact : err' + err.toString()));
                 }
                 var req = new XMLHttpRequest(); //jshint ignore: line
-                req.open('GET', new BlobClient().getViewURL(hash, 'j%s#on.json'), true);
+                req.open('GET', new BlobClient({logger: logger}).getViewURL(hash, 'j%s#on.json'), true);
                 req.onreadystatechange = function () {
                     if (req.readyState !== 4) {
                         return;

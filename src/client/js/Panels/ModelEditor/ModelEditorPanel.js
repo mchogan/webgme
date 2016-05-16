@@ -41,7 +41,7 @@ define(['js/PanelBase/PanelBaseWithHeader',
     ModelEditorPanel.prototype._initialize = function () {
         var self = this;
 
-        this.widget = new ModelEditorWidget(this.$el, {'toolBar': this.toolBar});
+        this.widget = new ModelEditorWidget(this.$el, {toolBar: this.toolBar});
 
         this.widget.setTitle = function (title) {
             self.setTitle(title);
@@ -56,6 +56,10 @@ define(['js/PanelBase/PanelBaseWithHeader',
             client: this._client,
             widget: this.widget
         });
+
+        this.control.setReadOnly = function (isReadOnly) {
+            self.setReadOnly(isReadOnly);
+        };
 
         this.onActivate();
     };

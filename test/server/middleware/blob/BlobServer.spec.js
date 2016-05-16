@@ -22,11 +22,11 @@ describe('BlobServer', function () {
     beforeEach(function (done) {
         // we have to set the config here
         var gmeConfig = testFixture.getGmeConfig();
-        gmeConfig.server.https.enable = false;
         serverBaseUrl = 'http://127.0.0.1:' + gmeConfig.server.port;
         bcParam.serverPort = gmeConfig.server.port;
         bcParam.server = '127.0.0.1';
-        bcParam.httpsecure = gmeConfig.server.https.enable;
+        bcParam.httpsecure = false;
+        bcParam.logger = testFixture.logger.fork('BlobServer:Blob');
 
         rimraf('./test-tmp/blob-storage', function (err) {
             if (err) {
@@ -52,9 +52,33 @@ describe('BlobServer', function () {
         });
     });
 
-    it('should return 500 at /rest/blob/metadata/non-existing-hash', function (done) {
+    it('should return 500 at /rest/blob/createMetadata if data is malformed', function (done) {
+        agent.post(serverBaseUrl + '/rest/blob/createMetadata')
+            .type('text')
+            .send('hello')
+            .end(function (err, res) {
+                should.equal(res.status, 500, err);
+                done();
+            });
+    });
+
+    it('should return 404 at /rest/blob/metadata/non-existing-hash', function (done) {
         agent.get(serverBaseUrl + '/rest/blob/metadata/non-existing-hash').end(function (err, res) {
-            should.equal(res.status, 500, err);
+            should.equal(res.status, 404, err);
+            done();
+        });
+    });
+
+    it('should return 404 at /rest/blob/download/non-existing-hash', function (done) {
+        agent.get(serverBaseUrl + '/rest/blob/download/non-existing-hash').end(function (err, res) {
+            should.equal(res.status, 404, err);
+            done();
+        });
+    });
+
+    it('should return 404 at /rest/blob/view/non-existing-hash', function (done) {
+        agent.get(serverBaseUrl + '/rest/blob/view/non-existing-hash').end(function (err, res) {
+            should.equal(res.status, 404, err);
             done();
         });
     });

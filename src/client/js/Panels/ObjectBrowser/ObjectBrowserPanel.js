@@ -1,4 +1,4 @@
-/*globals define, _*/
+/*globals define, _, WebGMEGlobal*/
 /*jshint browser: true*/
 
 /**
@@ -12,15 +12,16 @@ define(['js/PanelBase/PanelBaseWithHeader',
     './InheritanceBrowserControl',
     './CrosscutBrowserControl',
     'js/Widgets/TreeBrowser/TreeBrowserWidget',
+    'js/Utils/ComponentSettings',
     'css!./styles/ObjectBrowserPanel.css'
 ], function (PanelBaseWithHeader,
              CONSTANTS,
              TreeBrowserControl,
              InheritanceBrowserControl,
              CrosscutBrowserControl,
-             TreeBrowserWidget) {
+             TreeBrowserWidget,
+             ComponentSettings) {
     'use strict';
-
 
     var ObjectBrowserPanel,
         __parent__ = PanelBaseWithHeader,
@@ -47,36 +48,91 @@ define(['js/PanelBase/PanelBaseWithHeader',
     _.extend(ObjectBrowserPanel.prototype, __parent__.prototype);
 
     ObjectBrowserPanel.prototype._initialize = function () {
-        var compositionTreeBrowserWidget,
+        var toolbar,
+            compositionTreeBrowserWidget,
             compositionTreeBrowserControl,
             inheritanceTreeBrowserWidget,
             inheritanceTreeBrowserControl,
             crosscutTreeBrowserWidget,
-            crosscutTreeBrowserControl;
+            crosscutTreeBrowserControl,
+            compositionSettings,
+            compositionEl;
 
         this.$el.addClass(OBJECT_BROWSER_CLASS);
 
         this.$el.html('<ul class="nav nav-tabs">' +
-        '<li class="active"><a href="#composition" data-toggle="tab">Composition</a></li>' +
-        '<li class=""><a href="#inheritance" data-toggle="tab">Inheritance</a></li>' +
-        '<li class=""><a href="#crosscut" data-toggle="tab">Crosscut</a></li>' +
-        '</ul>' + '<div class="tab-content">' +
-        '<div class="tab-pane active" id="composition">composition</div>' +
-        '<div class="tab-pane" id="inheritance">inheritance</div>' +
-        '<div class="tab-pane" id="crosscut">crosscut</div>' +
-        '</div>');
+            '<li class="composition active"><a class="composition-anchor" href="#composition" data-toggle="tab">Composition</a></li>' +
+            '<li class="inheritance"><a href="#inheritance" data-toggle="tab">Inheritance</a></li>' +
+            '<li class="crosscut"><a href="#crosscut" data-toggle="tab">Crosscut</a></li>' +
+            '</ul>' + '<div class="tab-content">' +
+            '<div class="tab-pane active" id="composition">composition</div>' +
+            '<div class="tab-pane" id="inheritance">inheritance</div>' +
+            '<div class="tab-pane" id="crosscut">crosscut</div>' +
+            '</div>');
+
+        compositionEl = this.$el.find('a.composition-anchor');
 
         //set Widget title
         this.setTitle('Object Browser');
+        compositionSettings = TreeBrowserControl.getDefaultConfig();
+        ComponentSettings.resolveWithWebGMEGlobal(compositionSettings, TreeBrowserControl.getComponentId());
 
-        compositionTreeBrowserWidget = new TreeBrowserWidget(this.$el.find('div#composition').first());
-        compositionTreeBrowserControl = new TreeBrowserControl(this._client, compositionTreeBrowserWidget);
+        compositionTreeBrowserWidget = new TreeBrowserWidget(this.$el.find('div#composition').first(), {
+            enableEdit: true,
+            hideConnections: compositionSettings.filters.toggled.hideConnections,
+            hideAbstracts: compositionSettings.filters.toggled.hideAbstracts,
+            hideLeaves: compositionSettings.filters.toggled.hideLeaves,
+            hideLibraries: compositionSettings.filters.toggled.hideLibraries,
+            titleFilter: {
+                text: '',
+                type: 'caseInsensitive' //caseSensitive, regex
+            },
+            metaTypeFilter: {
+                text: '',
+                type: 'caseInsensitive' //caseSensitive, regex
+            },
+        });
+        compositionTreeBrowserControl = new TreeBrowserControl(this._client, compositionTreeBrowserWidget,
+            compositionSettings);
 
-        inheritanceTreeBrowserWidget = new TreeBrowserWidget(this.$el.find('div#inheritance').first());
+        inheritanceTreeBrowserWidget = new TreeBrowserWidget(this.$el.find('div#inheritance').first(), {
+            titleFilter: {
+                text: '',
+                type: 'caseInsensitive' //caseSensitive, regex
+            }
+        });
         inheritanceTreeBrowserControl = new InheritanceBrowserControl(this._client, inheritanceTreeBrowserWidget);
 
-        crosscutTreeBrowserWidget = new TreeBrowserWidget(this.$el.find('div#crosscut').first());
+        crosscutTreeBrowserWidget = new TreeBrowserWidget(this.$el.find('div#crosscut').first(), {
+            titleFilter: {
+                text: '',
+                type: 'caseInsensitive' //caseSensitive, regex
+            }
+        });
         crosscutTreeBrowserControl = new CrosscutBrowserControl(this._client, crosscutTreeBrowserWidget);
+
+        toolbar = WebGMEGlobal.Toolbar;
+
+        if (toolbar) {
+            toolbar.addSeparator();
+            toolbar.addButton({
+                title: 'Locate in tree browser',
+                icon: 'glyphicon glyphicon-screenshot',
+                data: {},
+                clickFn: function (/*data*/) {
+                    var nodeId = WebGMEGlobal.State.getActiveObject(),
+                        selectedIds = WebGMEGlobal.State.getActiveSelection();
+
+                    // Active the composition tree.
+                    compositionEl.click();
+                    if (selectedIds && selectedIds.length > 0) {
+                        compositionTreeBrowserControl.locateNode(selectedIds[0]);
+                    } else if (typeof nodeId === 'string') {
+                        compositionTreeBrowserControl.locateNode(nodeId);
+                    }
+                }
+            });
+        }
     };
 
     return ObjectBrowserPanel;

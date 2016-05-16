@@ -97,10 +97,20 @@ $tabs-container-height: 26px;
           right: -13px;
         }
 
+        &.align {
+          bottom: -13px;
+          left: -13px;
+        }
+
         &.move {
           top: -13px;
-          left: 50%;
+          left: -13px;
           margin-left: -13px;
+        }
+
+        &.open {
+          top: -13px;
+          left: -13px;
         }
 
         &:hover {
@@ -285,14 +295,14 @@ $tabs-container-height: 26px;
   }
 }
 
-div.css-zoom.diagram-designer-zoom {
+.diagram-designer-zoom-container {
   position: absolute;
   top: 30px;
   left: 10px;
 }
 
 .w-tabs {
-  div.css-zoom.diagram-designer-zoom {
+  .diagram-designer-zoom-container {
     top: 70px;
   }
 }
@@ -304,7 +314,7 @@ div.diagram-designer-drag-outline {
 /* TABS CONTAINER */
 
 .active-panel .diagram-designer-tabs-container {
-  background-color: rgba(235, 235, 235, 0.2);
+  background-color: #F7FAFF;
 }
 
 .diagram-designer-tabs-container {
@@ -312,7 +322,7 @@ div.diagram-designer-drag-outline {
   top: 3px;
   width: 100%;
   height: $tabs-container-height;
-  background-color: rgba(248, 248, 248, 0.4);
+  background-color: #FDFDFD;
 
   padding-top: 1px;
 
@@ -382,6 +392,15 @@ div.diagram-designer-drag-outline {
 
               input {
                 min-width: 50px !important;
+              }
+            }
+
+            i.delete-tab-btn {
+              cursor: pointer;
+              font-size: 100%;
+              margin-left: 5px;
+              &:hover {
+                color: #b30404;
               }
             }
 

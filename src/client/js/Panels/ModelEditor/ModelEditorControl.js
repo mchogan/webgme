@@ -12,7 +12,9 @@ define(['js/logger',
     './ModelEditorControl.DiagramDesignerWidgetEventHandlers',
     'js/Utils/GMEConcepts',
     'js/Utils/GMEVisualConcepts',
-    'js/Utils/PreferencesHelper'
+    'js/Utils/PreferencesHelper',
+    'js/Controls/AlignMenu',
+    'js/Utils/ComponentSettings'
 ], function (Logger,
              CONSTANTS,
              nodePropertyNames,
@@ -21,7 +23,9 @@ define(['js/logger',
              ModelEditorControlDiagramDesignerWidgetEventHandlers,
              GMEConcepts,
              GMEVisualConcepts,
-             PreferencesHelper) {
+             PreferencesHelper,
+             AlignMenu,
+             ComponentSettings) {
 
     'use strict';
 
@@ -33,17 +37,21 @@ define(['js/logger',
         SRC_POINTER_NAME = CONSTANTS.POINTER_SOURCE,
         DST_POINTER_NAME = CONSTANTS.POINTER_TARGET;
 
-    ModelEditorControl = function (options) {
+    ModelEditorControl = function (options, config) {
         this.logger = options.logger || Logger.create(options.loggerName || 'gme:Panels:ModelEditor:' +
-                                                                            'ModelEditorControl',
-            WebGMEGlobal.gmeConfig.client.log);
+                'ModelEditorControl',
+                WebGMEGlobal.gmeConfig.client.log);
 
         this._client = options.client;
+        this._config = ModelEditorControl.getDefaultConfig();
+        ComponentSettings.resolveWithWebGMEGlobal(this._config, ModelEditorControl.getComponentId());
 
         this._firstLoad = false;
+        this._topNode = CONSTANTS.PROJECT_ROOT_ID;
 
         //initialize core collections and variables
         this.designerCanvas = options.widget;
+        this._alignMenu = new AlignMenu(this.designerCanvas.CONSTANTS, {});
 
         if (this._client === undefined) {
             this.logger.error('ModelEditorControl\'s client is not specified...');
@@ -69,15 +77,17 @@ define(['js/logger',
 
         /****************** END OF - ADD BUTTONS AND THEIR EVENT HANDLERS TO DESIGNER CANVAS ******************/
 
-            //attach all the event handlers for event's coming from DesignerCanvas
+        //attach all the event handlers for event's coming from DesignerCanvas
         this.attachDiagramDesignerWidgetEventHandlers();
 
+        this._updateTopNode();
         this.logger.debug('ModelEditorControl ctor finished');
     };
 
     ModelEditorControl.prototype.selectedObjectChanged = function (nodeId) {
         var desc,
             nodeName,
+            node,
             self = this;
 
         this.logger.debug('activeObject "' + nodeId + '"');
@@ -109,6 +119,7 @@ define(['js/logger',
         //since PROJECT_ROOT_ID is an empty string, it is considered false..
         if (nodeId || nodeId === CONSTANTS.PROJECT_ROOT_ID) {
             desc = this._getObjectDescriptor(nodeId);
+            nodeName = (desc && desc.name || ' ');
             if (desc) {
                 this.currentNodeInfo.parentId = desc.parentId;
             }
@@ -120,8 +131,8 @@ define(['js/logger',
                 var aspectNames = this._client.getMetaAspectNames(nodeId) || [];
                 if (aspectNames.indexOf(this._selectedAspect) === -1) {
                     this.logger.warn('The currently selected aspect "' + this._selectedAspect +
-                                     '" does not exist in the object "' + desc.name + ' (' + nodeId +
-                                     ')", falling back to "All"');
+                        '" does not exist in the object "' + nodeName + ' (' + nodeId +
+                        ')", falling back to "All"');
                     this._selectedAspect = CONSTANTS.ASPECT_ALL;
                     WebGMEGlobal.State.registerActiveAspect(CONSTANTS.ASPECT_ALL);
                 }
@@ -139,13 +150,17 @@ define(['js/logger',
 
             this._firstLoad = true;
 
-            nodeName = (desc && desc.name || ' ');
-
             this.designerCanvas.setTitle(nodeName);
             this.designerCanvas.setBackgroundText(nodeName, {
                 'font-size': BACKGROUND_TEXT_SIZE,
                 color: BACKGROUND_TEXT_COLOR
             });
+
+            node = this._client.getNode(nodeId);
+            if (node && !this._client.isProjectReadOnly()) {
+                this.designerCanvas.setReadOnly(node.isLibraryRoot() || node.isLibraryElement());
+                this.setReadOnly(node.isLibraryRoot() || node.isLibraryElement());
+            }
 
             this.designerCanvas.showProgressbar();
 
@@ -172,14 +187,21 @@ define(['js/logger',
 
         if (nodeObj) {
             objDescriptor = {};
-
             objDescriptor.id = nodeObj.getId();
-            objDescriptor.name = nodeObj.getAttribute(nodePropertyNames.Attributes.name);
+            objDescriptor.name = nodeObj.getFullyQualifiedName();
             objDescriptor.parentId = nodeObj.getParentId();
+
+            if (nodeObj.isLibraryRoot()) {
+                //this means that a library root will not be visualized on our modelEditor
+                return objDescriptor;
+            }
 
             if (nodeId !== this.currentNodeInfo.id) {
                 //fill the descriptor based on its type
                 if (GMEConcepts.isConnection(nodeId)) {
+                    objDescriptor.connectionChanged = this._GMEModels.indexOf(nodeId) > -1 &&
+                        this._GMEConnections.indexOf(nodeId) === -1;
+
                     objDescriptor.kind = 'CONNECTION';
                     objDescriptor.source = nodeObj.getPointer(SRC_POINTER_NAME).to;
                     objDescriptor.target = nodeObj.getPointer(DST_POINTER_NAME).to;
@@ -195,6 +217,8 @@ define(['js/logger',
                     }
                 } else {
                     objDescriptor.kind = 'MODEL';
+                    objDescriptor.connectionChanged = this._GMEModels.indexOf(nodeId) === -1 &&
+                        this._GMEConnections.indexOf(nodeId) > -1;
 
                     //aspect specific coordinate
                     if (this._selectedAspect === CONSTANTS.ASPECT_ALL) {
@@ -202,8 +226,8 @@ define(['js/logger',
                     } else {
                         memberListContainerObj = this._client.getNode(this.currentNodeInfo.id);
                         pos = memberListContainerObj.getMemberRegistry(this._selectedAspect,
-                            nodeId,
-                            REGISTRY_KEYS.POSITION) || nodeObj.getRegistry(REGISTRY_KEYS.POSITION);
+                                nodeId,
+                                REGISTRY_KEYS.POSITION) || nodeObj.getRegistry(REGISTRY_KEYS.POSITION);
                     }
 
                     if (pos) {
@@ -248,16 +272,20 @@ define(['js/logger',
 
     // PUBLIC METHODS
     ModelEditorControl.prototype._eventCallback = function (events) {
-        var i = events ? events.length : 0;
+        var i = events ? events.length : 0,
+            refresh;
 
         this.logger.debug('_eventCallback "' + i + '" items');
 
         if (i > 0) {
             this.eventQueue.push(events);
-            this.processNextInQueue();
+            refresh = this.processNextInQueue();
         }
 
         this.logger.debug('_eventCallback "' + events.length + '" items - DONE');
+        if (refresh === true) {
+            this.selectedObjectChanged(this.currentNodeInfo.id);
+        }
     };
 
     ModelEditorControl.prototype.processNextInQueue = function () {
@@ -265,6 +293,7 @@ define(['js/logger',
             len = this.eventQueue.length,
             decoratorsToDownload = [DEFAULT_DECORATOR],
             itemDecorator,
+            refresh = false,
             self = this;
 
         if (len > 0) {
@@ -275,9 +304,9 @@ define(['js/logger',
             while (len--) {
                 if ((nextBatchInQueue[len].etype === CONSTANTS.TERRITORY_EVENT_LOAD) ||
                     (nextBatchInQueue[len].etype === CONSTANTS.TERRITORY_EVENT_UPDATE)) {
-                    nextBatchInQueue[len].desc = nextBatchInQueue[len].debugEvent ?
-                        _.extend({}, this._getObjectDescriptorDEBUG(nextBatchInQueue[len].eid)) :
-                        this._getObjectDescriptor(nextBatchInQueue[len].eid);
+
+                    nextBatchInQueue[len].desc = this._getObjectDescriptor(nextBatchInQueue[len].eid);
+                    refresh = refresh || nextBatchInQueue[len].desc.connectionChanged === true;
 
                     itemDecorator = nextBatchInQueue[len].desc.decorator;
 
@@ -293,6 +322,8 @@ define(['js/logger',
                 self._dispatchEvents(nextBatchInQueue);
             });
         }
+
+        return refresh;
     };
 
     ModelEditorControl.prototype._dispatchEvents = function (events) {
@@ -399,10 +430,10 @@ define(['js/logger',
                             insertIdxBefore === MAX_VAL) {
                             orderedConnectionEvents.splice(insertIdxAfter + 1, 0, e);
                         } else if (insertIdxAfter === -1 &&
-                                   insertIdxBefore !== MAX_VAL) {
+                            insertIdxBefore !== MAX_VAL) {
                             orderedConnectionEvents.splice(insertIdxBefore, 0, e);
                         } else if (insertIdxAfter !== -1 &&
-                                   insertIdxBefore !== MAX_VAL) {
+                            insertIdxBefore !== MAX_VAL) {
                             orderedConnectionEvents.splice(insertIdxBefore, 0, e);
                         }
                     }
@@ -471,12 +502,12 @@ define(['js/logger',
             if (this.___SLOW_CONN === true) {
                 setTimeout(function () {
                     self.logger.debug('Updating territory with ruleset from decorators: ' +
-                                      JSON.stringify(self._selfPatterns));
+                        JSON.stringify(self._selfPatterns));
                     self._client.updateTerritory(self._territoryId, self._selfPatterns);
                 }, 2000);
             } else {
                 this.logger.debug('Updating territory with ruleset from decorators: ' +
-                                  JSON.stringify(this._selfPatterns));
+                    JSON.stringify(this._selfPatterns));
                 this._client.updateTerritory(this._territoryId, this._selfPatterns);
             }
         }
@@ -556,7 +587,6 @@ define(['js/logger',
             }
         };
 
-
         //component loaded
         //we are interested in the load of sub_components of the opened component
         if (this.currentNodeInfo.id !== gmeID) {
@@ -615,7 +645,7 @@ define(['js/logger',
                                     uiComponent = this.designerCanvas.createConnection(objDesc);
 
                                     this.logger.debug('Connection: ' + uiComponent.id + ' for GME object: ' +
-                                                      objDesc.id);
+                                        objDesc.id);
 
                                     this._GmeID2ComponentID[gmeID].push(uiComponent.id);
                                     this._ComponentID2GmeID[uiComponent.id] = gmeID;
@@ -696,8 +726,8 @@ define(['js/logger',
                         l = destinations.length;
                         len -= 1;
 
-                        while (k--) {
-                            while (l--) {
+                        for (k = sources.length - 1; k >= 0; k -= 1) {
+                            for (l = destinations.length - 1; l >= 0; l -= 1) {
                                 objDesc.srcObjId = sources[k].objId;
                                 objDesc.srcSubCompId = sources[k].subCompId;
                                 objDesc.dstObjId = destinations[l].objId;
@@ -717,12 +747,12 @@ define(['js/logger',
                                     len -= 1;
                                 } else {
                                     this.logger.warn('Updating connections...Existing connections are less than the ' +
-                                    'needed src-dst combo...');
+                                        'needed src-dst combo...');
                                     //let's create a connection
                                     _.extend(objDesc, this.getConnectionDescriptor(gmeID));
                                     uiComponent = this.designerCanvas.createConnection(objDesc);
                                     this.logger.debug('Connection: ' + uiComponent.id + ' for GME object: ' +
-                                                      objDesc.id);
+                                        objDesc.id);
                                     this._GmeID2ComponentID[gmeID].push(uiComponent.id);
                                     this._ComponentID2GmeID[uiComponent.id] = gmeID;
                                 }
@@ -785,7 +815,7 @@ define(['js/logger',
         if (gmeID === this.currentNodeInfo.id) {
             //the opened model has been removed from territoy --> most likely deleted...
             this.logger.debug('The previously opened model does not exist... --- GMEID: "' + this.currentNodeInfo.id +
-                              '"');
+                '"');
             this.designerCanvas.setBackgroundText('The previously opened model does not exist...', {
                 'font-size': BACKGROUND_TEXT_SIZE,
                 color: BACKGROUND_TEXT_COLOR
@@ -836,7 +866,6 @@ define(['js/logger',
             len = idList.length,
             nodeObj;
 
-
         this._client.startTransaction();
 
         while (len--) {
@@ -851,7 +880,6 @@ define(['js/logger',
 
         this._client.completeTransaction();
     };
-
 
     ModelEditorControl.prototype._getAllSourceDestinationPairsForConnection = function (GMESrcId, GMEDstId) {
         var sources = [],
@@ -953,7 +981,7 @@ define(['js/logger',
         for (gmeID in this._notifyPackage) {
             if (this._notifyPackage.hasOwnProperty(gmeID)) {
                 this.logger.debug('NotifyPartDecorator: ' + gmeID + ', componentIDs: ' +
-                                  JSON.stringify(this._notifyPackage[gmeID]));
+                    JSON.stringify(this._notifyPackage[gmeID]));
 
                 if (this._GmeID2ComponentID.hasOwnProperty(gmeID)) {
                     //src is a DesignerItem
@@ -968,7 +996,12 @@ define(['js/logger',
     };
 
     ModelEditorControl.prototype._stateActiveObjectChanged = function (model, activeObjectId) {
-        this.selectedObjectChanged(activeObjectId);
+        if (this.currentNodeInfo && this.currentNodeInfo.id === activeObjectId) {
+            // [patrik] added this check to avoid redrawing when becoming active in split panel mode.
+            this.logger.debug('Disregarding activeObject changed when it is already the same.');
+        } else {
+            this.selectedObjectChanged(activeObjectId);
+        }
     };
 
     ModelEditorControl.prototype._stateActiveSelectionChanged = function (model, activeSelection) {
@@ -981,20 +1014,51 @@ define(['js/logger',
         }
     };
 
+    ModelEditorControl.prototype._activeProjectChanged = function (/*model, activeProjectId*/) {
+        this._updateTopNode();
+    };
+
+    ModelEditorControl.prototype._updateTopNode = function () {
+        var projectId = this._client.getActiveProjectId(),
+            projectName;
+
+        if (projectId) {
+            projectName = this._client.getActiveProjectName();
+            if (this._config.byProjectId.topNode.hasOwnProperty(projectId)) {
+                this._topNode = this._config.byProjectId.topNode[projectId];
+            } else if (this._config.byProjectName.topNode.hasOwnProperty(projectName)) {
+                this._topNode = this._config.byProjectName.topNode[projectName];
+            } else {
+                this._topNode = this._config.topNode;
+            }
+        }
+    };
+
     ModelEditorControl.prototype._attachClientEventListeners = function () {
         this._detachClientEventListeners();
         WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_OBJECT, this._stateActiveObjectChanged, this);
         WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_SELECTION, this._stateActiveSelectionChanged, this);
+        WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_PROJECT_NAME, this._activeProjectChanged, this);
     };
 
     ModelEditorControl.prototype._detachClientEventListeners = function () {
         WebGMEGlobal.State.off('change:' + CONSTANTS.STATE_ACTIVE_OBJECT, this._stateActiveObjectChanged);
         WebGMEGlobal.State.off('change:' + CONSTANTS.STATE_ACTIVE_SELECTION, this._stateActiveSelectionChanged);
+        WebGMEGlobal.State.off('change:' + CONSTANTS.STATE_ACTIVE_PROJECT_NAME, this._activeProjectChanged, this);
     };
 
     ModelEditorControl.prototype.onActivate = function () {
         this._attachClientEventListeners();
         this._displayToolbarItems();
+        if (this._selectedAspect) {
+            WebGMEGlobal.State.registerActiveAspect(this._selectedAspect);
+        }
+
+        if (this.currentNodeInfo && typeof this.currentNodeInfo.id === 'string') {
+            WebGMEGlobal.State.registerSuppressVisualizerFromNode(true);
+            WebGMEGlobal.State.registerActiveObject(this.currentNodeInfo.id);
+            WebGMEGlobal.State.registerSuppressVisualizerFromNode(false);
+        }
     };
 
     ModelEditorControl.prototype.onDeactivate = function () {
@@ -1070,8 +1134,7 @@ define(['js/logger',
     };
 
     ModelEditorControl.prototype._refreshBtnModelHierarchyUp = function () {
-        if (this.currentNodeInfo.parentId ||
-            this.currentNodeInfo.parentId === CONSTANTS.PROJECT_ROOT_ID) {
+        if (this.currentNodeInfo.id && this.currentNodeInfo.id !== this._topNode) {
             this.$btnModelHierarchyUp.show();
         } else {
             this.$btnModelHierarchyUp.hide();
@@ -1096,10 +1159,17 @@ define(['js/logger',
             aspects,
             tabID,
             i,
-            selectedTabID;
+            selectedTabID,
+            activePanel = WebGMEGlobal.PanelManager.getActivePanel();
 
         this._aspects = {};
         this.designerCanvas.clearTabs();
+
+        // If the active panel isn't set (and the ModelEditor exists), assume
+        // the ModelEditor is the active panel
+        if (!activePanel || activePanel.control === this) {
+            this._selectedAspect = WebGMEGlobal.State.getActiveAspect();
+        }
 
         if (objId || objId === CONSTANTS.PROJECT_ROOT_ID) {
             aspects = this._client.getMetaAspectNames(objId) || [];
@@ -1137,7 +1207,7 @@ define(['js/logger',
             }
         }
 
-        this.designerCanvas.selectTab(selectedTabID);
+        this.designerCanvas.selectTab(selectedTabID.toString());
 
         //check if the node's aspect rules has changed or not, and if so, initialize with that
         if (this._selectedAspect !== CONSTANTS.ASPECT_ALL) {
@@ -1149,7 +1219,7 @@ define(['js/logger',
                 aspectRulesChanged = (_.difference(this._selfPatterns[nodeId].items, newAspectRules.items)).length > 0;
                 if (aspectRulesChanged === false) {
                     aspectRulesChanged = (_.difference(newAspectRules.items, this._selfPatterns[nodeId].items)).length >
-                                         0;
+                        0;
                 }
             } else {
                 if (this._selfPatterns[nodeId].items || newAspectRules.items) {
@@ -1164,8 +1234,9 @@ define(['js/logger',
         }
     };
 
-    ModelEditorControl.prototype._initializeSelectedAspect = function () {
+    ModelEditorControl.prototype._initializeSelectedAspect = function (tabID) {
         WebGMEGlobal.State.registerActiveAspect(this._selectedAspect);
+        WebGMEGlobal.State.registerActiveTab(tabID);
 
         this.selectedObjectChanged(this.currentNodeInfo.id);
     };
@@ -1174,6 +1245,21 @@ define(['js/logger',
         return {};
     };
 
+    ModelEditorControl.getDefaultConfig = function () {
+        return {
+            topNode: '',
+            byProjectName: {
+                topNode: {}
+            },
+            byProjectId: {
+                topNode: {}
+            }
+        };
+    };
+
+    ModelEditorControl.getComponentId = function () {
+        return 'GenericUIModelEditorControl';
+    };
 
     //attach ModelEditorControl - DesignerCanvas event handler functions
     _.extend(ModelEditorControl.prototype, ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype);

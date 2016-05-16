@@ -8,12 +8,14 @@ define(['js/PanelBase/PanelBase',
     'js/Widgets/NetworkStatus/NetworkStatusWidget',
     'js/Widgets/BranchStatus/BranchStatusWidget',
     'js/Widgets/BranchSelector/BranchSelectorWidget',
-    'js/Widgets/KeyboardManager/KeyboardManagerWidget'
+    'js/Widgets/KeyboardManager/KeyboardManagerWidget',
+    'js/Widgets/Notification/NotificationWidget'
 ], function (PanelBase,
              NetworkStatusWidget,
              BranchStatusWidget,
              BranchSelectorWidget,
-             KeyboardManagerWidget) {
+             KeyboardManagerWidget,
+             NotificationWidget) {
 
     'use strict';
 
@@ -52,14 +54,15 @@ define(['js/PanelBase/PanelBase',
             networkStatusEl,
             n,
             branchStatusEl,
-            b;
+            b,
+            notificationEl;
 
         navBar.append(navBarInner);
         this.$el.append(navBar);
 
         //add ISIS link
         pullLeft = $('<div class="pull-left inline"></div>');
-        pullLeft.append($('<div class="navbar-text"><div class="webgme-copyright">© 2015 <a href="http://www.isis.vanderbilt.edu/" title="Vanderbilt University" target="_blank">Vanderbilt University</a></div></div>'));
+        pullLeft.append($('<div class="navbar-text"><div class="webgme-copyright">&copy; 2016 <a href="http://www.isis.vanderbilt.edu/" title="Vanderbilt University" target="_blank">Vanderbilt University</a></div></div>'));
         navBarInner.append(pullLeft);
 
         //add version UI piece
@@ -95,10 +98,13 @@ define(['js/PanelBase/PanelBase',
         n = new NetworkStatusWidget(networkStatusEl, this._client);
         navBarInner.append(networkStatusEl).append(separator.clone());
 
+        notificationEl = widgetPlaceHolder.clone();
+        new NotificationWidget(notificationEl, this._client);
+        navBarInner.append(notificationEl).append(separator.clone());
+
         branchStatusEl = widgetPlaceHolder.clone();
         b = new BranchStatusWidget(branchStatusEl, this._client);
         navBarInner.append(branchStatusEl).append(separator.clone());
-
     };
 
     return FooterControlsPanel;

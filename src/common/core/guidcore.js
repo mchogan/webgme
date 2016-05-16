@@ -6,38 +6,49 @@
 
 define([
     'common/util/assert',
-    'common/util/guid',
     'common/core/tasync',
-    'common/regexp'
-], function (ASSERT, GUID, TASYNC, REGEXP) {
+    'common/regexp',
+    'common/util/random',
+    'common/core/constants',
+], function (ASSERT, TASYNC, REGEXP, RANDOM, CONSTANTS) {
 
     'use strict';
 
-    var OWN_GUID = '_relguid';
+    var relidToInteger = RANDOM.relidToInteger,
+        GUID = RANDOM.generateGuid;
 
-    function guidCore(_innerCore, options) {
+    function GuidCore(innerCore, options) {
         ASSERT(typeof options === 'object');
         ASSERT(typeof options.globConf === 'object');
         ASSERT(typeof options.logger !== 'undefined');
-        var logger = options.logger.fork('guidCore');
-        //helper functions
+
+        var logger = options.logger,
+            self = this,
+            key;
+
+        for (key in innerCore) {
+            this[key] = innerCore[key];
+        }
+
+        logger.debug('initialized GuidCore');
+
+        //<editor-fold=Helper Functions>
         function toInternalGuid(myGuid) {
             return myGuid.replace(/-/g, '');
         }
 
         function toExternalGuid(myGuid) {
-            var out = myGuid.substr(0, 8) + '-' + myGuid.substr(8, 4) + '-' +
+            return myGuid.substr(0, 8) + '-' + myGuid.substr(8, 4) + '-' +
                 myGuid.substr(12, 4) + '-' + myGuid.substr(16, 4) + '-' + myGuid.substr(20);
-            return out;
         }
 
         function guidToArray(guid) {
             if (guid === null || guid === undefined) {
                 return [0, 0, 0, 0, 0, 0, 0, 0];
             }
-            var array = [];
-            for (var i = 0; i < guid.length / 4; i++) {
-                array.push(parseInt(guid.substr(4 * i, 4), 16));
+            var array = new Array(8);
+            for (var i = 0; i < guid.length / 4; i += 1) {
+                array[i] = parseInt(guid.substr(4 * i, 4), 16);
             }
             return array;
         }
@@ -45,20 +56,18 @@ define([
         function getRelidGuid(node) {
             //TODO we always should know what structure we should expect as a relid -
             // now we think it is a number so it can be converted to 0xsomething
-            var relid = _core.getRelid(node);
-            relid = Number(relid);
+            var relid = self.getRelid(node);
+            //relid = Number(relid);
+            relid = relidToInteger(relid);
             if (relid === 'NaN') {
                 return null;
-            }
-            if (relid < 0) {
-                relid = relid * (-1);
             }
 
             relid = relid.toString(16);
 
             //now we should fill up with 0's in the beggining
             while (relid.length < 32) {
-                relid = relid + '0'; //TODO we pad to the end so the final result will be more visible during debug
+                relid = relid + '0';
             }
             return relid;
         }
@@ -85,105 +94,102 @@ define([
             return arrayOut.join('');
         }
 
-        var _core = {};
-        for (var i in _innerCore) {
-            _core[i] = _innerCore[i];
+        function setDataGuid(node, guid) {
+            self.setAttribute(node, CONSTANTS.OWN_GUID,
+                xorGuids(
+                    toInternalGuid(guid),
+                    xorGuids(
+                        getRelidGuid(node),
+                        toInternalGuid(
+                            self.getGuid(
+                                self.getParent(node)
+                            )
+                        )
+                    )
+                )
+            );
         }
-        logger.debug('initialized');
-        //new functions
-        _core.getMiddleGuid = function (node) {
-            var outGuid = _core.getAttribute(node, OWN_GUID);
-            var tempnode = _core.getParent(node);
-            while (tempnode) {
-                outGuid = xorGuids(outGuid, _core.getAttribute(tempnode, OWN_GUID));
-                tempnode = _core.getParent(tempnode);
-            }
-            return outGuid;
-        };
 
-        _core.getGuid = function (node) {
-            var middle = _core.getMiddleGuid(node),
-                relid = getRelidGuid(node),
-                guid = xorGuids(middle, relid);
-            return toExternalGuid(guid);
-        };
+        //</editor-fold>
 
-        _core.setGuid = function (node, guid) {
-            ASSERT(REGEXP.GUID.test(guid));
-            var children = _core.loadChildren(node);
-            return TASYNC.call(function (nodeArray) {
-                var newGuid = toInternalGuid(guid);
-                //first setting the node's OWN_GUID
-                var oldOwn = _core.getAttribute(node, OWN_GUID);
-                var parent = _core.getParent(node);
-                if (parent) {
-                    _core.setAttribute(node, OWN_GUID,
-                        xorGuids(newGuid, xorGuids(_core.getMiddleGuid(parent), getRelidGuid(node))));
-                } else {
-                    _core.setAttribute(node, OWN_GUID, xorGuids(newGuid, getRelidGuid(node)));
-                }
-                var newOwn = _core.getAttribute(node, OWN_GUID);
-                //now modify its children's
-                for (var i = 0; i < nodeArray.length; i++) {
-                    var oldGuid = _core.getAttribute(nodeArray[i], OWN_GUID);
-                    _core.setAttribute(nodeArray[i], OWN_GUID, xorGuids(oldGuid, xorGuids(oldOwn, newOwn)));
-                }
-
-                return;
-            }, children);
-        };
-
-        //modified functions
-        _core.createNode = function (parameters) {
+        //<editor-fold=Modified Methods>
+        this.createNode = function (parameters) {
             parameters = parameters || {};
+
             var guid = parameters.guid || GUID(),
-                parent = parameters.parent;
+                node;
 
             ASSERT(REGEXP.GUID.test(guid));
 
-            var node = _innerCore.createNode(parameters);
-            guid = toInternalGuid(guid);
+            node = innerCore.createNode(parameters);
 
-            var relguid = '';
-            if (parent) {
-                relguid = xorGuids(toInternalGuid(_core.getMiddleGuid(_core.getParent(node))),
-                    xorGuids(guid, getRelidGuid(node)));
-            } else {
-                relguid = xorGuids(guid, getRelidGuid(node));
-            }
-            _innerCore.setAttribute(node, OWN_GUID, relguid);
+            setDataGuid(node, guid);
 
             return node;
         };
 
-        _core.moveNode = function (node, parent) {
-            var oldGuid = toInternalGuid(_core.getGuid(node)),
-                newNode = _innerCore.moveNode(node, parent);
+        this.moveNode = function (node, parent) {
+            var oldGuid = self.getGuid(node);
 
-            _core.setAttribute(newNode, OWN_GUID, xorGuids(_core.getMiddleGuid(parent),
-                xorGuids(oldGuid, getRelidGuid(newNode))));
+            node = innerCore.moveNode(node, parent);
 
-            return newNode;
+            setDataGuid(node, oldGuid);
+
+            return node;
         };
+        //</editor-fold>
 
-        _core.copyNode = function (node, parent) {
-            var newNode = _innerCore.copyNode(node, parent);
-            _core.setAttribute(newNode, OWN_GUID, toInternalGuid(GUID()));
-            return newNode;
-        };
-
-        _core.copyNodes = function (nodes, parent) {
-            var copiedNodes = _innerCore.copyNodes(nodes, parent),
-                i;
-            for (i = 0; i < copiedNodes.length; i++) {
-                _core.setAttribute(copiedNodes[i], OWN_GUID, toInternalGuid(GUID()));
+        //<editor-fold=Added Methods>
+        this.getGuid = function (node) {
+            if (node) {
+                return self.getDeducedGuid(node, self.getGuid(self.getParent(node)));
+            } else {
+                return CONSTANTS.NULL_GUID;
             }
-
-            return copiedNodes;
         };
 
-        return _core;
+        this.setGuid = function (node, guid) {
+            ASSERT(REGEXP.GUID.test(guid));
+            return TASYNC.call(function (children) {
+                var i,
+                    childrenGuids = [];
+
+                //save children guids
+                for (i = 0; i < children.length; i += 1) {
+                    childrenGuids.push(self.getGuid(children[i]));
+                }
+
+                //setting own dataGuid
+                setDataGuid(node, guid);
+
+                //changing children data guids
+                for (i = 0; i < children.length; i += 1) {
+                    setDataGuid(children[i], childrenGuids[i]);
+                }
+            }, self.loadChildren(node));
+        };
+
+        this.getDataGuid = function (node) {
+            return toExternalGuid(self.getAttribute(node, CONSTANTS.OWN_GUID));
+        };
+
+        this.getDeducedGuid = function (node, baseGuid) {
+            if (node && REGEXP.GUID.test(baseGuid)) {
+                return toExternalGuid(
+                    xorGuids(
+                        getRelidGuid(node),
+                        xorGuids(
+                            self.getAttribute(node, CONSTANTS.OWN_GUID),
+                            toInternalGuid(baseGuid)
+                        )
+                    )
+                );
+            } else {
+                return CONSTANTS.NULL_GUID;
+            }
+        };
+        //</editor-fold>
     }
 
-    return guidCore;
+    return GuidCore;
 });

@@ -1,4 +1,4 @@
-/*globals define, _, $*/
+/*globals define, $, WebGMEGlobal*/
 /*jshint browser: true*/
 /**
  * @author rkereskenyi / https://github.com/rkereskenyi
@@ -7,9 +7,11 @@
 define([
     'js/Controls/PropertyGrid/Widgets/WidgetBase',
     'blob/BlobClient',
+    'js/logger',
     'css!./styles/AssetWidget.css'
 ], function (WidgetBase,
-             BlobClient) {
+             BlobClient,
+             Logger) {
 
     'use strict';
 
@@ -18,10 +20,12 @@ define([
         INPUT_FILE_UPLOAD = $('<input type="file" />'),
         //MAX_FILE_SIZE = 100000000,
         ASSET_WIDGET_BASE = $('<div class="asset-widget" />'),
-        ASSET_LINK = $('<a href="" target="_blank"/>');
+        ASSET_LINK = $('<a class="blob-download-link" href="" target="_self"/>');
 
     AssetWidget = function (propertyDesc) {
-        AssetWidget.superclass.call(this, propertyDesc);
+        WidgetBase.call(this, propertyDesc);
+        this._logger = Logger.create('gme:js:Controls:PropertyGrid:Widgets:AssetWidget',
+            WebGMEGlobal.gmeConfig.client.log);
 
         this.__el = ASSET_WIDGET_BASE.clone();
         this.el.append(this.__el);
@@ -36,14 +40,15 @@ define([
 
         this.__fileUploadInput = INPUT_FILE_UPLOAD.clone();
 
+        this.__files = [];
+
         this._attachFileDropHandlers();
 
         this.updateDisplay();
     };
 
-    AssetWidget.superclass = WidgetBase;
-
-    _.extend(AssetWidget.prototype, WidgetBase.prototype);
+    AssetWidget.prototype = Object.create(WidgetBase.prototype);
+    AssetWidget.prototype.constructor = AssetWidget;
 
     AssetWidget.prototype._attachFileDropHandlers = function () {
         var self = this;
@@ -101,9 +106,8 @@ define([
         this.__btnAttach.off('click');
     };
 
-
     AssetWidget.prototype.updateDisplay = function () {
-        var bc = new BlobClient(),
+        var bc = new BlobClient({logger: this._logger.fork('BlobClient')}),
             urlDownload = this.propertyValue ? bc.getDownloadURL(this.propertyValue) : '',
             text = this.propertyValue,
 
@@ -126,11 +130,11 @@ define([
             });
         }
 
-        return AssetWidget.superclass.prototype.updateDisplay.call(this);
+        return WidgetBase.prototype.updateDisplay.call(this);
     };
 
     AssetWidget.prototype.setReadOnly = function (isReadOnly) {
-        AssetWidget.superclass.prototype.setReadOnly.call(this, isReadOnly);
+        WidgetBase.prototype.setReadOnly.call(this, isReadOnly);
 
         if (this.__btnAttach) {
             if (isReadOnly === true) {
@@ -148,7 +152,7 @@ define([
 
     AssetWidget.prototype._fileSelectHandler = function (event) {
         var self = this,
-            blobClient = new BlobClient(),
+            blobClient = new BlobClient({logger: this._logger.fork('BlobClient')}),
             i,
             file,
 
@@ -168,6 +172,7 @@ define([
 
         // process all File objects
         if (files && files.length > 0) {
+            this.__files = files;
             this._detachFileDropHandlers(true);
 
             afName = self.propertyName;
@@ -224,6 +229,41 @@ define([
         } while (bytes >= thresh);
 
         return bytes.toFixed(1) + ' ' + units[u];
+    };
+
+    AssetWidget.prototype.getTargetAsJson = function (callback) {
+        var self = this,
+            file,
+            parsedContent = null,
+            reader;
+
+        if (this.__files && this.__files.length > 0) {
+            file = this.__files[0];
+            reader = new FileReader();
+
+            reader.onload = function (e) {
+                if (e.target && e.target.result) {
+                    try {
+                        parsedContent = JSON.parse(e.target.result);
+                    } catch (exp) {
+                        self._logger.error('failed to read asset on the client side', exp);
+                        parsedContent = null;
+                    }
+                }
+
+                callback(parsedContent);
+            };
+
+            reader.readAsText(file);
+
+        } else {
+            callback(null);
+        }
+    };
+
+    AssetWidget.prototype.destroy = function () {
+        this._detachFileDropHandlers();
+        WidgetBase.prototype.destroy.call(this);
     };
 
     return AssetWidget;

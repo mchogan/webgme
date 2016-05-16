@@ -8,13 +8,19 @@ function getClientConfig(gmeConfig) {
     'use strict';
     var clientConfig = JSON.parse(JSON.stringify(gmeConfig));
 
-    delete clientConfig.server.sessionCookieSecret;
-    delete clientConfig.server.https.certificateFile;
-    delete clientConfig.server.https.keyFile;
     delete clientConfig.server.log;
+    delete clientConfig.server.extlibExcludes;
+
+    delete clientConfig.authentication.jwt.expiresIn;
+    delete clientConfig.authentication.jwt.renewBeforeExpires;
+    delete clientConfig.authentication.jwt.privateKey;
+    delete clientConfig.authentication.jwt.publicKey;
+    delete clientConfig.authentication.salts;
+
     delete clientConfig.executor.nonce;
     delete clientConfig.mongo;
     delete clientConfig.blob;
+    delete clientConfig.bin;
 
     clientConfig.storage.cache = clientConfig.storage.clientCacheSize;
 

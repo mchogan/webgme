@@ -1,6 +1,7 @@
 //TODO: This file must be revised
 /*globals require, process, __dirname, GLOBAL, console*/
 /**
+ * @module Executor:AddLabelJob
  * @author lattmann / https://github.com/lattmann
  * @author ksmyth / https://github.com/ksmyth
  */
@@ -18,20 +19,22 @@ requirejs.config({
     baseUrl: __dirname + '/..',
     paths: {
         //WebGME custom modules
-        'eventDispatcher': '../webgme/common/EventDispatcher',
-        'notificationManager': 'js/NotificationManager',
-        'clientUtil': 'js/util',
-        'loaderCircles': 'js/Loader/LoaderCircles',
-        'loaderProgressBar': 'js/Loader/LoaderProgressBar',
+        eventDispatcher: '../webgme/common/EventDispatcher',
+        notificationManager: 'js/NotificationManager',
+        clientUtil: 'js/util',
+        loaderCircles: 'js/Loader/LoaderCircles',
+        loaderProgressBar: 'js/Loader/LoaderProgressBar',
 
-        'codemirror': 'lib/codemirror/codemirror.amd',
+        codemirror: 'lib/codemirror/codemirror.amd',
         'jquery-csszoom': 'lib/jquery/jquery.csszoom',
 
-        'jszip': 'lib/jszip/jszip',
-        'executor': 'src/rest/executor',
-        'executor_old': 'src/rest/executor_old',
-        'blob': '../webgme/src/middleware/blob',
-        'superagent': 'lib/superagent/superagent'
+        jszip: 'bower_components/jszip/dist/jszip',
+        executor: 'src/rest/executor',
+        executor_old: 'src/rest/executor_old',
+        blob: '../webgme/src/middleware/blob',
+        superagent: 'lib/superagent/superagent',
+        q: 'lib/q/q',
+        debug: 'bower_components/visionmedia-debug/dist/debug'
     },
     nodeRequire: nodeRequire
 });
@@ -81,4 +84,3 @@ requirejs(['blob/BlobClient', 'minimatch'], function (BlobClient, minimatch) {
         putFile(files[i]);
     }
 });
-

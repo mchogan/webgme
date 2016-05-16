@@ -1,4 +1,4 @@
-/*globals define, _*/
+/*globals define*/
 /*jshint browser: true*/
 /**
  * @author rkereskenyi / https://github.com/rkereskenyi
@@ -17,11 +17,11 @@ define([
     iCheckBoxWidget = function (propertyDesc) {
         var self = this;
 
-        iCheckBoxWidget.superclass.call(this, propertyDesc);
+        WidgetBase.call(this, propertyDesc);
 
         this.__checkbox = new ICheckBox({
-            checkedText: 'YES',
-            uncheckedText: 'NO',
+            checkedText: 'TRUE',
+            uncheckedText: 'FALSE',
             checkChangedFn: function (data, isChecked) {
                 self.setValue(isChecked);
                 self.fireFinishChange();
@@ -33,21 +33,17 @@ define([
         this.el.append(this.__checkbox.el);
     };
 
-    iCheckBoxWidget.superclass = WidgetBase;
-
-    _.extend(
-        iCheckBoxWidget.prototype,
-        WidgetBase.prototype
-    );
+    iCheckBoxWidget.prototype = Object.create(WidgetBase.prototype);
+    iCheckBoxWidget.prototype.constructor = iCheckBoxWidget;
 
     iCheckBoxWidget.prototype.updateDisplay = function () {
         this.__checkbox.setChecked(this.getValue());
 
-        return iCheckBoxWidget.superclass.prototype.updateDisplay.call(this);
+        return WidgetBase.prototype.updateDisplay.call(this);
     };
 
     iCheckBoxWidget.prototype.setReadOnly = function (isReadOnly) {
-        iCheckBoxWidget.superclass.prototype.setReadOnly.call(this, isReadOnly);
+        WidgetBase.prototype.setReadOnly.call(this, isReadOnly);
 
         this.__checkbox.setEnabled(!isReadOnly);
     };

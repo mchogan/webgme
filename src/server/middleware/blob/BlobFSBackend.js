@@ -14,11 +14,14 @@ var fs = require('fs'),
     GUID = requireJS('common/util/guid'),
 
     ensureDir = require('../../util/ensureDir'),
-    BlobBackendBase = require('./BlobBackendBase');
+    BlobBackendBase = require('./BlobBackendBase'),
+    BlobError = require('./BlobError');
 
-var BlobFSBackend = function (gmeConfig) {
-    BlobBackendBase.call(this);
+var BlobFSBackend = function (gmeConfig, logger) {
+    BlobBackendBase.call(this, logger);
     this.blobDir = gmeConfig.blob.fsDir;
+    this.tempBucket = this.tempBucket + '-' + gmeConfig.server.port;
+    this.logger.info('local-storage:', this.blobDir);
 };
 
 // Inherits from BlobManagerBase
@@ -101,7 +104,7 @@ BlobFSBackend.prototype.getObject = function (hash, writeStream, bucket, callbac
 
     fs.lstat(filename, function (err, stat) {
         if ((err && err.code === 'ENOENT') || !stat.isFile()) {
-            return callback('Requested object does not exist: ' + hash); // FIXME: make the request have status 404
+            return callback(new BlobError('Requested object does not exist: ' + hash, 404));
         } else if (err) {
             return callback('getObject error: ' + err.code || 'unknown');
         }

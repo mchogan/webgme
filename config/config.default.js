@@ -8,15 +8,24 @@ var path = require('path'),
     config = {
         addOn: {
             enable: false,
+            monitorTimeout: 10000,
             basePaths: [path.join(__dirname, '../src/addon/core')]
         },
 
         authentication: {
             enable: false,
-            allowGuests: false,
-            guestAccount: 'anonymous',
+            allowGuests: true,
+            guestAccount: 'guest',
             logOutUrl: '/',
-            salts: 10
+            salts: 10,
+            jwt: {
+                expiresIn: 3600 * 24 * 7,
+                renewBeforeExpires: 3600,
+                cookieId: 'access_token',
+                // These are just examples and should be overwritten
+                privateKey: path.join(__dirname, '../src/server/middleware/auth/EXAMPLE_PRIVATE_KEY'),
+                publicKey: path.join(__dirname, '../src/server/middleware/auth/EXAMPLE_PUBLIC_KEY')
+            }
         },
 
         bin: {
@@ -45,21 +54,13 @@ var path = require('path'),
         client: {
             appDir: path.join(__dirname, '../src/client'),
             log: {
-                level: 'debug' // To see log messages in the browser inspector set:
-                               // localStorage.debug = '*' (or 'gme*', 'gme:core*')
+                level: 'debug'
             },
-            usedDecorators: ['ModelDecorator',
-                             'CircleDecorator',
-                             'MetaDecorator',
-                             'SVGDecorator',
-                             'UMLStateMachineDecorator',
-                             'DefaultDecorator'],
-            // Used in client/WebGME.js to load initial project.
-            defaultProject: {
-                name: null,
-                branch: null,
-                node: null
-            }
+            defaultConnectionRouter: 'basic3' //'basic', 'basic2', 'basic3'
+        },
+
+        core: {
+            enableCustomConstraints: false,
         },
 
         debug: false,
@@ -67,8 +68,9 @@ var path = require('path'),
         executor: {
             enable: false,
             nonce: null,
-            outputDir: './',
             workerRefreshInterval: 5000,
+            clearOutputTimeout: 60000,
+            clearOldDataAtStartUp: false,
             labelJobs: './labelJobs.json'
         },
 
@@ -77,30 +79,33 @@ var path = require('path'),
             options: {
                 db: {
                     w: 1,
-                    native_parser: true
+                    native_parser: true // jshint ignore: line
                 },
                 server: {
-                    auto_reconnect: true,
-                    socketOptions: {keepAlive: 1},
-                    poolSize: 20
+                    auto_reconnect: true, // jshint ignore: line
+                    socketOptions: {keepAlive: 1}
+                    //poolSize: 5 // default pool size is 5
                 }
             }
         },
 
         plugin: {
+            allowBrowserExecution: true,
             allowServerExecution: false,
-            basePaths: [path.join(__dirname, '../src/plugin/coreplugins')]
+            basePaths: [path.join(__dirname, '../src/plugin/coreplugins')],
+            displayAll: false,
+            serverResultTimeout: 60000
         },
 
         requirejsPaths: {},
 
         rest: {
-            secure: false,
             components: {}
         },
 
         seedProjects: {
             enable: true,
+            allowDuplication: true, //requires mongodb >= 2.6
             defaultProject: 'EmptyProject',
             basePaths: [path.join(__dirname, '../seeds')]
         },
@@ -108,22 +113,13 @@ var path = require('path'),
         server: {
             port: 8888,
             maxWorkers: 10,
-            sessionStore: {
-                type: 'Memory', // Memory, Redis, Mongo, options will be passed to the specified storage
-                // see specific session store documentations for options connect-mongo and connect-redis
-                options: {
-                    //url: 'mongodb://127.0.0.1:27017/multi'
-                }
-            },
-            sessionCookieId: 'webgmeSid',
-            sessionCookieSecret: 'meWebGMEez',
             log: {
                 //patterns: ['gme:server:*', '-gme:server:standalone*'],
                 transports: [{
                     transportType: 'Console',
                     //patterns: ['gme:server:*', '-gme:server:worker*'], // ['gme:server:worker:*'], ['gme:server:*', '-gme:server:worker*']
                     options: {
-                        level: 'info',
+                        level: 'info', // Set this back to info when merged
                         colorize: true,
                         timestamp: true,
                         prettyPrint: true,
@@ -149,34 +145,59 @@ var path = require('path'),
                     }
                 }]
             },
-            https: {
-                enable: false,
-                certificateFile: path.join(__dirname, '../certificates/sample-cert.pem'),
-                keyFile: path.join(__dirname, '../certificates/sample-key.pem')
-            }
+            extlibExcludes: ['config\/config\..*\.js$'],
+            behindSecureProxy: false
         },
 
         socketIO: {
-            reconnection: false,
-            'connect timeout': 10,
-            'reconnection delay': 1,
-            'force new connection': true,
-            transports: ['websocket']
+            clientOptions: {
+                reconnection: true,
+                'connect timeout': 10,
+                'reconnection delay': 1,
+                'force new connection': true
+            },
+            serverOptions: {
+                //transports: ['websocket', 'polling']
+            },
+            adapter: {
+                type: 'Memory', // Memory, Redis
+                options: {
+                    //uri: '127.0.0.1:6379'
+                },
+            }
         },
 
         storage: {
-            autoPersist: true, // core setting
             cache: 2000,
+            // If true events such as PROJECT_CREATED and BRANCH_CREATED will only be broadcasted
+            // and not emitted back to the web-socket that triggered the event.
+            broadcastProjectEvents: false,
+            maxEmittedCoreObjects: -1,
+            loadBucketSize: 100,
+            loadBucketTimer: 10,
             clientCacheSize: 2000, // overwrites cache on client
             keyType: 'plainSHA1', // 'rand160Bits', 'ZSSHA', 'plainSHA1',
-            failSafe: 'memory',
-            failSafeFrequency: 10000,
-            timeout: 10000
+            database: {
+                type: 'mongo', // mongo, redis, memory
+                options: { // if mongo - settings will be used from config.mongo
+                    //port: 6666
+                }
+            }
         },
 
         visualization: {
+            extraCss: [],
             decoratorPaths: [path.join(__dirname, '../src/client/decorators')],
-            visualizerDescriptors: [path.join(__dirname, '../src/client/js/Visualizers.json')]
+            decoratorsToPreload: null, // array of names (ids)
+            svgDirs: [],
+            visualizerDescriptors: [path.join(__dirname, '../src/client/js/Visualizers.json')],
+
+            panelPaths: [path.join(__dirname, '../src/client/js/Panels')],
+
+            layout: {
+                default: 'DefaultLayout',
+                basePaths: [path.join(__dirname, '../src/client/js/Layouts')]
+            }
         }
     };
 

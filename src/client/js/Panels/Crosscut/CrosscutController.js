@@ -12,7 +12,8 @@ define(['js/logger',
     'js/Utils/GMEConcepts',
     'js/Panels/ControllerBase/DiagramDesignerWidgetMultiTabMemberListControllerBase',
     'js/Panels/MetaEditor/MetaRelations',
-    'js/NodePropertyNames'
+    'js/NodePropertyNames',
+    'js/Utils/ComponentSettings'
 ], function (Logger,
              REGISTRY_KEYS,
              CONSTANTS,
@@ -21,7 +22,8 @@ define(['js/logger',
              GMEConcepts,
              DiagramDesignerWidgetMultiTabMemberListControllerBase,
              MetaRelations,
-             nodePropertyNames) {
+             nodePropertyNames,
+             ComponentSettings) {
 
     'use strict';
 
@@ -34,18 +36,27 @@ define(['js/logger',
         options = options || {};
         options.loggerName = 'gme:Panels:CrossCut:CrosscutController';
 
+        this._config = CrosscutController.getDefaultConfig();
+        ComponentSettings.resolveWithWebGMEGlobal(this._config, CrosscutController.getComponentId());
+
         DiagramDesignerWidgetMultiTabMemberListControllerBase.call(this, options);
 
         this._filteredOutConnTypes = [];
         this._filteredOutConnectionDescriptors = {};
+        this._activeCrosscutId = null;
+        this._initActiveTab = false;
+        this._tabsHasBeenRequested = false;
+        this._autoCreateCrosscut = this._config.autoCreateCrosscut === true;
 
+        this._initFilterPanel();
         this.logger.debug('CrosscutController ctor finished');
     };
 
     _.extend(CrosscutController.prototype, DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype);
 
     CrosscutController.prototype._attachDiagramDesignerWidgetEventHandlers = function () {
-        var self = this;
+        var self = this,
+            oldTabChangefn;
 
         //cal base classes _attachDiagramDesignerWidgetEventHandlers
         DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype
@@ -59,6 +70,20 @@ define(['js/logger',
 
         this._widget.onCreateNewConnection = function (params) {
             self._onCreateNewConnection(params);
+        };
+
+        this._widget.onModifyConnectionEnd = function (params) {
+            self._onModifyConnectionEnd(params);
+        };
+
+        this._widget.onCheckChanged = function (value, isChecked) {
+            self._onConnectionTypeFilterCheckChanged(value, isChecked);
+        };
+
+        oldTabChangefn = this._widget.onSelectedTabChanged;
+        this._widget.onSelectedTabChanged = function (tabID) {
+            oldTabChangefn(tabID);
+            self._selectedTabChanged(tabID);
         };
     };
 
@@ -81,10 +106,24 @@ define(['js/logger',
             territoryChanged = false,
             territoryId = this._selectedMemberListMembersTerritoryId,
             territoryPatterns = this._selectedMemberListMembersTerritoryPatterns,
+            putConnectionsToBeHandledLast = function (list) {
+                var boxes = [],
+                    connections = [],
+                    i, node;
+                for (i = 0; i < list.length; i += 1) {
+                    node = client.getNode(list[i]);
+                    if (node && node.isConnection()) {
+                        connections.push(list[i]);
+                    } else {
+                        boxes.push(list[i]);
+                    }
+                }
+                return connections.concat(boxes);
+            },
             client = this._client;
 
         //let's see who has been deleted
-        diff = _.difference(currentlyDisplayedMembers, actualMembers);
+        diff = putConnectionsToBeHandledLast(_.difference(currentlyDisplayedMembers, actualMembers));
         len = diff.length;
         while (len--) {
             delete territoryPatterns[diff[len]];
@@ -92,7 +131,7 @@ define(['js/logger',
         }
 
         //let's see who has been added
-        diff = _.difference(actualMembers, currentlyDisplayedMembers);
+        diff = putConnectionsToBeHandledLast(_.difference(actualMembers, currentlyDisplayedMembers));
         len = diff.length;
         while (len--) {
             territoryPatterns[diff[len]] = {children: 0};
@@ -100,13 +139,13 @@ define(['js/logger',
         }
 
         //let's update the one that has not been changed but their position might have
-        diff = _.intersection(actualMembers, currentlyDisplayedMembers);
-        len = diff.length;
-        this._widget.beginUpdate();
-        while (len--) {
-            this._onUpdate(diff[len]);
-        }
-        this._widget.endUpdate();
+        //diff = putConnectionsToBeHandledLast(_.intersection(actualMembers, currentlyDisplayedMembers));
+        //len = diff.length;
+        //this._widget.beginUpdate();
+        //while (len--) {
+        //    this._onUpdate(diff[len]);
+        //}
+        //this._widget.endUpdate();
 
         //save current list of members
         this._selectedMemberListMembers = actualMembers;
@@ -124,6 +163,10 @@ define(['js/logger',
 
         this._connectionListByType = {};
 
+        this._filteredOutConnectionDescriptors = {}; //we should clear this
+        this._connectionWaitingListByDstGMEID = {};
+        this._connectionWaitingListBySrcGMEID = {};
+
         DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._initializeSelectedMemberList.call(this);
     };
 
@@ -132,6 +175,7 @@ define(['js/logger',
             len = events.length,
             obj,
             objDecorator,
+            connEvents = [],
             client = this._client,
             self = this;
 
@@ -146,9 +190,13 @@ define(['js/logger',
                 if (obj) {
                     //if it is a connection find src and dst and do not care about decorator
                     if (events[len].desc.isConnection === true) {
-                        objDecorator = CONNECTION_DECORATOR;
-                        events[len].desc.isConnection = false;
-                        events[len].desc.decoratorParams = {displayName: false};
+                        //objDecorator = CONNECTION_DECORATOR;
+                        //events[len].desc.isConnection = false;
+                        //events[len].desc.decoratorParams = {displayName: false};
+                        events[len].desc.srcID = obj.getPointer(CONSTANTS.POINTER_SOURCE).to;
+                        events[len].desc.dstID = obj.getPointer(CONSTANTS.POINTER_TARGET).to;
+                        events[len].desc.reconnectable = true;
+                        events[len].desc.editable = true;
                     } else {
                         objDecorator = obj.getRegistry(REGISTRY_KEYS.DECORATOR);
                     }
@@ -163,11 +211,18 @@ define(['js/logger',
                     }
 
                     events[len].desc.decorator = objDecorator;
+
+                    if (events[len].desc.isConnection) {
+                        connEvents.push(events[len]);
+                        events.splice(len, 1);
+                    }
                 }
             }
         }
 
         client.decoratorManager.download(decoratorsToDownload, WIDGET_NAME, function () {
+            //put the connection events back to the very end
+            events = events.concat(connEvents);
             self._dispatchEvents(events);
         });
     };
@@ -178,10 +233,20 @@ define(['js/logger',
             crosscutsRegistry = GMEConcepts.getCrosscuts(memberListContainerID),
             len = crosscutsRegistry.length;
 
+        if (this._autoCreateCrosscut === true && len === 0 && this._tabsHasBeenRequested === false) {
+            this._onTabAddClicked();
+            memberListContainerID = this._memberListContainerID;
+            crosscutsRegistry = GMEConcepts.getCrosscuts(memberListContainerID);
+            len = crosscutsRegistry.length;
+        }
+
+        this._tabsHasBeenRequested = true;
+
         while (len--) {
             result.push({
                 memberListID: crosscutsRegistry[len].SetID,
                 title: crosscutsRegistry[len].title,
+                filterInfo: crosscutsRegistry[len].filter || {},
                 enableDeleteTab: true,
                 enableRenameTab: true
             });
@@ -216,7 +281,7 @@ define(['js/logger',
      */
     CrosscutController.prototype.displayNoTabMessage = function () {
         this._widget.setBackgroundText('No crosscuts defined yet. Press the + button in the top-left corner to ' +
-        'create one...');
+            'create one...');
     };
 
 
@@ -241,65 +306,21 @@ define(['js/logger',
     /*  END OF --- HANDLE OBJECT DRAG & DROP ACCEPTANCE       */
     /**********************************************************/
 
-
-    CrosscutController.prototype._dispatchEvents = function (events) {
-        var i,
-            e,
-            territoryChanged = false;
-
-        this.logger.debug('_dispatchEvents "' + events.length + '" items: ' + JSON.stringify(events));
-
-        this._widget.beginUpdate();
-
-        this._notifyPackage = {};
-
-        //item insert/update/unload & connection unload
-        for (i = 0; i < events.length; i += 1) {
-            e = events[i];
-            switch (e.etype) {
-                case CONSTANTS.TERRITORY_EVENT_LOAD:
-                    territoryChanged = this._onLoad(e.eid, e.desc) || territoryChanged;
-                    break;
-                case CONSTANTS.TERRITORY_EVENT_UPDATE:
-                    this._onUpdate(e.eid);
-                    break;
-                case CONSTANTS.TERRITORY_EVENT_UNLOAD:
-                    territoryChanged = this._onUnload(e.eid) || territoryChanged;
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        this._handleDecoratorNotification();
-
-        this._widget.endUpdate();
-
-        this._widget.hideProgressbar();
-
-        //update the territory
-        if (territoryChanged) {
-            this.logger.debug('Updating territory with ruleset from decorators: ' + JSON.stringify(this._selfPatterns));
-
-            this._client.updateTerritory(this._selectedMemberListMembersTerritoryId,
-                this._selectedMemberListMembersTerritoryPatterns);
-        }
-
-        this.logger.debug('_dispatchEvents "' + events.length + '" items - DONE');
-    };
-
     CrosscutController.prototype._onLoad = function (gmeID, desc) {
         var territoryChanged;
 
-        desc.isConnection = false;
+        //desc.isConnection = false;
 
         territoryChanged = DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._onLoad.call(this,
             gmeID,
             desc);
 
         //process new node to display containment / pointers / inheritance / sets as connections
+        //if (!desc.isConnection) {
         this._processNodePointers(gmeID, false);
         this._processNodePointers(gmeID, true);
+
+        //}
 
         //check all the waiting pointers (whose SRC/DST is already displayed and waiting for the DST/SRC to show up)
         //it might be this new node
@@ -310,14 +331,24 @@ define(['js/logger',
 
     CrosscutController.prototype._onUpdate = function (gmeID, desc) {
         //component updated
+        var node = this._client.getNode(gmeID);
         desc = desc || {};
-        desc.isConnection = false;
+        if (node && node.isConnection()) {
+            desc.isConnection = true;
+            desc.srcID = node.getPointer(CONSTANTS.POINTER_SOURCE).to;
+            desc.dstID = node.getPointer(CONSTANTS.POINTER_TARGET).to;
+            desc.reconnectable = true;
+            desc.editable = true;
+        } else {
+            desc.isConnection = false;
+        }
 
         //we are interested in the load of member items and their custom territory involvement
         if (this._selectedMemberListMembers.indexOf(gmeID) !== -1 &&
             this._GMEID2ComponentID[gmeID]) {
             DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._onUpdate.call(this, gmeID, desc);
 
+            //if (!node.isConnection()) {
             //process new node to display containment / pointers / inheritance / sets as connections
             this._processNodePointers(gmeID, false);
             this._processNodePointers(gmeID, true);
@@ -325,6 +356,14 @@ define(['js/logger',
             //check all the waiting pointers (whose SRC/DST is already displayed and waiting for the DST/SRC to show up)
             //it might be this new node
             this._processConnectionWaitingList(gmeID);
+            //}
+        } else if (this._selectedMemberListMembers.indexOf(gmeID) === -1 &&
+            this._GMEID2ComponentID[gmeID]) {
+            //member have been removed but still in territory
+            this._onUpdatePortToItem(gmeID, true, desc);
+        } else if (this._selectedMemberListMembers.indexOf(gmeID) !== -1 && !this._GMEID2ComponentID[gmeID]) {
+            //new member that was in the territory
+            this._onUpdatePortToItem(gmeID, false, desc);
         }
     };
 
@@ -337,6 +376,10 @@ define(['js/logger',
             pointerName,
             otherEnd;
 
+        //if (this._GMEID2ComponentID.hasOwnProperty(gmeID) && this._GMEID2ComponentID[gmeID][0].indexOf('C_') === 0) {
+        //    this._widget.deleteComponent(this._GMEID2ComponentID[gmeID][0]);
+        //    delete this._GMEID2ComponentID[gmeID];
+        //} else {
         if (this._GMEID2ComponentID.hasOwnProperty(gmeID)) {
 
             //gather all the information that is stored in this node's META
@@ -365,8 +408,8 @@ define(['js/logger',
 
                 if (this._widget.itemIds.indexOf(componentID) !== -1) {
                     territoryChanged = territoryChanged ||
-                    this._updateDecoratorTerritoryQuery(
-                        this._widget.items[componentID]._decoratorInstance, true);
+                        this._updateDecoratorTerritoryQuery(
+                            this._widget.items[componentID]._decoratorInstance, true);
                 }
 
                 this._widget.deleteComponent(componentID);
@@ -436,10 +479,36 @@ define(['js/logger',
         //keep up accounting
         delete this._nodePointers[gmeID];
         delete this._nodeSets[gmeID];
+        //}
+
 
         return territoryChanged;
     };
 
+    /*CrosscutController.prototype._onUpdatePortToItem = function (gmeID) {
+     var members = this._selectedMemberListMembers,
+     i,
+     node, src, dst;
+
+     for (i = 0; i < members.length; i += 1) {
+     node = this._client.getNode(members[i]);
+     if (node && node.isConnection()) {
+     src = node.getPointer('src').to;
+     dst = node.getPointer('dst').to;
+     if (src === gmeID || dst === gmeID) {
+     DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._onUnload.call(this, members[i]);
+     DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._onLoad.call(this, members[i], {
+     isConnection: true,
+     srcID: src,
+     dstID: dst,
+     reconnectable: true,
+     editable: true
+     });
+
+     }
+     }
+     }
+     };*/
 
     CrosscutController.prototype._getAssociatedConnections = function (objectID) {
         var result = {src: [], dst: []},
@@ -482,7 +551,7 @@ define(['js/logger',
     /*******************************************************************************/
     CrosscutController.prototype._processNodePointers = function (gmeID, isSet) {
         var node = this._client.getNode(gmeID),
-            pointerNames = isSet === true ? node.getSetNames() : node.getPointerNames(),
+            pointerNames = node === null ? [] : isSet === true ? node.getSetNames() : node.getPointerNames(),
             pointerTo,
             len,
             oldPointers,
@@ -492,7 +561,8 @@ define(['js/logger',
             pointerName,
             idx,
             combinedName,
-            ptrType = isSet === true ? MetaRelations.META_RELATIONS.SET : MetaRelations.META_RELATIONS.POINTER;
+            isConnection = node === null ? false : node.isConnection(),
+            setMembers, member;
 
         if (isSet === true) {
             this._nodeSets[gmeID] = this._nodeSets[gmeID] || {names: [], combinedNames: []};
@@ -504,32 +574,59 @@ define(['js/logger',
 
         len = pointerNames.length;
         while (len--) {
-            if (pointerNames[len] !== CONSTANTS.POINTER_BASE) {
-                pointerTo = node.getPointer(pointerNames[len]).to;
-
-                if (pointerTo) {
-                    combinedName = gmeID + '_' + pointerNames[len] + '_' + pointerTo;
-
+            if (isSet) {
+                setMembers = node.getMemberIds(pointerNames[len]);
+                member = setMembers.pop();
+                if (typeof member === 'string') {
                     newPointers.names.push(pointerNames[len]);
+                }
+                while (typeof member === 'string') {
+                    combinedName = gmeID + '_' + pointerNames[len] + '_' + member;
 
                     newPointers.combinedNames.push(combinedName);
 
                     newPointers[combinedName] = {
                         name: pointerNames[len],
-                        target: pointerTo
+                        target: member,
+                        type: MetaRelations.META_RELATIONS.SET
                     };
+
+                    member = setMembers.pop();
+                }
+            } else {
+                if (pointerNames[len] !== CONSTANTS.POINTER_BASE && !(isConnection && (pointerNames[len] === CONSTANTS.POINTER_SOURCE ||
+                    pointerNames[len] === CONSTANTS.POINTER_TARGET))) {
+                    pointerTo = node.getPointer(pointerNames[len]).to;
+
+                    if (pointerTo) {
+                        combinedName = gmeID + '_' + pointerNames[len] + '_' + pointerTo;
+
+                        newPointers.names.push(pointerNames[len]);
+
+                        newPointers.combinedNames.push(combinedName);
+
+                        newPointers[combinedName] = {
+                            name: pointerNames[len],
+                            target: pointerTo,
+                            type: MetaRelations.META_RELATIONS.POINTER
+                        };
+                    }
                 }
             }
         }
 
         //base and parent are special relations and they also needs to be added when not checked for sets
-        if (!isSet) {
+        if (!isSet && node) {
             pointerTo = node.getParentId();
             if (typeof pointerTo === 'string') {
                 combinedName = gmeID + '_' + CONSTANTS.RELATION_CONTAINMENT + '_' + pointerTo;
                 newPointers.names.push(CONSTANTS.RELATION_CONTAINMENT);
                 newPointers.combinedNames.push(combinedName);
-                newPointers[combinedName] = {name: CONSTANTS.RELATION_CONTAINMENT, target: pointerTo};
+                newPointers[combinedName] = {
+                    name: CONSTANTS.RELATION_CONTAINMENT,
+                    target: pointerTo,
+                    type: MetaRelations.META_RELATIONS.CONTAINMENT
+                };
             }
 
 
@@ -538,7 +635,11 @@ define(['js/logger',
                 combinedName = gmeID + '_' + CONSTANTS.POINTER_BASE + '_' + pointerTo;
                 newPointers.names.push(CONSTANTS.POINTER_BASE);
                 newPointers.combinedNames.push(combinedName);
-                newPointers[combinedName] = {name: CONSTANTS.POINTER_BASE, target: pointerTo};
+                newPointers[combinedName] = {
+                    name: CONSTANTS.POINTER_BASE,
+                    target: pointerTo,
+                    type: MetaRelations.META_RELATIONS.INHERITANCE
+                };
             }
         }
 
@@ -551,7 +652,7 @@ define(['js/logger',
             pointerName = oldPointers[combinedName].name;
             pointerTarget = oldPointers[combinedName].target;
 
-            this._removeConnection(gmeID, pointerTarget, ptrType, pointerName);
+            this._removeConnection(gmeID, pointerTarget, oldPointers[combinedName].type, pointerName);
 
             idx = oldPointers.combinedNames.indexOf(combinedName);
             oldPointers.combinedNames.splice(idx, 1);
@@ -570,10 +671,11 @@ define(['js/logger',
             oldPointers.combinedNames.push(combinedName);
             oldPointers[combinedName] = {
                 name: newPointers[combinedName].name,
-                target: newPointers[combinedName].target
+                target: newPointers[combinedName].target,
+                type: newPointers[combinedName].type
             };
 
-            this._createConnection(gmeID, pointerTarget, ptrType, {name: pointerName});
+            this._createConnection(gmeID, pointerTarget, newPointers[combinedName].type, {name: pointerName});
         }
     };
     /******************************************************************************************/
@@ -680,10 +782,6 @@ define(['js/logger',
                     switch (connTexts.name) {
                         case CONSTANTS.POINTER_BASE:
                             visualType = MetaRelations.META_RELATIONS.INHERITANCE;
-                            //TODO here the inheritance relations drawn in opposite direction
-                            // TODO so we have to switch src and dst to be able to use the same visual style
-                            connDesc.srcObjId = this._GMEID2ComponentID[gmeDstId][0];
-                            connDesc.dstObjId = this._GMEID2ComponentID[gmeSrcId][0];
                             break;
                         case CONSTANTS.RELATION_CONTAINMENT:
                             visualType = MetaRelations.META_RELATIONS.CONTAINMENT;
@@ -707,6 +805,7 @@ define(['js/logger',
                 this._saveConnection(gmeSrcId, gmeDstId, connType, connComponent.id, connTexts);
             } else {
                 //connection type is filtered out
+                this._filteredOutConnectionDescriptors[connType] = this._filteredOutConnectionDescriptors[connType] || [];
                 this._filteredOutConnectionDescriptors[connType].push([gmeSrcId, gmeDstId, connTexts]);
             }
         } else {
@@ -871,7 +970,7 @@ define(['js/logger',
             if (gmeID) {
                 //deleting a box --> remove from crosscut's set
                 logger.debug('removeMember memberListContainerID: ' + memberListContainerID + ', gmeID: ' + gmeID +
-                ', memberListToRemoveFrom: ' + memberListToRemoveFrom);
+                    ', memberListToRemoveFrom: ' + memberListToRemoveFrom);
                 //_client.removeMember(memberListContainerID, gmeID, memberListToRemoveFrom);
 
                 //check if this GME object is a connection and whether it's parent is the crosscut container
@@ -1004,20 +1103,13 @@ define(['js/logger',
     CrosscutController.prototype._onCreateNewConnection = function (params) {
         var sourceId,
             targetId,
+            self = this,
             parentId = this._memberListContainerID,
             client = this._client,
-            CONTEXT_POS_OFFSET = 10,
             menuItems = {},
-            i,
             sourceObj,
             targetObj,
-            connObj,
-            ptrAction = 'PTR',
-            setAction = 'SET',
-            connectionAction = 'CONN',
-            createPointer,
-            addToSet,
-            createConnection,
+
             logger = this.logger,
             aspect = this._selectedMemberListID,
             dstPosition = this._widget.items[params.dst].getBoundingBox(),
@@ -1026,21 +1118,20 @@ define(['js/logger',
             validPointerTypes,
             validSetTypes,
             validConnectionTypes,
-            sourceObjName,
-            targetObjName,
-            connObjName;
 
-        createPointer = function (srcId, dstId, ptrName) {
+            existingConns;
+
+        function createPointer(srcId, dstId, ptrName) {
             logger.debug('createPointer srcId: ' + srcId + ', dstId: ' + dstId + ', ptrName: ' + ptrName);
             client.makePointer(srcId, ptrName, dstId);
-        };
+        }
 
-        addToSet = function (containerId, objId, setName) {
+        function addToSet(containerId, objId, setName) {
             logger.debug('addToSet containerId: ' + containerId + ', objId: ' + objId + ', ptrName: ' + setName);
             client.addMember(containerId, objId, setName);
-        };
+        }
 
-        createConnection = function (srcId, dstId, connType) {
+        function createConnection(srcId, dstId, connType) {
             var newConnID,
                 dx,
                 dy;
@@ -1064,7 +1155,129 @@ define(['js/logger',
             client.setMemberRegistry(parentId, newConnID, aspect, REGISTRY_KEYS.POSITION, {x: dx, y: dy});
 
             client.completeTransaction();
-        };
+        }
+
+        function followConnection(connPath) {
+            var patterns = {},
+                territoryId;
+
+            patterns[connPath] = {children: 0};
+
+            territoryId = client.addUI(null, function (events) {
+                var targetNodeObj,
+                    i;
+
+                for (i = 0; i < events.length; i += 1) {
+                    if (events[i].eid === connPath && events[i].etype === 'load') {
+                        targetNodeObj = client.getNode(connPath);
+                        if (targetNodeObj) {
+                            WebGMEGlobal.State.registerActiveObject(connPath);
+                        }
+                        break;
+                    }
+                }
+
+                client.removeUI(territoryId);
+            });
+
+            client.updateTerritory(territoryId, patterns);
+        }
+
+        function displayContextMenu() {
+            //show available pointers/sets/connection types to the user to select one
+            var sourceObjName = sourceObj.getAttribute(nodePropertyNames.Attributes.name),
+                targetObjName = targetObj.getAttribute(nodePropertyNames.Attributes.name),
+                CONTEXT_POS_OFFSET = 10,
+                ptrAction = 'PTR',
+                setAction = 'SET',
+                connectionAction = 'CONN',
+                followConnAction = 'FOLLOW_CONN',
+                connObj,
+                i,
+                connObjName;
+
+            //'Create pointer'
+            for (i = 0; i < validPointerTypes.length; i += 1) {
+                menuItems[ptrAction + validPointerTypes[i]] = {
+                    name: 'Create pointer \'' + validPointerTypes[i] + '\' from \'' + sourceObjName + '\' to \'' +
+                    targetObjName + '\'',
+                    icon: 'glyphicon glyphicon-share',
+                    action: ptrAction,
+                    type: validPointerTypes[i]
+                };
+            }
+
+            //'Add to set'
+            for (i = 0; i < validSetTypes.length; i += 1) {
+                menuItems[setAction + validSetTypes[i]] = {
+                    name: 'Add \'' + targetObjName + '\' to set \'' + validSetTypes[i] + '\' of \'' +
+                    sourceObjName + '\'',
+                    icon: false,
+                    action: setAction,
+                    type: validSetTypes[i]
+                };
+            }
+
+            //'Create connection' in crosscut container
+            connObjName = '';
+            for (i = 0; i < validConnectionTypes.length; i += 1) {
+                connObj = client.getNode(validConnectionTypes[i]);
+
+                if (connObj) {
+                    connObjName = connObj.getAttribute(nodePropertyNames.Attributes.name);
+                } else {
+                    connObjName = validConnectionTypes[i];
+                }
+
+                menuItems[connectionAction + validConnectionTypes[i]] = {
+                    name: 'Create connection \'' + connObjName + '\' from \'' + sourceObjName + '\' to \'' +
+                    targetObjName + '\'',
+                    icon: 'glyphicon glyphicon-resize-horizontal',
+                    action: connectionAction,
+                    type: validConnectionTypes[i]
+                };
+            }
+
+            if (validConnectionTypes.length > 0) {
+                for (i = 0; i < existingConns.length; i += 1) {
+                    menuItems[followConnAction + existingConns[i]] = {
+                        name: 'Open existing connection [' + existingConns[i] + '] from \'' + sourceObjName +
+                        '\' to \'' + targetObjName + '\'',
+                        icon: 'glyphicon glyphicon-share',
+                        action: followConnAction,
+                        type: existingConns[i]
+                    };
+                }
+            }
+
+            //show context menu
+            self._widget.createMenu(menuItems, function (key) {
+                    var menuItem = menuItems[key],
+                        type = menuItem.type,
+                        action = menuItem.action;
+
+                    switch (action) {
+                        case ptrAction:
+                            createPointer(sourceId, targetId, type);
+                            break;
+                        case setAction:
+                            addToSet(sourceId, targetId, type);
+                            break;
+                        case connectionAction:
+                            createConnection(sourceId, targetId, type);
+                            break;
+                        case followConnAction:
+                            followConnection(type);
+                            break;
+                        default:
+                            break;
+                    }
+                },
+
+                self._widget.posToPageXY(dstPosition.x - CONTEXT_POS_OFFSET,
+                    dstPosition.y - CONTEXT_POS_OFFSET)
+            );
+        }
 
         if (params.srcSubCompId === undefined) {
             sourceId = this._ComponentID2GMEID[params.src];
@@ -1097,6 +1310,14 @@ define(['js/logger',
 
         //if there is any option at all
         if (validPointerTypes.length + validSetTypes.length + validConnectionTypes.length > 0) {
+            sourceObj = client.getNode(sourceId);
+            targetObj = client.getNode(targetId);
+
+            if (validConnectionTypes.length > 0) {
+                existingConns = _.intersection(sourceObj.getCollectionPaths('src'),
+                    targetObj.getCollectionPaths('dst'));
+            }
+
             //if only 1 option, figure out automatically
             if (validPointerTypes.length + validSetTypes.length + validConnectionTypes.length === 1) {
                 //thre is only one possible choice, go with that
@@ -1107,85 +1328,53 @@ define(['js/logger',
                     //add target to the set of source
                     addToSet(sourceId, targetId, validSetTypes[0]);
                 } else if (validConnectionTypes.length === 1) {
-                    //create connection between source and target in this parent
-                    createConnection(sourceId, targetId, validConnectionTypes[0]);
+                    if (existingConns.length === 0) {
+                        //create connection between source and target in this parent
+                        createConnection(sourceId, targetId, validConnectionTypes[0]);
+                    } else {
+                        // Display the existing connections
+                        displayContextMenu();
+                    }
                 }
             } else {
                 //more options, show context menu
-                //show available pointers/sets/connection types to the user to select one
-                sourceObj = client.getNode(sourceId);
-                targetObj = client.getNode(targetId);
-
-                sourceObjName = sourceObj.getAttribute(nodePropertyNames.Attributes.name);
-                targetObjName = targetObj.getAttribute(nodePropertyNames.Attributes.name);
-
-                //'Create pointer'
-                for (i = 0; i < validPointerTypes.length; i += 1) {
-                    menuItems[ptrAction + validPointerTypes[i]] = {
-                        name: 'Create pointer \'' + validPointerTypes[i] + '\' from \'' + sourceObjName + '\' to \'' +
-                        targetObjName + '\'',
-                        icon: 'glyphicon glyphicon-share',
-                        action: ptrAction,
-                        type: validPointerTypes[i]
-                    };
-                }
-
-                //'Add to set'
-                for (i = 0; i < validSetTypes.length; i += 1) {
-                    menuItems[setAction + validSetTypes[i]] = {
-                        name: 'Add \'' + targetObjName + '\' to set \'' + validSetTypes[i] + '\' of \'' +
-                        sourceObjName + '\'',
-                        icon: false,
-                        action: setAction,
-                        type: validSetTypes[i]
-                    };
-                }
-
-                //'Create connection' in crosscut container
-                connObjName = '';
-                for (i = 0; i < validConnectionTypes.length; i += 1) {
-                    connObj = client.getNode(validConnectionTypes[i]);
-
-                    if (connObj) {
-                        connObjName = connObj.getAttribute(nodePropertyNames.Attributes.name);
-                    } else {
-                        connObjName = validConnectionTypes[i];
-                    }
-
-                    menuItems[connectionAction + validConnectionTypes[i]] = {
-                        name: 'Create connection \'' + connObjName + '\' from \'' + sourceObjName + '\' to \'' +
-                        targetObjName + '\'',
-                        icon: 'glyphicon glyphicon-resize-horizontal',
-                        action: connectionAction,
-                        type: validConnectionTypes[i]
-                    };
-                }
-
-                //show context menu
-                this._widget.createMenu(menuItems, function (key) {
-                        var menuItem = menuItems[key],
-                            type = menuItem.type,
-                            action = menuItem.action;
-
-                        switch (action) {
-                            case ptrAction:
-                                createPointer(sourceId, targetId, type);
-                                break;
-                            case setAction:
-                                addToSet(sourceId, targetId, type);
-                                break;
-                            case connectionAction:
-                                createConnection(sourceId, targetId, type);
-                                break;
-                            default:
-                                break;
-                        }
-                    },
-
-                    this._widget.posToPageXY(dstPosition.x - CONTEXT_POS_OFFSET,
-                        dstPosition.y - CONTEXT_POS_OFFSET)
-                );
+                displayContextMenu();
             }
+        }
+    };
+
+    CrosscutController.prototype._onModifyConnectionEnd = function (params) {
+        var gmeID = this._ComponentID2GMEID[params.id],
+            oldDesc = params.old,
+            newDesc = params.new,
+            newEndPointGMEID;
+
+        if (gmeID) {
+            this._client.startTransaction();
+
+            //update connection endpoint - SOURCE
+            if (oldDesc.srcObjId !== newDesc.srcObjId ||
+                oldDesc.srcSubCompId !== newDesc.srcSubCompId) {
+                if (newDesc.srcSubCompId !== undefined) {
+                    newEndPointGMEID = this._Subcomponent2GMEID[newDesc.srcObjId][newDesc.srcSubCompId];
+                } else {
+                    newEndPointGMEID = this._ComponentID2GMEID[newDesc.srcObjId];
+                }
+                this._client.makePointer(gmeID, 'src', newEndPointGMEID);
+            }
+
+            //update connection endpoint - TARGET
+            if (oldDesc.dstObjId !== newDesc.dstObjId ||
+                oldDesc.dstSubCompId !== newDesc.dstSubCompId) {
+                if (newDesc.dstSubCompId !== undefined) {
+                    newEndPointGMEID = this._Subcomponent2GMEID[newDesc.dstObjId][newDesc.dstSubCompId];
+                } else {
+                    newEndPointGMEID = this._ComponentID2GMEID[newDesc.dstObjId];
+                }
+                this._client.makePointer(gmeID, 'dst', newEndPointGMEID);
+            }
+
+            this._client.completeTransaction();
         }
     };
 
@@ -1205,30 +1394,171 @@ define(['js/logger',
 
     CrosscutController.prototype._attachClientEventListeners = function () {
         DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._attachClientEventListeners.call(this);
-        WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_CROSSCUT, this._stateActiveCrosscutChanged, this);
     };
 
     CrosscutController.prototype._detachClientEventListeners = function () {
         DiagramDesignerWidgetMultiTabMemberListControllerBase.prototype._detachClientEventListeners.call(this);
-        WebGMEGlobal.State.off('change:' + CONSTANTS.STATE_ACTIVE_CROSSCUT, this._stateActiveCrosscutChanged);
     };
 
-    CrosscutController.prototype._stateActiveCrosscutChanged = function (model, activeCrosscutId) {
-        var tabKeys = Object.keys(this._tabIDMemberListID),
-            len = tabKeys.length,
-            tabToSelect;
+
+    //FILTER
+    /****************************************************************************/
+    /*                  POINTER FILTER PANEL AND EVENT HANDLERS                 */
+    /****************************************************************************/
+    CrosscutController.prototype._initFilterPanel = function () {
+        var filterIcon;
+
+        filterIcon = MetaRelations.createButtonIcon(MetaRelations.META_RELATIONS.CONTAINMENT);
+        this._widget.addFilterItem('Containment', MetaRelations.META_RELATIONS.CONTAINMENT, filterIcon);
+
+        filterIcon = MetaRelations.createButtonIcon(MetaRelations.META_RELATIONS.POINTER);
+        this._widget.addFilterItem('Pointer', MetaRelations.META_RELATIONS.POINTER, filterIcon);
+
+        filterIcon = MetaRelations.createButtonIcon(MetaRelations.META_RELATIONS.INHERITANCE);
+        this._widget.addFilterItem('Inheritance', MetaRelations.META_RELATIONS.INHERITANCE, filterIcon);
+
+        filterIcon = MetaRelations.createButtonIcon(MetaRelations.META_RELATIONS.SET);
+        this._widget.addFilterItem('Set', MetaRelations.META_RELATIONS.SET, filterIcon);
+    };
+
+    CrosscutController.prototype._onConnectionTypeFilterCheckChanged = function (value, isChecked) {
+        var idx;
+
+        if (isChecked === true) {
+            //type should be enabled
+            idx = this._filteredOutConnTypes.indexOf(value);
+            this._filteredOutConnTypes.splice(idx, 1);
+            this._unfilterConnType(value);
+        } else {
+            this._filteredOutConnTypes.push(value);
+            this._filterConnType(value);
+        }
+
+        if (!this._initActiveTab) {
+            this._updateCrosscutRegistry();
+        }
+    };
+
+    CrosscutController.prototype._filterConnType = function (connType) {
+        var len = this._connectionListByType &&
+            this._connectionListByType.hasOwnProperty(connType) ? this._connectionListByType[connType].length : 0,
+            connComponentId,
+            gmeSrcId,
+            gmeDstId,
+            connTexts,
+            pointerName;
+
+        this._filteredOutConnectionDescriptors[connType] = [];
+
+        this._widget.beginUpdate();
 
         while (len--) {
-            if (this._tabIDMemberListID[tabKeys[len]] === activeCrosscutId) {
-                tabToSelect = tabKeys[len];
-                break;
+            connComponentId = this._connectionListByType[connType][len];
+
+            gmeSrcId = this._connectionListByID[connComponentId].GMESrcId;
+            gmeDstId = this._connectionListByID[connComponentId].GMEDstId;
+            connTexts = this._connectionListByID[connComponentId].connTexts;
+
+            if (connType === MetaRelations.META_RELATIONS.POINTER) {
+                pointerName = this._connectionListByID[connComponentId].name;
+            }
+
+            this._filteredOutConnectionDescriptors[connType].push([gmeSrcId, gmeDstId, connTexts]);
+
+            this._removeConnection(gmeSrcId, gmeDstId, connType, pointerName);
+        }
+
+        this._widget.endUpdate();
+    };
+
+    CrosscutController.prototype._unfilterConnType = function (connType) {
+        //FIXME: What does this mean?
+        var len = this._filteredOutConnectionDescriptors &&
+            this._filteredOutConnectionDescriptors.hasOwnProperty(connType) ?
+                this._filteredOutConnectionDescriptors[connType].length : 0,
+            gmeSrcId,
+            gmeDstId,
+            connTexts;
+
+        this._widget.beginUpdate();
+
+        while (len--) {
+            gmeSrcId = this._filteredOutConnectionDescriptors[connType][len][0];
+            gmeDstId = this._filteredOutConnectionDescriptors[connType][len][1];
+            connTexts = this._filteredOutConnectionDescriptors[connType][len][2];
+
+            this._createConnection(gmeSrcId, gmeDstId, connType, connTexts);
+        }
+
+        delete this._filteredOutConnectionDescriptors[connType];
+
+        this._widget.endUpdate();
+    };
+
+    CrosscutController.prototype._updateCrosscutRegistry = function () {
+        var containerNode = this._client.getNode(this._memberListContainerID),
+            regItem = containerNode.getEditableRegistry(REGISTRY_KEYS.CROSSCUTS),
+            i, crosscutId = Number(this._activeCrosscutId);
+
+        for (i = 0; i < regItem.length; i += 1) {
+            if (regItem[i].order === crosscutId) {
+                regItem[i].filter = this._filteredOutConnTypes;
             }
         }
 
-        WebGMEGlobal.State.unset(CONSTANTS.STATE_ACTIVE_CROSSCUT, {silent: true});
-        if (tabToSelect) {
-            this._widget.selectTab(tabToSelect);
+        this._client.setRegistry(this._memberListContainerID, REGISTRY_KEYS.CROSSCUTS, regItem);
+    };
+
+    CrosscutController.prototype._selectedTabChanged = function (tabId) {
+        if (tabId === this._activeCrosscutId) {
+            return;
         }
+        //we have to clear the filter, then load it, and apply
+        this._activeCrosscutId = tabId;
+        this._initActiveTab = true;
+
+        var containerNode = this._client.getNode(this._memberListContainerID),
+            regItem = containerNode ? containerNode.getEditableRegistry(REGISTRY_KEYS.CROSSCUTS) : [],
+            i, crosscutId = Number(this._activeCrosscutId),
+            filter = [];
+
+
+        for (i = 0; i < regItem.length; i += 1) {
+            if (regItem[i].order === crosscutId) {
+                filter = regItem[i].filter || [];
+            }
+        }
+
+        //reset filter
+        if (this._widget._filterCheckboxes[MetaRelations.META_RELATIONS.CONTAINMENT]) {
+            this._widget.setChecked(MetaRelations.META_RELATIONS.CONTAINMENT, true);
+        }
+        if (this._widget._filterCheckboxes[MetaRelations.META_RELATIONS.POINTER]) {
+            this._widget.setChecked(MetaRelations.META_RELATIONS.POINTER, true);
+        }
+        if (this._widget._filterCheckboxes[MetaRelations.META_RELATIONS.INHERITANCE]) {
+            this._widget.setChecked(MetaRelations.META_RELATIONS.INHERITANCE, true);
+        }
+        if (this._widget._filterCheckboxes[MetaRelations.META_RELATIONS.SET]) {
+            this._widget.setChecked(MetaRelations.META_RELATIONS.SET, true);
+        }
+
+        //now setting the saved values
+        for (i = 0; i < filter.length; i += 1) {
+            this._widget.setChecked(filter[i], false);
+        }
+        
+        this._initActiveTab = false;
+    };
+
+    CrosscutController.getDefaultConfig = function () {
+        return {
+            autoCreateCrosscut: false
+        };
+    };
+
+    CrosscutController.getComponentId = function () {
+        return 'GenericUICrosscutController';
     };
 
     return CrosscutController;

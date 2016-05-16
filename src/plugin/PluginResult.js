@@ -2,9 +2,10 @@
 /*jshint browser: true, node:true*/
 
 /**
+ * A module representing a PluginResult.
+ *
  * @author lattmann / https://github.com/lattmann
  */
-
 
 define(['plugin/PluginMessage'], function (PluginMessage) {
     'use strict';
@@ -15,6 +16,7 @@ define(['plugin/PluginMessage'], function (PluginMessage) {
      *
      * @param config - deserializes an existing configuration to this object.
      * @constructor
+     * @alias PluginResult
      */
     var PluginResult = function (config) {
         var pluginMessage,
@@ -27,6 +29,8 @@ define(['plugin/PluginMessage'], function (PluginMessage) {
             this.messages = [];
             this.artifacts = config.artifacts;
             this.error = config.error;
+            this.commits = config.commits;
+            this.projectId = config.projectId;
 
             for (i = 0; i < config.messages.length; i += 1) {
                 if (config.messages[i] instanceof PluginMessage) {
@@ -44,6 +48,8 @@ define(['plugin/PluginMessage'], function (PluginMessage) {
             this.startTime = null;
             this.finishTime = null;
             this.error = null;
+            this.projectId = null;
+            this.commits = [];
         }
     };
 
@@ -68,7 +74,7 @@ define(['plugin/PluginMessage'], function (PluginMessage) {
     /**
      * Returns with the plugin messages.
      *
-     * @returns {plugin.PluginMessage[]}
+     * @returns {PluginMessage[]}
      */
     PluginResult.prototype.getMessages = function () {
         return this.messages;
@@ -77,7 +83,7 @@ define(['plugin/PluginMessage'], function (PluginMessage) {
     /**
      * Adds a new plugin message to the messages list.
      *
-     * @param {plugin.PluginMessage} pluginMessage
+     * @param {PluginMessage} pluginMessage
      */
     PluginResult.prototype.addMessage = function (pluginMessage) {
         this.messages.push(pluginMessage);
@@ -87,8 +93,24 @@ define(['plugin/PluginMessage'], function (PluginMessage) {
         return this.artifacts;
     };
 
+    /**
+     * Adds a saved artifact to the result - linked via its hash.
+     *
+     * @param {string} hash - Hash of saved artifact.
+     */
     PluginResult.prototype.addArtifact = function (hash) {
         this.artifacts.push(hash);
+    };
+
+    /**
+     *
+     * @param {object} commitData
+     * @param {string} commitData.commitHash - hash of the commit.
+     * @param {string} commitData.status - storage.constants./SYNCED/FORKED/MERGED
+     * @param {string} commitData.branchName - name of branch that got updated with the commitHash.
+     */
+    PluginResult.prototype.addCommit = function (commitData) {
+        this.commits.push(commitData);
     };
 
     /**
@@ -106,10 +128,19 @@ define(['plugin/PluginMessage'], function (PluginMessage) {
     /**
      * Sets the name of the plugin to which the result object belongs to.
      *
-     * @param pluginName - name of the plugin
+     * @param {string} pluginName - name of the plugin
      */
     PluginResult.prototype.setPluginName = function (pluginName) {
         this.pluginName = pluginName;
+    };
+
+    /**
+     * Sets the name of the projectId the result was generated from.
+     *
+     * @param {string} projectId - id of the project
+     */
+    PluginResult.prototype.setProjectId = function (projectId) {
+        this.projectId = projectId;
     };
 
     /**
@@ -163,7 +194,11 @@ define(['plugin/PluginMessage'], function (PluginMessage) {
      * @param {string} time
      */
     PluginResult.prototype.setError = function (error) {
-        this.error = error;
+        if (error instanceof Error) {
+            this.error = error.message;
+        } else {
+            this.error = error;
+        }
     };
 
     /**
@@ -174,7 +209,9 @@ define(['plugin/PluginMessage'], function (PluginMessage) {
     PluginResult.prototype.serialize = function () {
         var result = {
             success: this.success,
+            projectId: this.projectId,
             messages: [],
+            commits: this.commits,
             artifacts: this.artifacts,
             pluginName: this.pluginName,
             startTime: this.startTime,

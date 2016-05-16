@@ -18,6 +18,7 @@ define([
     './MetaDecorator.DiagramDesignerWidget.Constraints',
     './MetaDecorator.DiagramDesignerWidget.Aspects',
     './MetaTextEditorDialog',
+    'common/regexp',
     'css!./styles/MetaDecorator.DiagramDesignerWidget.css'
 ], function (CONSTANTS,
              nodePropertyNames,
@@ -29,14 +30,16 @@ define([
              MetaRelations,
              MetaDecoratorDiagramDesignerWidgetConstraints,
              MetaDecoratorDiagramDesignerWidgetAspects,
-             MetaTextEditorDialog) {
+             MetaTextEditorDialog,
+             REGEXP) {
 
     'use strict';
 
     var MetaDecoratorDiagramDesignerWidget,
         DECORATOR_ID = 'MetaDecorator',
         ABSTRACT_CLASS = 'abstract',
-        TEXT_META_EDIT_BTN_BASE = $('<i class="glyphicon glyphicon-cog text-meta"/>');
+        TEXT_META_EDIT_BTN_BASE = $('<i class="glyphicon glyphicon-cog text-meta"/>'),
+        TEXT_META_LOCKED_BASE = $('<i class="glyphicon glyphicon-lock meta-lock"/>');
 
     MetaDecoratorDiagramDesignerWidget = function (options) {
 
@@ -47,6 +50,7 @@ define([
         this.name = '';
         this._attributeNames = [];
         this._attributes = {};
+        this._inLibrary = false;
         this._skinParts = {
             $name: undefined,
             $attributesContainer: undefined,
@@ -74,23 +78,32 @@ define([
 
     //jshint camelcase: false
     MetaDecoratorDiagramDesignerWidget.prototype.on_addTo = function () {
-        var self = this;
+        var self = this,
+            node = self._control._client.getNode(self._metaInfo[CONSTANTS.GME_ID]);
+
+        if (node && (node.isLibraryElement() || node.isLibraryRoot())) {
+            self._inLibrary = true;
+        }
 
         this._renderContent();
 
-        // set title editable on double-click
-        this._skinParts.$name.on('dblclick.editOnDblClick', null, function (event) {
-            if (self.hostDesignerItem.canvas.getIsReadOnlyMode() !== true) {
-                $(this).editInPlace({
-                    class: '',
-                    onChange: function (oldValue, newValue) {
-                        self._onNodeTitleChanged(oldValue, newValue);
-                    }
-                });
-            }
-            event.stopPropagation();
-            event.preventDefault();
-        });
+        if (self._inLibrary) {
+            this.readOnlyMode(true);
+        } else {
+            // set title editable on double-click
+            this._skinParts.$name.on('dblclick.editOnDblClick', null, function (event) {
+                if (self.hostDesignerItem.canvas.getIsReadOnlyMode() !== true) {
+                    $(this).editInPlace({
+                        class: '',
+                        onChange: function (oldValue, newValue) {
+                            self._onNodeTitleChanged(oldValue, newValue);
+                        }
+                    });
+                }
+                event.stopPropagation();
+                event.preventDefault();
+            });
+        }
 
         //set the 'Add new...' clickhandler
         this._skinParts.$addAttributeContainer.on('click', null, function (event) {
@@ -124,20 +137,34 @@ define([
                 var attrName = $(this).find('.n').text().replace(':', ''),
                     attrNames,
                     dialog = new AttributeDetailsDialog(),
-                    atrMeta = client.getAttributeSchema(self._metaInfo[CONSTANTS.GME_ID], attrName);
-                var desc = _.extend({}, {name: attrName, type: atrMeta.type, defaultValue: atrMeta.default});
-                if (atrMeta.enum && atrMeta.enum.length > 0) {
+                    attrMeta = client.getAttributeSchema(self._metaInfo[CONSTANTS.GME_ID], attrName),
+                    attrValue = client.getNode(self._metaInfo[CONSTANTS.GME_ID]).getAttribute(attrName);
+                var desc = _.extend({}, {
+                    name: attrName,
+                    type: attrMeta.type,
+                    defaultValue: attrValue,
+                    min: attrMeta.min,
+                    max: attrMeta.max,
+                    regexp: attrMeta.regexp
+                });
+
+                //we will not let 'name' attribute to be modified as that is used UI-wise
+                if (attrName === nodePropertyNames.Attributes.name) {
+                    return;
+                }
+
+                if (attrMeta.enum && attrMeta.enum.length > 0) {
                     desc.isEnum = true;
                     desc.enumValues = [];
-                    for (var i = 0; i < atrMeta.enum.length; i++) {
-                        desc.enumValues.push(atrMeta.enum[i]);
+                    for (var i = 0; i < attrMeta.enum.length; i++) {
+                        desc.enumValues.push(attrMeta.enum[i]);
                     }
                 } else {
                     desc.isMeta = false;
                 }
 
                 //pass all the other attribute names to the dialog
-                attrNames = client.getValidAttributeNames(self._metaInfo[CONSTANTS.GME_ID]);
+                attrNames = client.getOwnValidAttributeNames(self._metaInfo[CONSTANTS.GME_ID]);
                 attrNames.splice(attrNames.indexOf(attrName), 1);
 
                 dialog.show(desc, attrNames, function (attrDesc) {
@@ -161,6 +188,8 @@ define([
 
         //render text-editor based META editing UI piece
         this._skinParts.$textMetaEditorBtn = TEXT_META_EDIT_BTN_BASE.clone();
+        this._skinParts.$textMetaLock = TEXT_META_LOCKED_BASE.clone();
+
         this.$el.append(this._skinParts.$textMetaEditorBtn);
         this._skinParts.$textMetaEditorBtn.on('click', function (event) {
             if (self.hostDesignerItem.canvas.getIsReadOnlyMode() !== true) {
@@ -169,6 +198,9 @@ define([
             event.stopPropagation();
             event.preventDefault();
         });
+
+        this.$el.append(this._skinParts.$textMetaLock);
+        this._skinParts.$textMetaLock.hide();
 
         if (this.hostDesignerItem.canvas.getIsReadOnlyMode() === true) {
             this._skinParts.$addAttributeContainer.detach();
@@ -185,7 +217,8 @@ define([
             newName = '';
 
         if (nodeObj) {
-            newName = nodeObj.getAttribute(nodePropertyNames.Attributes.name) || '';
+            // newName = nodeObj.getAttribute(nodePropertyNames.Attributes.name) || '';
+            newName = nodeObj.getFullyQualifiedName();
 
             if (this.name !== newName) {
                 this.name = newName;
@@ -286,7 +319,6 @@ define([
                 attrLIBase.clone().append(this._attributes[this._attributeNames[i]].$el));
         }
 
-
     };
 
     MetaDecoratorDiagramDesignerWidget.prototype._addAttribute = function (attrName) {
@@ -302,7 +334,6 @@ define([
         }
     };
 
-
     MetaDecoratorDiagramDesignerWidget.prototype._removeAttribute = function (attrName) {
         var idx = this._attributeNames.indexOf(attrName);
 
@@ -312,7 +343,6 @@ define([
             this._attributeNames.splice(idx, 1);
         }
     };
-
 
     MetaDecoratorDiagramDesignerWidget.prototype.destroy = function () {
         var len = this._attributeNames.length;
@@ -336,7 +366,7 @@ define([
     MetaDecoratorDiagramDesignerWidget.prototype._onNewAttributeClick = function () {
         var client = this._control._client,
             objId = this._metaInfo[CONSTANTS.GME_ID];
-        this._onNewClick(client.getValidAttributeNames(objId), this._skinParts.$attributesContainer,
+        this._onNewClick(client.getOwnValidAttributeNames(objId), this._skinParts.$attributesContainer,
             this._skinParts.$addAttributeContainer, this._skinParts.$attributesTitle, this._onNewAttributeCreate);
     };
 
@@ -419,18 +449,19 @@ define([
                 }
             }
         ).keyup(function (/*event*/) {
-                if (self._isValidName(inputCtrl.val(), existingNames)) {
-                    ctrlGroup.removeClass('error');
-                } else {
-                    ctrlGroup.addClass('error');
-                }
-            }).blur(function (/*event*/) {
-                cancel();
-            });
+            if (self._isValidName(inputCtrl.val(), existingNames)) {
+                //ctrlGroup.removeClass('error');
+                inputCtrl.removeClass('text-danger');
+            } else {
+                //ctrlGroup.addClass('error');
+                inputCtrl.addClass('text-danger');
+            }
+        }).blur(function (/*event*/) {
+            cancel();
+        });
 
         this.hostDesignerItem.canvas.selectNone();
     };
-
 
     MetaDecoratorDiagramDesignerWidget.prototype._onNewAttributeCreate = function (attrName) {
         var desc,
@@ -459,7 +490,9 @@ define([
 
         if (attrName === '' ||
             typeof attrName !== 'string' ||
-            collection.indexOf(attrName) !== -1) {
+            attrName === 'name' ||
+            collection.indexOf(attrName) !== -1 ||
+            REGEXP.DOCUMENT_KEY.test(attrName) === false) {
             result = false;
         }
 
@@ -473,15 +506,17 @@ define([
     };
 
     MetaDecoratorDiagramDesignerWidget.prototype._setReadOnlyMode = function (readOnly) {
-        if (readOnly === true) {
+        if (readOnly === true || this._inLibrary === true) {
             this._skinParts.$addAttributeContainer.detach();
             this._skinParts.$addConstraintContainer.detach();
             this._skinParts.$addAspectContainer.detach();
             this.$el.find('input.new-attr').val('').blur();
+            this._skinParts.$textMetaLock.show();
         } else {
             this._skinParts.$attributesTitle.append(this._skinParts.$addAttributeContainer);
             this._skinParts.$constraintsTitle.append(this._skinParts.$addConstraintContainer);
             this._skinParts.$aspectsTitle.append(this._skinParts.$addAspectContainer);
+            this._skinParts.$textMetaLock.hide();
         }
     };
 
@@ -492,33 +527,22 @@ define([
 
         client.startTransaction();
 
-        //this.logger.warn('saveAttributeDescriptor: ' + name + ', attrDesc: ' + JSON.stringify(attrDesc));
-        //if this is an attribute rename
+        this.logger.warn('saveAttributeDescriptor: ' + name + ', attrDesc: ' + JSON.stringify(attrDesc));
+
         if (attrName !== attrDesc.name) {
-            //name has changed --> delete the descriptor with the old name
-            //TODO: as of now we have to create an alibi attribute instance with the same name
-            //TODO: just because of this hack, make sure that the name is not overwritten
-            //TODO: just because of this hack, delete the alibi attribute as well
-            if (attrName !== nodePropertyNames.Attributes.name) {
-                client.removeAttributeSchema(objID, attrName);
-                client.delAttributes(objID, attrName);
-            }
+            //rename an attribute
+            client.removeAttributeSchema(objID, attrName);
+            client.delAttributes(objID, attrName);
 
-            //set the new name to attrName
-            attrName = attrDesc.name;
         }
 
-
-        //TODO: as of now we have to create an alibi attribute instance with the same name
-        //TODO: just because of this hack, make sure that the name is not overwritten
-        if (attrName !== nodePropertyNames.Attributes.name) {
-            attrSchema = {type: attrDesc.type, default: attrDesc.defaultValue};
-            if (attrDesc.isEnum) {
-                attrSchema.enum = attrDesc.enumValues;
-            }
-            client.setAttributeSchema(objID, attrName, attrSchema);
-            client.setAttributes(objID, attrName, attrDesc.defaultValue);
+        attrSchema = {type: attrDesc.type, min: attrDesc.min, max: attrDesc.max, regexp: attrDesc.regexp};
+        if (attrDesc.isEnum) {
+            attrSchema.enum = attrDesc.enumValues;
         }
+
+        client.setAttributeSchema(objID, attrDesc.name, attrSchema);
+        client.setAttributes(objID, attrDesc.name, attrDesc.defaultValue);
 
         client.completeTransaction();
     };
@@ -606,11 +630,13 @@ define([
                 len: LEN
             };
 
-            if (connType && connType === MetaRelations.META_RELATIONS.INHERITANCE) {
+            if (connType &&
+                (connType === MetaRelations.META_RELATIONS.INHERITANCE ||
+                connType === MetaRelations.META_RELATIONS.MIXIN)) {
                 //if the connection is inheritance
-                //it can be NORTH only if destination
-                //it can be SOUTH only if source
-                if (isEnd) {
+                //it can be NORTH only if source
+                //it can be SOUTH only if destination
+                if (!isEnd) {
                     //north is not disabled, use north only
                     //otherwise use all
                     if (disabledAreas.indexOf(cN.id) === -1) {
@@ -645,17 +671,11 @@ define([
     MetaDecoratorDiagramDesignerWidget.prototype._showMetaTextEditorDialog = function () {
         var client = this._control._client,
             dialog = new MetaTextEditorDialog(),
-            metaObj = client.getMeta(this._metaInfo[CONSTANTS.GME_ID]),
+            gmeId = this._metaInfo[CONSTANTS.GME_ID],
+            metaObj = client.getMeta(gmeId),
             self = this;
 
-        dialog.show(JSON.stringify(metaObj, undefined, 2), function (text) {
-            try {
-                var newMetaObj = JSON.parse(text);
-                client.setMeta(self._metaInfo[CONSTANTS.GME_ID], newMetaObj);
-            } catch (e) {
-                self.logger.error('Saving META failed... Either not JSON object or something else went wrong...');
-            }
-        });
+        dialog.show(client.getNode(gmeId), JSON.stringify(metaObj, undefined, 2));
     };
 
     return MetaDecoratorDiagramDesignerWidget;

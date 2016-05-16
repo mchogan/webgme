@@ -1,5 +1,5 @@
 /** vim: et:ts=4:sw=4:sts=4
- * @license RequireJS 2.1.16 Copyright (c) 2010-2015, The Dojo Foundation All Rights Reserved.
+ * @license RequireJS 2.1.22 Copyright (c) 2010-2015, The Dojo Foundation All Rights Reserved.
  * Available via the MIT or new BSD license.
  * see: http://github.com/jrburke/requirejs for details
  */
@@ -12,7 +12,7 @@ var requirejs, require, define;
 (function (global) {
     var req, s, head, baseElement, dataMain, src,
         interactiveScript, currentlyAddingScript, mainScript, subPath,
-        version = '2.1.16',
+        version = '2.1.22',
         commentRegExp = /(\/\*([\s\S]*?)\*\/|([^:]|^)\/\/(.*)$)/mg,
         cjsRequireRegExp = /[^.]\s*require\s*\(\s*["']([^'"\s]+)["']\s*\)/g,
         jsSuffixRegExp = /\.js$/,
@@ -21,7 +21,6 @@ var requirejs, require, define;
         ostring = op.toString,
         hasOwn = op.hasOwnProperty,
         ap = Array.prototype,
-        apsp = ap.splice,
         isBrowser = !!(typeof window !== 'undefined' && typeof navigator !== 'undefined' && window.document),
         isWebWorker = !isBrowser && typeof importScripts !== 'undefined',
         //PS3 indicates loaded and complete, but need to wait for complete
@@ -244,7 +243,7 @@ var requirejs, require, define;
                     // still work when converted to a path, even though
                     // as an ID it is less than ideal. In larger point
                     // releases, may be better to just kick out an error.
-                    if (i === 0 || (i == 1 && ary[2] === '..') || ary[i - 1] === '..') {
+                    if (i === 0 || (i === 1 && ary[2] === '..') || ary[i - 1] === '..') {
                         continue;
                     } else if (i > 0) {
                         ary.splice(i - 1, 2);
@@ -554,11 +553,13 @@ var requirejs, require, define;
         function takeGlobalQueue() {
             //Push all the globalDefQueue items into the context's defQueue
             if (globalDefQueue.length) {
-                //Array splice in the values since the context code has a
-                //local var ref to defQueue, so cannot just reassign the one
-                //on context.
-                apsp.apply(defQueue,
-                           [defQueue.length, 0].concat(globalDefQueue));
+                each(globalDefQueue, function(queueItem) {
+                    var id = queueItem[0];
+                    if (typeof id === 'string') {
+                        context.defQueueMap[id] = true;
+                    }
+                    defQueue.push(queueItem);
+                });
                 globalDefQueue = [];
             }
         }
@@ -589,7 +590,7 @@ var requirejs, require, define;
                         id: mod.map.id,
                         uri: mod.map.url,
                         config: function () {
-                            return  getOwn(config.config, mod.map.id) || {};
+                            return getOwn(config.config, mod.map.id) || {};
                         },
                         exports: mod.exports || (mod.exports = {})
                     });
@@ -845,7 +846,10 @@ var requirejs, require, define;
                     factory = this.factory;
 
                 if (!this.inited) {
-                    this.fetch();
+                    // Only fetch if not already in the defQueue.
+                    if (!hasProp(context.defQueueMap, id)) {
+                        this.fetch();
+                    }
                 } else if (this.error) {
                     this.emit('error', this.error);
                 } else if (!this.defining) {
@@ -857,21 +861,10 @@ var requirejs, require, define;
 
                     if (this.depCount < 1 && !this.defined) {
                         if (isFunction(factory)) {
-                            //If there is an error listener, favor passing
-                            //to that instead of throwing an error. However,
-                            //only do it for define()'d  modules. require
-                            //errbacks should not be called for failures in
-                            //their callbacks (#699). However if a global
-                            //onError is set, use that.
-                            if ((this.events.error && this.map.isDefine) ||
-                                req.onError !== defaultOnError) {
-                                try {
-                                    exports = context.execCb(id, factory, depExports, exports);
-                                } catch (e) {
-                                    err = e;
-                                }
-                            } else {
+                            try {
                                 exports = context.execCb(id, factory, depExports, exports);
+                            } catch (e) {
+                                err = e;
                             }
 
                             // Favor return value over exports. If node/cjs in play,
@@ -888,12 +881,30 @@ var requirejs, require, define;
                             }
 
                             if (err) {
-                                err.requireMap = this.map;
-                                err.requireModules = this.map.isDefine ? [this.map.id] : null;
-                                err.requireType = this.map.isDefine ? 'define' : 'require';
-                                return onError((this.error = err));
+                                // If there is an error listener, favor passing
+                                // to that instead of throwing an error. However,
+                                // only do it for define()'d  modules. require
+                                // errbacks should not be called for failures in
+                                // their callbacks (#699). However if a global
+                                // onError is set, use that.
+                                if ((this.events.error && this.map.isDefine) ||
+                                    req.onError !== defaultOnError) {
+                                    err.requireMap = this.map;
+                                    err.requireModules = this.map.isDefine ? [this.map.id] : null;
+                                    err.requireType = this.map.isDefine ? 'define' : 'require';
+                                    return onError((this.error = err));
+                                } else if (typeof console !== 'undefined' &&
+                                           console.error) {
+                                    // Log the error for debugging. If promises could be
+                                    // used, this would be different, but making do.
+                                    console.error(err);
+                                } else {
+                                    // Do not want to completely lose the error. While this
+                                    // will mess up processing and lead to similar results
+                                    // as bug 1440, it at least surfaces the error.
+                                    req.onError(err);
+                                }
                             }
-
                         } else {
                             //Just a literal value
                             exports = factory;
@@ -905,7 +916,11 @@ var requirejs, require, define;
                             defined[id] = exports;
 
                             if (req.onResourceLoad) {
-                                req.onResourceLoad(context, this.map, this.depMaps);
+                                var resLoadMaps = [];
+                                each(this.depMaps, function (depMap) {
+                                    resLoadMaps.push(depMap.normalizedMap || depMap);
+                                });
+                                req.onResourceLoad(context, this.map, resLoadMaps);
                             }
                         }
 
@@ -964,6 +979,7 @@ var requirejs, require, define;
                                                       this.map.parentMap);
                         on(normalizedMap,
                             'defined', bind(this, function (value) {
+                                this.map.normalizedMap = normalizedMap;
                                 this.init([], function () { return value; }, null, {
                                     enabled: true,
                                     ignore: true
@@ -1117,6 +1133,9 @@ var requirejs, require, define;
                         this.depCount += 1;
 
                         on(depMap, 'defined', bind(this, function (depExports) {
+                            if (this.undefed) {
+                                return;
+                            }
                             this.defineDep(i, depExports);
                             this.check();
                         }));
@@ -1233,13 +1252,15 @@ var requirejs, require, define;
             while (defQueue.length) {
                 args = defQueue.shift();
                 if (args[0] === null) {
-                    return onError(makeError('mismatch', 'Mismatched anonymous define() module: ' + args[args.length - 1]));
+                    return onError(makeError('mismatch', 'Mismatched anonymous define() module: ' +
+                        args[args.length - 1]));
                 } else {
                     //args are id, deps, factory. Should be normalized by the
                     //define() function.
                     callGetModule(args);
                 }
             }
+            context.defQueueMap = {};
         }
 
         context = {
@@ -1249,6 +1270,7 @@ var requirejs, require, define;
             defined: defined,
             urlFetched: urlFetched,
             defQueue: defQueue,
+            defQueueMap: {},
             Module: Module,
             makeModuleMap: makeModuleMap,
             nextTick: req.nextTick,
@@ -1320,7 +1342,7 @@ var requirejs, require, define;
                     each(cfg.packages, function (pkgObj) {
                         var location, name;
 
-                        pkgObj = typeof pkgObj === 'string' ? { name: pkgObj } : pkgObj;
+                        pkgObj = typeof pkgObj === 'string' ? {name: pkgObj} : pkgObj;
 
                         name = pkgObj.name;
                         location = pkgObj.location;
@@ -1347,7 +1369,7 @@ var requirejs, require, define;
                     //late to modify them, and ignore unnormalized ones
                     //since they are transient.
                     if (!mod.inited && !mod.map.unnormalized) {
-                        mod.map = makeModuleMap(id);
+                        mod.map = makeModuleMap(id, null, true);
                     }
                 });
 
@@ -1483,6 +1505,7 @@ var requirejs, require, define;
                         var map = makeModuleMap(id, relMap, true),
                             mod = getOwn(registry, id);
 
+                        mod.undefed = true;
                         removeScript(id);
 
                         delete defined[id];
@@ -1493,10 +1516,11 @@ var requirejs, require, define;
                         //in array so that the splices do not
                         //mess up the iteration.
                         eachReverse(defQueue, function(args, i) {
-                            if(args[0] === id) {
+                            if (args[0] === id) {
                                 defQueue.splice(i, 1);
                             }
                         });
+                        delete context.defQueueMap[id];
 
                         if (mod) {
                             //Hold on to listeners in case the
@@ -1558,6 +1582,7 @@ var requirejs, require, define;
 
                     callGetModule(args);
                 }
+                context.defQueueMap = {};
 
                 //Do this after the cycle of callGetModule in case the result
                 //of those calls/init calls changes the registry.
@@ -1693,7 +1718,21 @@ var requirejs, require, define;
             onScriptError: function (evt) {
                 var data = getScriptData(evt);
                 if (!hasPathFallback(data.id)) {
-                    return onError(makeError('scripterror', 'Script error for: ' + data.id, evt, [data.id]));
+                    var parents = [];
+                    eachProp(registry, function(value, key) {
+                        if (key.indexOf('_@r') !== 0) {
+                            each(value.depMaps, function(depMap) {
+                                if (depMap.id === data.id) {
+                                    parents.push(key);
+                                }
+                                return true;
+                            });
+                        }
+                    });
+                    return onError(makeError('scripterror', 'Script error for "' + data.id +
+                                             (parents.length ?
+                                             '", needed by: ' + parents.join(', ') :
+                                             '"'), evt, [data.id]));
                 }
             }
         };
@@ -1852,6 +1891,9 @@ var requirejs, require, define;
         if (isBrowser) {
             //In the browser so use a script tag
             node = req.createNode(config, moduleName, url);
+            if (config.onNodeCreated) {
+                config.onNodeCreated(node, config, moduleName, url);
+            }
 
             node.setAttribute('data-requirecontext', context.contextName);
             node.setAttribute('data-requiremodule', moduleName);
@@ -1917,9 +1959,9 @@ var requirejs, require, define;
                 //In a web worker, use importScripts. This is not a very
                 //efficient use of importScripts, importScripts will block until
                 //its script is downloaded and evaluated. However, if web workers
-                //are in play, the expectation that a build has been done so that
-                //only one script needs to be loaded anyway. This may need to be
-                //reevaluated if other use cases become common.
+                //are in play, the expectation is that a build has been done so
+                //that only one script needs to be loaded anyway. This may need
+                //to be reevaluated if other use cases become common.
                 importScripts(url);
 
                 //Account for anonymous modules
@@ -1980,7 +2022,7 @@ var requirejs, require, define;
                 //like a module name.
                 mainScript = mainScript.replace(jsSuffixRegExp, '');
 
-                 //If mainScript is still a path, fall back to dataMain
+                //If mainScript is still a path, fall back to dataMain
                 if (req.jsExtRegExp.test(mainScript)) {
                     mainScript = dataMain;
                 }
@@ -2059,13 +2101,17 @@ var requirejs, require, define;
         //where the module name is not known until the script onload event
         //occurs. If no context, use the global queue, and get it processed
         //in the onscript load callback.
-        (context ? context.defQueue : globalDefQueue).push([name, deps, callback]);
+        if (context) {
+            context.defQueue.push([name, deps, callback]);
+            context.defQueueMap[name] = true;
+        } else {
+            globalDefQueue.push([name, deps, callback]);
+        }
     };
 
     define.amd = {
         jQuery: true
     };
-
 
     /**
      * Executes the text. Normally just uses eval, but can be modified
@@ -2084,18 +2130,16 @@ var requirejs, require, define;
 
 define("node_modules/requirejs/require", function(){});
 
-/*
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- *
- * Author: Robert Kereskenyi
- */
+/*globals define*/
+/*jshint node: true, browser: true*/
 
-
-/*
- * -------- EVENT DIASPATCHER -------
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
  */
 
 define('common/eventDispatcher',[], function () {
+    'use strict';
+
     var EventDispatcher = function () {
         this._eventList = {};
     };
@@ -2172,6 +2216,9 @@ define('common/eventDispatcher',[], function () {
                 handler(this, eventArgs);
             }
         },
+        clearAllEvents: function () {
+            this._eventList = {};
+        },
         _getEventHandler: function (eventName) {
             // Get Event Handler Array for this Event
             var evt = this._getEvent(eventName, false);
@@ -2194,28 +2241,50 @@ define('common/eventDispatcher',[], function () {
 
     return EventDispatcher;
 });
-define('blob/BlobConfig',[], function(){
+/*globals define*/
+/*jshint browser: true, node:true*/
 
+/**
+ * Client module for accessing the blob.
+ *
+ * @author lattmann / https://github.com/lattmann
+ */
+
+define('blob/BlobConfig',[], function () {
+    'use strict';
     var BlobConfig = {
         hashMethod: 'sha1', // TODO: in the future we may switch to sha512
         hashRegex: new RegExp('^[0-9a-f]{40}$')
     };
+
     return BlobConfig;
 });
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * Client module for accessing the blob.
  *
- * Author: Zsolt Lattmann
+ * @author lattmann / https://github.com/lattmann
  */
 
-define('blob/BlobMetadata',['blob/BlobConfig'], function(BlobConfig){
+define('blob/BlobMetadata',['blob/BlobConfig'], function (BlobConfig) {
+    'use strict';
 
     /**
      * Initializes a new instance of BlobMetadata
-     * @param {Object<string, string|number|Object>} metadata A serialized metadata object. Name and content must be defined.
+     * @param {object} metadata - A serialized metadata object.
+     * @param {string} metadata.name
+     * @param {string|Object} metadata.content
+     * @param {number} [metadata.size=0]
+     * @param {BlobMetadata.CONTENT_TYPES} [metadata.contentType=BlobMetadata.CONTENT_TYPES.OBJECT]
+     * @param {string} [metadata.mime='']
+     * @param {boolean} [metadata.isPublic=false]
+     * @param {string[]} [metadata.tags=[]]
      * @constructor
+     * @alias BlobMetadata
      */
-    var BlobMetadata = function(metadata) {
+    var BlobMetadata = function (metadata) {
         var key;
         if (metadata) {
             this.name = metadata.name;
@@ -2229,7 +2298,7 @@ define('blob/BlobMetadata',['blob/BlobConfig'], function(BlobConfig){
                 for (key in this.content) {
                     if (this.content.hasOwnProperty(key)) {
                         if (BlobConfig.hashRegex.test(this.content[key].content) === false) {
-                            throw Error("BlobMetadata is malformed: hash is invalid");
+                            throw new Error('BlobMetadata is malformed: hash \'' + this.content[key].content + '\'is invalid');
                         }
                     }
                 }
@@ -2251,7 +2320,13 @@ define('blob/BlobMetadata',['blob/BlobConfig'], function(BlobConfig){
 
     /**
      * Serializes the metadata to a JSON object.
-     * @returns {{name: string, size: number, mime: string, tags: Array.<string>, content: (string|Object}, contentType: string}}
+     * @returns {{
+     *  name: string,
+     *  size: number,
+     *  mime: string,
+     *  tags: Array.<string>,
+     *  content: (string|Object),
+     *  contentType: string}}
      */
     BlobMetadata.prototype.serialize = function () {
         var metadata = {
@@ -2280,774 +2355,785 @@ define('blob/BlobMetadata',['blob/BlobConfig'], function(BlobConfig){
         return metadata;
     };
 
-    return BlobMetadata
+    return BlobMetadata;
 });
+
+/*globals define*/
+/*jshint node: true, browser: true, camelcase: false*/
+
 /**
- * The MIT License (MIT)
- * Copyright (c) 2013, Miklos Maroti
+ * @author mmaroti / https://github.com/mmaroti
  */
 
 (function () {
-	
+    'use strict';
 
-	// ------- assert -------
+    // ------- assert -------
 
-	var TASYNC_TRACE_ENABLE = true;
+    var TASYNC_TRACE_ENABLE = true;
 
-	function setTrace (value) {
-		TASYNC_TRACE_ENABLE = value;
-	}
+    function setTrace(value) {
+        TASYNC_TRACE_ENABLE = value;
+    }
 
-	function assert (cond) {
-		if (!cond) {
-			throw new Error("tasync internal error");
-		}
-	}
+    function assert(cond) {
+        if (!cond) {
+            throw new Error('tasync internal error');
+        }
+    }
 
-	// ------- Future -------
-
-	var STATE_LISTEN = 0;
-	var STATE_REJECTED = 1;
-	var STATE_RESOLVED = 2;
-
-	var Future = function () {
-		this.state = STATE_LISTEN;
-		this.value = [];
-	};
-
-	Future.prototype.register = function (target) {
-		assert(this.state === STATE_LISTEN);
-		assert(typeof target === "object" && target !== null);
-
-		this.value.push(target);
-	};
-
-	Future.prototype.resolve = function (value) {
-		assert(this.state === STATE_LISTEN && !(value instanceof Future));
-
-		var listeners = this.value;
-
-		this.state = STATE_RESOLVED;
-		this.value = value;
-
-		var i;
-		for (i = 0; i < listeners.length; ++i) {
-			listeners[i].onResolved(value);
-		}
-	};
-
-	Future.prototype.reject = function (error) {
-		assert(this.state === STATE_LISTEN && error instanceof Error);
-
-		var listeners = this.value;
-
-		this.state = STATE_REJECTED;
-		this.value = error;
-
-		var i;
-		for (i = 0; i < listeners.length; ++i) {
-			listeners[i].onRejected(error);
-		}
-	};
-
-	// ------- Delay -------
-
-	function delay (timeout, value) {
-		if (timeout < 0) {
-			return value;
-		}
-
-		var future = new Future();
-		setTimeout(function () {
-			future.resolve(value);
-		}, timeout);
-		return future;
-	}
-
-	// ------- Lift -------
-
-	var FutureLift = function (array, index) {
-		Future.call(this);
-
-		this.array = array;
-		this.index = index;
-	};
-
-	FutureLift.prototype = Object.create(Future.prototype);
-
-	FutureLift.prototype.onResolved = function (value) {
-		assert(this.state === STATE_LISTEN);
-
-		var array = this.array;
-		array[this.index] = value;
-
-		while (++this.index < array.length) {
-			value = array[this.index];
-			if (value instanceof Future) {
-				if (value.state === STATE_RESOLVED) {
-					array[this.index] = value.value;
-				} else if (value.state === STATE_LISTEN) {
-					value.register(this);
-					return;
-				} else {
-					assert(value.state === STATE_REJECTED);
-					this.reject(value.value);
-					return;
-				}
-			}
-		}
-
-		this.array = null;
-		this.resolve(array);
-	};
-
-	FutureLift.prototype.onRejected = function (error) {
-		this.array = null;
-		this.reject(error);
-	};
-
-	var lift = function (array) {
-		if (!(array instanceof Array)) {
-			throw new Error("array argument is expected");
-		}
-
-		var index;
-		for (index = 0; index < array.length; ++index) {
-			var value = array[index];
-			if (value instanceof Future) {
-				if (value.state === STATE_RESOLVED) {
-					array[index] = value.value;
-				} else if (value.state === STATE_LISTEN) {
-					var future = new FutureLift(array, index);
-					value.register(future);
-					return future;
-				} else {
-					assert(value.state === STATE_REJECTED);
-					return value;
-				}
-			}
-		}
-
-		return array;
-	};
-
-	// ------- Apply -------
-
-	var ROOT = {
-		subframes: 0
-	};
-
-	var FRAME = ROOT;
-
-	var FutureApply = function tasync_trace_end (func, that, args, index) {
-		Future.call(this);
-
-		this.caller = FRAME;
-		this.position = ++FRAME.subframes;
-		this.subframes = 0;
-
-		if (TASYNC_TRACE_ENABLE) {
-			this.trace = new Error();
-		}
-
-		this.func = func;
-		this.that = that;
-		this.args = args;
-		this.index = index;
-	};
-
-	FutureApply.prototype = Object.create(Future.prototype);
-
-	FutureApply.prototype.getPath = function () {
-		var future = this.caller, path = [ this.position ];
-
-		while (future !== ROOT) {
-			path.push(future.position);
-			future = future.caller;
-		}
-
-		return path;
-	};
-
-	function getSlice (trace) {
-		assert(typeof trace === "string");
-
-		var end = trace.indexOf("tasync_trace_start");
-		if (end >= 0) {
-			end = trace.lastIndexOf("\n", end) + 1;
-		} else {
-			if (trace.charAt(trace.length - 1) !== "\n") {
-				// trace += "\n";
-			}
-			end = undefined;
-		}
-
-		var start = trace.indexOf("tasync_trace_end");
-		if (start >= 0) {
-			start = trace.indexOf("\n", start) + 1;
-			if (start >= 0) {
-				start = trace.indexOf("\n", start) + 1;
-			}
-		} else {
-			start = 0;
-		}
-
-		return trace.substring(start, end);
-	}
-
-	function createError (error, future) {
-		if (!(error instanceof Error)) {
-			error = new Error(error);
-		}
-
-		if (TASYNC_TRACE_ENABLE) {
-			error.trace = getSlice(error.stack);
-			do {
-				error.trace += "*** callback ***\n";
-				error.trace += getSlice(future.trace.stack);
-				future = future.caller;
-			} while (future !== ROOT);
-		}
-
-		return error;
-	}
-
-	FutureApply.prototype.onRejected = function (error) {
-		this.args = null;
-		this.reject(error);
-	};
-
-	FutureApply.prototype.onResolved = function tasync_trace_start (value) {
-		assert(this.state === STATE_LISTEN);
-
-		var args = this.args;
-		args[this.index] = value;
-
-		while (--this.index >= 0) {
-			value = args[this.index];
-			if (value instanceof Future) {
-				if (value.state === STATE_RESOLVED) {
-					args[this.index] = value.value;
-				} else if (value.state === STATE_LISTEN) {
-					value.register(this);
-					return;
-				} else {
-					assert(value.state === STATE_REJECTED);
-					this.reject(value.value);
-					return;
-				}
-			}
-		}
-
-		assert(FRAME === ROOT);
-		FRAME = this;
-
-		this.args = null;
-		try {
-			value = this.func.apply(this.that, args);
-		} catch (error) {
-			FRAME = ROOT;
-
-			this.reject(createError(error, this));
-			return;
-		}
-
-		FRAME = ROOT;
-
-		if (value instanceof Future) {
-			assert(value.state === STATE_LISTEN);
-
-			this.onResolved = this.resolve;
-			value.register(this);
-		} else {
-			this.resolve(value);
-		}
-	};
-
-	var apply = function (func, args, that) {
-		if (typeof func !== "function") {
-			throw new Error("function argument is expected");
-		} else if (!(args instanceof Array)) {
-			throw new Error("array argument is expected");
-		}
-
-		var index = args.length;
-		while (--index >= 0) {
-			var value = args[index];
-			if (value instanceof Future) {
-				if (value.state === STATE_LISTEN) {
-					var future = new FutureApply(func, that, args, index);
-					value.register(future);
-					return future;
-				} else if (value.state === STATE_RESOLVED) {
-					args[index] = value.value;
-				} else {
-					assert(value.state === STATE_REJECTED);
-					return value;
-				}
-			}
-		}
-
-		return func.apply(that, args);
-	};
-
-	// ------- Call -------
-
-	var FutureCall = function tasync_trace_end (args, index) {
-		Future.call(this);
-
-		this.caller = FRAME;
-		this.position = ++FRAME.subframes;
-		this.subframes = 0;
-
-		if (TASYNC_TRACE_ENABLE) {
-			this.trace = new Error();
-		}
-
-		this.args = args;
-		this.index = index;
-	};
-
-	FutureCall.prototype = Object.create(Future.prototype);
-
-	FutureCall.prototype.getPath = FutureApply.prototype.getPath;
-	FutureCall.prototype.onRejected = FutureApply.prototype.onRejected;
-
-	var FUNCTION_CALL = Function.call;
-
-	FutureCall.prototype.onResolved = function tasync_trace_start (value) {
-		assert(this.state === STATE_LISTEN);
-
-		var args = this.args;
-		args[this.index] = value;
-
-		while (--this.index >= 0) {
-			value = args[this.index];
-			if (value instanceof Future) {
-				if (value.state === STATE_RESOLVED) {
-					args[this.index] = value.value;
-				} else if (value.state === STATE_LISTEN) {
-					value.register(this);
-					return;
-				} else {
-					assert(value.state === STATE_REJECTED);
-					this.reject(value.value);
-					return;
-				}
-			}
-		}
-
-		assert(FRAME === ROOT);
-		FRAME = this;
-
-		this.args = null;
-		try {
-			var func = args[0];
-			args[0] = null;
-			value = FUNCTION_CALL.apply(func, args);
-		} catch (error) {
-			FRAME = ROOT;
-
-			this.reject(createError(error, this));
-			return;
-		}
-
-		FRAME = ROOT;
-
-		if (value instanceof Future) {
-			assert(value.state === STATE_LISTEN);
-
-			this.onResolved = this.resolve;
-			value.register(this);
-		} else {
-			this.resolve(value);
-		}
-	};
-
-	var call = function () {
-		var index = arguments.length;
-		while (--index >= 0) {
-			var value = arguments[index];
-			if (value instanceof Future) {
-				if (value.state === STATE_LISTEN) {
-					var future = new FutureCall(arguments, index);
-					value.register(future);
-					return future;
-				} else if (value.state === STATE_RESOLVED) {
-					arguments[index] = value.value;
-				} else {
-					assert(value.state === STATE_REJECTED);
-					return value;
-				}
-			}
-		}
-
-		var func = arguments[0];
-		return FUNCTION_CALL.apply(func, arguments);
-	};
-
-	// ------- TryCatch -------
-
-	function FutureTryCatch (handler) {
-		Future.call(this);
-
-		this.handler = handler;
-	}
-
-	FutureTryCatch.prototype = Object.create(Future.prototype);
-
-	FutureTryCatch.prototype.onRejected = function (error) {
-		try {
-			var value = this.handler(error);
-
-			if (value instanceof Future) {
-				this.onRejected = Future.prorotype.reject;
-				value.register(this);
-			} else {
-				this.resolve(value);
-			}
-		} catch (err) {
-			this.reject(err);
-		}
-	};
-
-	FutureTryCatch.prototype.onResolved = Future.prototype.resolve;
-
-	function trycatch (func, handler) {
-		if (typeof func !== "function" || typeof handler !== "function") {
-			throw new Error("function arguments are expected");
-		}
-
-		try {
-			var value = func();
-
-			if (value instanceof Future) {
-				var future = new FutureTryCatch(handler);
-				value.register(future);
-
-				return future;
-			} else {
-				return value;
-			}
-		} catch (error) {
-			return handler(error);
-		}
-	}
-
-	// ------- Wrap -------
-
-	function wrap (func) {
-		if (typeof func !== "function") {
-			throw new Error("function argument is expected");
-		}
-
-		if (typeof func.tasync_wraped === "undefined") {
-			func.tasync_wraped = function () {
-				var args = arguments;
-				var future = new Future();
-
-				args[args.length++] = function (error, value) {
-					if (error) {
-						future.reject(error instanceof Error ? error : new Error(error));
-					} else {
-						future.resolve(value);
-					}
-				};
-
-				func.apply(this, args);
-
-				if (future.state === STATE_LISTEN) {
-					return future;
-				} else if (future.state === STATE_RESOLVED) {
-					return future.value;
-				} else {
-					assert(future.state === STATE_REJECTED);
-					throw future.value;
-				}
-			};
-
-			func.tasync_wraped.tasync_unwraped = func;
-		}
-
-		return func.tasync_wraped;
-	}
-
-	// ------- Unwrap -------
-
-	function UnwrapListener (callback) {
-		this.callback = callback;
-	}
-
-	UnwrapListener.prototype.onRejected = function (error) {
-		this.callback(error);
-	};
-
-	UnwrapListener.prototype.onResolved = function (value) {
-		this.callback(null, value);
-	};
-
-	function unwrap (func) {
-		if (typeof func !== "function") {
-			throw new Error("function argument is expected");
-		}
-
-		if (typeof func.tasync_unwraped === "undefined") {
-			func.tasync_unwraped = function () {
-				var args = arguments;
-
-				var callback = args[--args.length];
-				assert(typeof callback === "function");
-
-				var value;
-				try {
-					value = func.apply(this, args);
-				} catch (error) {
-					callback(error);
-					return;
-				}
-
-				if (value instanceof Future) {
-					assert(value.state === STATE_LISTEN);
-
-					var listener = new UnwrapListener(callback);
-					value.register(listener);
-				} else {
-					callback(null, value);
-				}
-			};
-
-			func.tasync_unwraped.tasync_wraped = func;
-		}
-
-		return func.tasync_unwraped;
-	}
-
-	// ------- Throttle -------
-
-	function FutureThrottle (func, that, args) {
-		Future.call(this);
-
-		this.func = func;
-		this.that = that;
-		this.args = args;
-
-		this.caller = FRAME;
-		this.position = ++FRAME.subframes;
-
-		this.path = this.getPath();
-	}
-
-	FutureThrottle.prototype = Object.create(Future.prototype);
-
-	FutureThrottle.prototype.execute = function () {
-		var value;
-		try {
-			assert(FRAME === ROOT);
-			FRAME = this;
-
-			value = this.func.apply(this.that, this.args);
-
-			FRAME = ROOT;
-		} catch (error) {
-			FRAME = ROOT;
-
-			this.reject(error);
-			return;
-		}
-
-		if (value instanceof Future) {
-			assert(value.state === STATE_LISTEN);
-			value.register(this);
-		} else {
-			this.resolve(value);
-		}
-	};
-
-	FutureThrottle.prototype.getPath = FutureApply.prototype.getPath;
-	FutureThrottle.prototype.onResolved = Future.prototype.resolve;
-	FutureThrottle.prototype.onRejected = Future.prototype.reject;
-
-	FutureThrottle.prototype.compare = function (second) {
-		var first = this.path;
-		second = second.path;
-
-		var i, limit = first.length < second.length ? first.length : second.length;
-		for (i = 0; i < limit; ++i) {
-			if (first[i] !== second[i]) {
-				return first[i] - second[i];
-			}
-		}
-
-		return first.length - second.length;
-	};
-
-	function ThrottleListener (limit) {
-		this.running = 0;
-		this.limit = limit;
-		this.queue = [];
-	}
-
-	function priorityQueueInsert (queue, elem) {
-		var low = 0;
-		var high = queue.length;
-
-		while (low < high) {
-			var mid = Math.floor((low + high) / 2);
-			assert(low <= mid && mid < high);
-
-			if (elem.compare(queue[mid]) < 0) {
-				low = mid + 1;
-			} else {
-				high = mid;
-			}
-		}
-
-		queue.splice(low, 0, elem);
-	}
-
-	ThrottleListener.prototype.execute = function (func, that, args) {
-		if (this.running < this.limit) {
-			var value = func.apply(that, args);
-
-			if (value instanceof Future) {
-				assert(value.state === STATE_LISTEN);
-
-				++this.running;
-				value.register(this);
-			}
-
-			return value;
-		} else {
-			var future = new FutureThrottle(func, that, args);
-			priorityQueueInsert(this.queue, future);
-
-			return future;
-		}
-	};
-
-	ThrottleListener.prototype.onResolved = function () {
-		if (this.queue.length > 0) {
-			var future = this.queue.pop();
-			future.register(this);
-
-			future.execute();
-		} else {
-			--this.running;
-		}
-	};
-
-	ThrottleListener.prototype.onRejected = ThrottleListener.prototype.onResolved;
-
-	// TODO: prevent recursion, otheriwise throttle will not work
-	function throttle (func, limit) {
-		if (typeof func !== "function") {
-			throw new Error("function argument is expected");
-		} else if (typeof limit !== "number") {
-			throw new Error("number argument is expected");
-		}
-
-		var listener = new ThrottleListener(limit);
-
-		return function () {
-			return listener.execute(func, this, arguments);
-		};
-	}
-
-	// ------- Join -------
-
-	function FutureJoin (first) {
-		Future.call(this);
-
-		this.first = first;
-		this.missing = first instanceof Future && first.state === STATE_LISTEN ? 1 : 0;
-	}
-
-	FutureJoin.prototype = Object.create(Future.prototype);
-
-	FutureJoin.prototype.onResolved = function (value) {
-		if (--this.missing === 0) {
-			assert(this.state !== STATE_RESOLVED);
-
-			if (this.state === STATE_LISTEN) {
-				if (this.first instanceof Future) {
-					assert(this.first.state === STATE_RESOLVED);
-
-					this.resolve(this.first.value);
-				} else {
-					this.resolve(this.first);
-				}
-			}
-		}
-	};
-
-	FutureJoin.prototype.onRejected = function (error) {
-		if (this.state === STATE_LISTEN) {
-			this.reject(error);
-		}
-	};
-
-	function join (first, second) {
-		if (first instanceof Future && first.state === STATE_REJECTED) {
-			return first;
-		} else if (second instanceof Future) {
-			if (second.state === STATE_RESOLVED) {
-				return first;
-			} else if (second.state === STATE_REJECTED) {
-				return second;
-			}
-		} else {
-			return first;
-		}
-
-		if (!(first instanceof FutureJoin)) {
-			first = new FutureJoin(first);
-		}
-
-		first.missing += 1;
-		second.register(first);
-
-		return first;
-	}
-
-	// ------- TASYNC -------
-
-	var TASYNC = {
-		setTrace: setTrace,
-		delay: delay,
-		lift: lift,
-		apply: apply,
-		call: call,
-		trycatch: trycatch,
-		wrap: wrap,
-		unwrap: unwrap,
-		throttle: throttle,
-		join: join
-	};
-
-	if (typeof define === "function" && define.amd) {
-		define('common/core/tasync',[], function () {
-			return TASYNC;
-		});
-	} else {
-		module.exports = TASYNC;
-	}
+    // ------- Future -------
+
+    var STATE_LISTEN = 0;
+    var STATE_REJECTED = 1;
+    var STATE_RESOLVED = 2;
+
+    var Future = function () {
+        this.state = STATE_LISTEN;
+        this.value = [];
+    };
+
+    Future.prototype.register = function (target) {
+        assert(this.state === STATE_LISTEN);
+        assert(typeof target === 'object' && target !== null);
+
+        this.value.push(target);
+    };
+
+    Future.prototype.resolve = function (value) {
+        assert(this.state === STATE_LISTEN && !(value instanceof Future));
+
+        var listeners = this.value;
+
+        this.state = STATE_RESOLVED;
+        this.value = value;
+
+        var i;
+        for (i = 0; i < listeners.length; ++i) {
+            listeners[i].onResolved(value);
+        }
+    };
+
+    Future.prototype.reject = function (error) {
+        assert(this.state === STATE_LISTEN && error instanceof Error);
+
+        var listeners = this.value;
+
+        this.state = STATE_REJECTED;
+        this.value = error;
+
+        var i;
+        for (i = 0; i < listeners.length; ++i) {
+            listeners[i].onRejected(error);
+        }
+    };
+
+    // ------- Delay -------
+
+    function delay(timeout, value) {
+        if (timeout < 0) {
+            return value;
+        }
+
+        var future = new Future();
+        setTimeout(function () {
+            future.resolve(value);
+        }, timeout);
+        return future;
+    }
+
+    // ------- Lift -------
+
+    var FutureLift = function (array, index) {
+        Future.call(this);
+
+        this.array = array;
+        this.index = index;
+    };
+
+    FutureLift.prototype = Object.create(Future.prototype);
+
+    FutureLift.prototype.onResolved = function (value) {
+        assert(this.state === STATE_LISTEN);
+
+        var array = this.array;
+        array[this.index] = value;
+
+        while (++this.index < array.length) {
+            value = array[this.index];
+            if (value instanceof Future) {
+                if (value.state === STATE_RESOLVED) {
+                    array[this.index] = value.value;
+                } else if (value.state === STATE_LISTEN) {
+                    value.register(this);
+                    return;
+                } else {
+                    assert(value.state === STATE_REJECTED);
+                    this.reject(value.value);
+                    return;
+                }
+            }
+        }
+
+        this.array = null;
+        this.resolve(array);
+    };
+
+    FutureLift.prototype.onRejected = function (error) {
+        this.array = null;
+        this.reject(error);
+    };
+
+    var lift = function (array) {
+        if (!(array instanceof Array)) {
+            throw new Error('array argument is expected');
+        }
+
+        var index;
+        for (index = 0; index < array.length; ++index) {
+            var value = array[index];
+            if (value instanceof Future) {
+                if (value.state === STATE_RESOLVED) {
+                    array[index] = value.value;
+                } else if (value.state === STATE_LISTEN) {
+                    var future = new FutureLift(array, index);
+                    value.register(future);
+                    return future;
+                } else {
+                    assert(value.state === STATE_REJECTED);
+                    return value;
+                }
+            }
+        }
+
+        return array;
+    };
+
+    // ------- Apply -------
+
+    var ROOT = {
+        subframes: 0
+    };
+
+    var FRAME = ROOT;
+
+    var FutureApply = function tasync_trace_end(func, that, args, index) {
+        Future.call(this);
+
+        this.caller = FRAME;
+        this.position = ++FRAME.subframes;
+        this.subframes = 0;
+
+        if (TASYNC_TRACE_ENABLE) {
+            this.trace = new Error();
+        }
+
+        this.func = func;
+        this.that = that;
+        this.args = args;
+        this.index = index;
+    };
+
+    FutureApply.prototype = Object.create(Future.prototype);
+
+    FutureApply.prototype.getPath = function () {
+        var future = this.caller,
+            path = [this.position];
+
+        while (future !== ROOT) {
+            path.push(future.position);
+            future = future.caller;
+        }
+
+        return path;
+    };
+
+    function getSlice(trace) {
+        assert(typeof trace === 'string');
+
+        var end = trace.indexOf('tasync_trace_start');
+        if (end >= 0) {
+            end = trace.lastIndexOf('\n', end) + 1;
+        } else {
+            if (trace.charAt(trace.length - 1) !== '\n') {
+                // trace += '\n';
+            }
+            end = undefined;
+        }
+
+        var start = trace.indexOf('tasync_trace_end');
+        if (start >= 0) {
+            start = trace.indexOf('\n', start) + 1;
+            if (start >= 0) {
+                start = trace.indexOf('\n', start) + 1;
+            }
+        } else {
+            start = 0;
+        }
+
+        return trace.substring(start, end);
+    }
+
+    function createError(error, future) {
+        if (!(error instanceof Error)) {
+            error = new Error(error);
+        }
+
+        if (TASYNC_TRACE_ENABLE) {
+            error.trace = getSlice(error.stack);
+            do {
+                error.trace += '*** callback ***\n';
+                error.trace += getSlice(future.trace.stack);
+                future = future.caller;
+            } while (future !== ROOT);
+        }
+
+        return error;
+    }
+
+    FutureApply.prototype.onRejected = function (error) {
+        this.args = null;
+        this.reject(error);
+    };
+
+    FutureApply.prototype.onResolved = function tasync_trace_start(value) {
+        assert(this.state === STATE_LISTEN);
+
+        var args = this.args;
+        args[this.index] = value;
+
+        while (--this.index >= 0) {
+            value = args[this.index];
+            if (value instanceof Future) {
+                if (value.state === STATE_RESOLVED) {
+                    args[this.index] = value.value;
+                } else if (value.state === STATE_LISTEN) {
+                    value.register(this);
+                    return;
+                } else {
+                    assert(value.state === STATE_REJECTED);
+                    this.reject(value.value);
+                    return;
+                }
+            }
+        }
+
+        assert(FRAME === ROOT);
+        FRAME = this;
+
+        this.args = null;
+        try {
+            value = this.func.apply(this.that, args);
+        } catch (error) {
+            FRAME = ROOT;
+
+            this.reject(createError(error, this));
+            return;
+        }
+
+        FRAME = ROOT;
+
+        if (value instanceof Future) {
+            assert(value.state === STATE_LISTEN);
+
+            this.onResolved = this.resolve;
+            value.register(this);
+        } else {
+            this.resolve(value);
+        }
+    };
+
+    var apply = function (func, args, that) {
+        if (typeof func !== 'function') {
+            throw new Error('function argument is expected');
+        } else if (!(args instanceof Array)) {
+            throw new Error('array argument is expected');
+        }
+
+        var index = args.length;
+        while (--index >= 0) {
+            var value = args[index];
+            if (value instanceof Future) {
+                if (value.state === STATE_LISTEN) {
+                    var future = new FutureApply(func, that, args, index);
+                    value.register(future);
+                    return future;
+                } else if (value.state === STATE_RESOLVED) {
+                    args[index] = value.value;
+                } else {
+                    assert(value.state === STATE_REJECTED);
+                    return value;
+                }
+            }
+        }
+
+        return func.apply(that, args);
+    };
+
+    // ------- Call -------
+
+    var FutureCall = function tasync_trace_end(args, index) {
+        Future.call(this);
+
+        this.caller = FRAME;
+        this.position = ++FRAME.subframes;
+        this.subframes = 0;
+
+        if (TASYNC_TRACE_ENABLE) {
+            this.trace = new Error();
+        }
+
+        this.args = args;
+        this.index = index;
+    };
+
+    FutureCall.prototype = Object.create(Future.prototype);
+
+    FutureCall.prototype.getPath = FutureApply.prototype.getPath;
+    FutureCall.prototype.onRejected = FutureApply.prototype.onRejected;
+
+    var FUNCTION_CALL = Function.call;
+
+    FutureCall.prototype.onResolved = function tasync_trace_start(value) {
+        assert(this.state === STATE_LISTEN);
+
+        var args = this.args;
+        args[this.index] = value;
+
+        while (--this.index >= 0) {
+            value = args[this.index];
+            if (value instanceof Future) {
+                if (value.state === STATE_RESOLVED) {
+                    args[this.index] = value.value;
+                } else if (value.state === STATE_LISTEN) {
+                    value.register(this);
+                    return;
+                } else {
+                    assert(value.state === STATE_REJECTED);
+                    this.reject(value.value);
+                    return;
+                }
+            }
+        }
+
+        assert(FRAME === ROOT);
+        FRAME = this;
+
+        this.args = null;
+        try {
+            var func = args[0];
+            args[0] = null;
+            value = FUNCTION_CALL.apply(func, args);
+        } catch (error) {
+            FRAME = ROOT;
+
+            this.reject(createError(error, this));
+            return;
+        }
+
+        FRAME = ROOT;
+
+        if (value instanceof Future) {
+            assert(value.state === STATE_LISTEN);
+
+            this.onResolved = this.resolve;
+            value.register(this);
+        } else {
+            this.resolve(value);
+        }
+    };
+
+    var call = function () {
+        var index = arguments.length;
+        while (--index >= 0) {
+            var value = arguments[index];
+            if (value instanceof Future) {
+                if (value.state === STATE_LISTEN) {
+                    var future = new FutureCall(arguments, index);
+                    value.register(future);
+                    return future;
+                } else if (value.state === STATE_RESOLVED) {
+                    arguments[index] = value.value;
+                } else {
+                    assert(value.state === STATE_REJECTED);
+                    return value;
+                }
+            }
+        }
+
+        var func = arguments[0];
+        return FUNCTION_CALL.apply(func, arguments);
+    };
+
+    // ------- TryCatch -------
+
+    function FutureTryCatch(handler) {
+        Future.call(this);
+
+        this.handler = handler;
+    }
+
+    FutureTryCatch.prototype = Object.create(Future.prototype);
+
+    FutureTryCatch.prototype.onRejected = function (error) {
+        try {
+            var value = this.handler(error);
+
+            if (value instanceof Future) {
+                this.onRejected = Future.prorotype.reject;
+                value.register(this);
+            } else {
+                this.resolve(value);
+            }
+        } catch (err) {
+            this.reject(err);
+        }
+    };
+
+    FutureTryCatch.prototype.onResolved = Future.prototype.resolve;
+
+    function trycatch(func, handler) {
+        if (typeof func !== 'function' || typeof handler !== 'function') {
+            throw new Error('function arguments are expected');
+        }
+
+        try {
+            var value = func();
+
+            if (value instanceof Future) {
+                var future = new FutureTryCatch(handler);
+                value.register(future);
+
+                return future;
+            } else {
+                return value;
+            }
+        } catch (error) {
+            return handler(error);
+        }
+    }
+
+    // ------- Wrap -------
+
+    function wrap(func) {
+        if (typeof func !== 'function') {
+            throw new Error('function argument is expected');
+        }
+
+        if (func.tasync_wraped === undefined) {
+            func.tasync_wraped = function () {
+                var args = arguments;
+                var future = new Future();
+
+                args[args.length++] = function (error, value) {
+                    if (error) {
+                        future.reject(error instanceof Error ? error : new Error(error));
+                    } else {
+                        future.resolve(value);
+                    }
+                };
+
+                func.apply(this, args);
+
+                if (future.state === STATE_LISTEN) {
+                    return future;
+                } else if (future.state === STATE_RESOLVED) {
+                    return future.value;
+                } else {
+                    assert(future.state === STATE_REJECTED);
+                    throw future.value;
+                }
+            };
+
+            func.tasync_wraped.tasync_unwraped = func;
+        }
+
+        return func.tasync_wraped;
+    }
+
+    // ------- Unwrap -------
+
+    function UnwrapListener(callback) {
+        this.callback = callback;
+    }
+
+    UnwrapListener.prototype.onRejected = function (error) {
+        this.callback(error);
+    };
+
+    UnwrapListener.prototype.onResolved = function (value) {
+        this.callback(null, value);
+    };
+
+    function unwrap(func) {
+        if (typeof func !== 'function') {
+            throw new Error('function argument is expected');
+        }
+
+        if (func.tasync_unwraped === undefined) {
+            func.tasync_unwraped = function () {
+                var args = arguments;
+
+                var callback = args[--args.length];
+                assert(typeof callback === 'function');
+
+                var value;
+                try {
+                    value = func.apply(this, args);
+                } catch (error) {
+                    callback(error);
+                    return;
+                }
+
+                if (value instanceof Future) {
+                    assert(value.state === STATE_LISTEN);
+
+                    var listener = new UnwrapListener(callback);
+                    value.register(listener);
+                } else {
+                    callback(null, value);
+                }
+            };
+
+            func.tasync_unwraped.tasync_wraped = func;
+        }
+
+        return func.tasync_unwraped;
+    }
+
+    // ------- Throttle -------
+
+    function FutureThrottle(func, that, args) {
+        Future.call(this);
+
+        this.func = func;
+        this.that = that;
+        this.args = args;
+
+        this.caller = FRAME;
+        this.position = ++FRAME.subframes;
+
+        this.path = this.getPath();
+    }
+
+    FutureThrottle.prototype = Object.create(Future.prototype);
+
+    FutureThrottle.prototype.execute = function () {
+        var value;
+        try {
+            assert(FRAME === ROOT);
+            FRAME = this;
+
+            value = this.func.apply(this.that, this.args);
+
+            FRAME = ROOT;
+        } catch (error) {
+            FRAME = ROOT;
+
+            this.reject(error);
+            return;
+        }
+
+        if (value instanceof Future) {
+            assert(value.state === STATE_LISTEN);
+            value.register(this);
+        } else {
+            this.resolve(value);
+        }
+    };
+
+    FutureThrottle.prototype.getPath = FutureApply.prototype.getPath;
+    FutureThrottle.prototype.onResolved = Future.prototype.resolve;
+    FutureThrottle.prototype.onRejected = Future.prototype.reject;
+
+    FutureThrottle.prototype.compare = function (second) {
+        var first = this.path;
+        second = second.path;
+
+        var i, limit = first.length < second.length ? first.length : second.length;
+        for (i = 0; i < limit; ++i) {
+            if (first[i] !== second[i]) {
+                return first[i] - second[i];
+            }
+        }
+
+        return first.length - second.length;
+    };
+
+    function ThrottleListener(limit) {
+        this.running = 0;
+        this.limit = limit;
+        this.queue = [];
+    }
+
+    function priorityQueueInsert(queue, elem) {
+        var low = 0;
+        var high = queue.length;
+
+        while (low < high) {
+            var mid = Math.floor((low + high) / 2);
+            assert(low <= mid && mid < high);
+
+            if (elem.compare(queue[mid]) < 0) {
+                low = mid + 1;
+            } else {
+                high = mid;
+            }
+        }
+
+        queue.splice(low, 0, elem);
+    }
+
+    ThrottleListener.prototype.execute = function (func, that, args) {
+        if (this.running < this.limit) {
+            var value = func.apply(that, args);
+
+            if (value instanceof Future) {
+                assert(value.state === STATE_LISTEN);
+
+                ++this.running;
+                value.register(this);
+            }
+
+            return value;
+        } else {
+            var future = new FutureThrottle(func, that, args);
+            priorityQueueInsert(this.queue, future);
+
+            return future;
+        }
+    };
+
+    ThrottleListener.prototype.onResolved = function () {
+        if (this.queue.length > 0) {
+            var future = this.queue.pop();
+            future.register(this);
+
+            future.execute();
+        } else {
+            --this.running;
+        }
+    };
+
+    ThrottleListener.prototype.onRejected = ThrottleListener.prototype.onResolved;
+
+    // TODO: prevent recursion, otheriwise throttle will not work
+    function throttle(func, limit) {
+        if (typeof func !== 'function') {
+            throw new Error('function argument is expected');
+        } else if (typeof limit !== 'number') {
+            throw new Error('number argument is expected');
+        }
+
+        var listener = new ThrottleListener(limit);
+
+        return function () {
+            return listener.execute(func, this, arguments);
+        };
+    }
+
+    // ------- Join -------
+
+    function FutureJoin(first) {
+        Future.call(this);
+
+        this.first = first;
+        this.missing = first instanceof Future && first.state === STATE_LISTEN ? 1 : 0;
+    }
+
+    FutureJoin.prototype = Object.create(Future.prototype);
+
+    FutureJoin.prototype.onResolved = function (/*value*/) {
+        if (--this.missing === 0) {
+            assert(this.state !== STATE_RESOLVED);
+
+            if (this.state === STATE_LISTEN) {
+                if (this.first instanceof Future) {
+                    assert(this.first.state === STATE_RESOLVED);
+
+                    this.resolve(this.first.value);
+                } else {
+                    this.resolve(this.first);
+                }
+            }
+        }
+    };
+
+    FutureJoin.prototype.onRejected = function (error) {
+        if (this.state === STATE_LISTEN) {
+            this.reject(error);
+        }
+    };
+
+    function join(first, second) {
+        if (first instanceof Future && first.state === STATE_REJECTED) {
+            return first;
+        } else if (second instanceof Future) {
+            if (second.state === STATE_RESOLVED) {
+                return first;
+            } else if (second.state === STATE_REJECTED) {
+                return second;
+            }
+        } else {
+            return first;
+        }
+
+        if (!(first instanceof FutureJoin)) {
+            first = new FutureJoin(first);
+        }
+
+        first.missing += 1;
+        second.register(first);
+
+        return first;
+    }
+
+    // ------- TASYNC -------
+
+    var TASYNC = {
+        setTrace: setTrace,
+        delay: delay,
+        lift: lift,
+        apply: apply,
+        call: call,
+        trycatch: trycatch,
+        wrap: wrap,
+        unwrap: unwrap,
+        throttle: throttle,
+        join: join
+    };
+
+    if (typeof define === 'function' && define.amd) {
+        define('common/core/tasync',[], function () {
+            return TASYNC;
+        });
+    } else {
+        module.exports = TASYNC;
+    }
 }());
 
 /*globals define*/
 /*jshint browser: true, node:true*/
 
-/*
+/**
  * @author lattmann / https://github.com/lattmann
  */
 
-define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tasync'], function (BlobMetadata, BlobConfig, tasync) {
-    
+define('blob/Artifact',[
+    'blob/BlobMetadata',
+    'blob/BlobConfig',
+    'common/core/tasync',
+    'q'
+], function (BlobMetadata, BlobConfig, tasync, Q) {
+    'use strict';
+
     /**
      * Creates a new instance of artifact, i.e. complex object, in memory. This object can be saved in the storage.
      * @param {string} name Artifact's name without extension
-     * @param {blob.BlobClient} blobClient
-     * @param {blob.BlobMetadata} descriptor
+     * @param {BlobClient} blobClient
+     * @param {BlobMetadata} descriptor
      * @constructor
+     * @alias Artifact
      */
     var Artifact = function (name, blobClient, descriptor) {
         this.name = name;
@@ -3056,44 +3142,65 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tas
         this.blobClientGetMetadata = tasync.unwrap(tasync.throttle(tasync.wrap(blobClient.getMetadata), 5));
         // TODO: use BlobMetadata class here
         this.descriptor = descriptor || {
-            name: name + '.zip',
-            size: 0,
-            mime: 'application/zip',
-            content: {},
-            contentType: 'complex'
-        }; // name and hash pairs
+                name: name + '.zip',
+                size: 0,
+                mime: 'application/zip',
+                content: {},
+                contentType: 'complex'
+            }; // name and hash pairs
     };
 
     /**
      * Adds content to the artifact as a file.
-     * @param {string} name filename
-     * @param {Blob} content File object or Blob
-     * @param callback
+     * @param {string} name - filename
+     * @param {Blob} content - File object or Blob.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with {string} <b>hash</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
      */
     Artifact.prototype.addFile = function (name, content, callback) {
-        var self = this;
-        var filename = name.substring(name.lastIndexOf('/') + 1);
+        var self = this,
+            filename = name.substring(name.lastIndexOf('/') + 1),
+            deferred = Q.defer();
 
         self.blobClientPutFile.call(self.blobClient, filename, content, function (err, hash) {
             if (err) {
-                callback(err);
+                deferred.reject(err);
                 return;
             }
 
             self.addObjectHash(name, hash, function (err, hash) {
-                callback(err, hash);
+                if (err) {
+                    deferred.reject(err);
+                    return;
+                }
+
+                deferred.resolve(hash);
             });
         });
+
+        return deferred.promise.nodeify(callback);
     };
 
+    /**
+     * Adds files as soft-link.
+     * @param {string} name - filename.
+     * @param {Blob} content - File object or Blob.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with {string} <b>metadataHash</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     Artifact.prototype.addFileAsSoftLink = function (name, content, callback) {
-        var self = this;
-        var filename = name.substring(name.lastIndexOf('/') + 1);
+        var deferred = Q.defer(),
+            self = this,
+            filename = name.substring(name.lastIndexOf('/') + 1);
 
         self.blobClientPutFile.call(self.blobClient, filename, content,
             function (err, hash) {
                 if (err) {
-                    callback(err);
+                    deferred.reject(err);
                     return;
                 }
                 var size;
@@ -3104,52 +3211,72 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tas
                     size = content.length;
                 }
 
-                self.addMetadataHash(name, hash, size, function (err, hash) {
-                    callback(err, hash);
-                });
+                self.addMetadataHash(name, hash, size)
+                    .then(deferred.resolve)
+                    .catch(deferred.reject);
             });
+
+        return deferred.promise.nodeify(callback);
     };
 
     /**
      * Adds a hash to the artifact using the given file path.
-     * @param {string} name Path to the file in the artifact. Note: 'a/b/c.txt'
-     * @param {string} hash Metadata hash that has to be added.
-     * @param callback
+     * @param {string} name - Path to the file in the artifact. Note: 'a/b/c.txt'
+     * @param {string} hash - Metadata hash that has to be added.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with {string} <b>hash</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
      */
     Artifact.prototype.addObjectHash = function (name, hash, callback) {
-        var self = this;
+        var self = this,
+            deferred = Q.defer();
 
         if (BlobConfig.hashRegex.test(hash) === false) {
-            callback('Blob hash is invalid');
-            return;
+            deferred.reject('Blob hash is invalid');
+        } else {
+            self.blobClientGetMetadata.call(self.blobClient, hash, function (err, metadata) {
+                if (err) {
+                    deferred.reject(err);
+                    return;
+                }
+
+                if (self.descriptor.content.hasOwnProperty(name)) {
+                    deferred.reject(new Error('Another content with the same name was already added. ' +
+                        JSON.stringify(self.descriptor.content[name])));
+
+                } else {
+                    self.descriptor.size += metadata.size;
+
+                    self.descriptor.content[name] = {
+                        content: metadata.content,
+                        contentType: BlobMetadata.CONTENT_TYPES.OBJECT
+                    };
+                    deferred.resolve(hash);
+                }
+            });
         }
 
-        self.blobClientGetMetadata.call(self.blobClient, hash, function (err, metadata) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            if (self.descriptor.content.hasOwnProperty(name)) {
-                callback('Another content with the same name was already added. ' + JSON.stringify(self.descriptor.content[name]));
-
-            } else {
-                self.descriptor.size += metadata.size;
-
-                self.descriptor.content[name] = {
-                    content: metadata.content,
-                    contentType: BlobMetadata.CONTENT_TYPES.OBJECT
-                };
-                callback(null, hash);
-            }
-        });
+        return deferred.promise.nodeify(callback);
     };
 
+    /**
+     * Adds a hash to the artifact using the given file path.
+     * @param {string} name - Path to the file in the artifact. Note: 'a/b/c.txt'
+     * @param {string} hash - Metadata hash that has to be added.
+     * @param {number} [size] - Size of the referenced blob.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with {string} <b>hash</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     Artifact.prototype.addMetadataHash = function (name, hash, size, callback) {
         var self = this,
+            deferred = Q.defer(),
             addMetadata = function (size) {
                 if (self.descriptor.content.hasOwnProperty(name)) {
-                    callback('Another content with the same name was already added. ' + JSON.stringify(self.descriptor.content[name]));
+                    deferred.reject(new Error('Another content with the same name was already added. ' +
+                        JSON.stringify(self.descriptor.content[name])));
 
                 } else {
                     self.descriptor.size += size;
@@ -3158,7 +3285,7 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tas
                         content: hash,
                         contentType: BlobMetadata.CONTENT_TYPES.SOFT_LINK
                     };
-                    callback(null, hash);
+                    deferred.resolve(hash);
                 }
             };
 
@@ -3168,13 +3295,11 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tas
         }
 
         if (BlobConfig.hashRegex.test(hash) === false) {
-            callback('Blob hash is invalid');
-            return;
-        }
-        if (size === undefined) {
+            deferred.reject(new Error('Blob hash is invalid'));
+        } else if (size === undefined) {
             self.blobClientGetMetadata.call(self.blobClient, hash, function (err, metadata) {
                 if (err) {
-                    callback(err);
+                    deferred.reject(err);
                     return;
                 }
                 addMetadata(metadata.size);
@@ -3182,202 +3307,216 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tas
         } else {
             addMetadata(size);
         }
+
+        return deferred.promise.nodeify(callback);
     };
 
     /**
      * Adds multiple files.
      * @param {Object.<string, Blob>} files files to add
-     * @param callback
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with {string[]} <b>hashes</b>.<br>
+     * On error the promise will be rejected with {@link Error|string} <b>error</b>.
      */
     Artifact.prototype.addFiles = function (files, callback) {
         var self = this,
-            fileNames = Object.keys(files),
-            nbrOfFiles = fileNames.length,
-            hashes = [],
-            error = '',
-            i,
-            counterCallback = function (err, hash) {
-                error = err ? error + err : error;
-                nbrOfFiles -= 1;
-                hashes.push(hash);
-                if (nbrOfFiles === 0) {
-                    if (error) {
-                        return callback('Failed adding files: ' + error, hashes);
-                    }
-                    callback(null, hashes);
-                }
-            };
+            fileNames = Object.keys(files);
 
-        if (nbrOfFiles === 0) {
-            callback(null, hashes);
-            return;
-        }
-
-        for (i = 0; i < fileNames.length; i += 1) {
-            self.addFile(fileNames[i], files[fileNames[i]], counterCallback);
-        }
+        return Q.all(fileNames.map(function (fileName) {
+            return self.addFile(fileName, files[fileName]);
+        })).nodeify(callback);
     };
 
     /**
      * Adds multiple files as soft-links.
      * @param {Object.<string, Blob>} files files to add
-     * @param callback
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with {string[]} <b>metadataHashes</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
      */
     Artifact.prototype.addFilesAsSoftLinks = function (files, callback) {
         var self = this,
-            fileNames = Object.keys(files),
-            nbrOfFiles = fileNames.length,
-            hashes = [],
-            error = '',
-            i,
-            counterCallback = function (err, hash) {
-                error = err ? error + err : error;
-                nbrOfFiles -= 1;
-                hashes.push(hash);
-                if (nbrOfFiles === 0) {
-                    if (error) {
-                        return callback('Failed adding files as soft-links: ' + error, hashes);
-                    }
-                    callback(null, hashes);
-                }
-            };
+            fileNames = Object.keys(files);
 
-        if (nbrOfFiles === 0) {
-            callback(null, hashes);
-            return;
-        }
-
-        for (i = 0; i < fileNames.length; i += 1) {
-            self.addFileAsSoftLink(fileNames[i], files[fileNames[i]], counterCallback);
-        }
+        return Q.all(fileNames.map(function (fileName) {
+            return self.addFileAsSoftLink(fileName, files[fileName]);
+        })).nodeify(callback);
     };
 
     /**
      * Adds hashes to the artifact using the given file paths.
-     * @param {object.<string, string>} objectHashes - Keys are file paths and values object hashes.
-     * @param callback
+     * @param {object.<string, string>} objectHashes - Keys are file paths and values metadata hashes.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with {string[]} <b>hashes</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
      */
     Artifact.prototype.addObjectHashes = function (objectHashes, callback) {
         var self = this,
-            fileNames = Object.keys(objectHashes),
-            nbrOfFiles = fileNames.length,
-            hashes = [],
-            error = '',
-            i,
-            counterCallback = function (err, hash) {
-                error = err ? error + err : error;
-                nbrOfFiles -= 1;
-                hashes.push(hash);
-                if (nbrOfFiles === 0) {
-                    if (error) {
-                        return callback('Failed adding objectHashes: ' + error, hashes);
-                    }
-                    callback(null, hashes);
-                }
-            };
+            fileNames = Object.keys(objectHashes);
 
-        if (nbrOfFiles === 0) {
-            callback(null, hashes);
-            return;
-        }
-
-        for (i = 0; i < fileNames.length; i += 1) {
-            self.addObjectHash(fileNames[i], objectHashes[fileNames[i]], counterCallback);
-        }
+        return Q.all(fileNames.map(function (fileName) {
+            return self.addObjectHash(fileName, objectHashes[fileName]);
+        })).nodeify(callback);
     };
 
     /**
      * Adds hashes to the artifact using the given file paths.
      * @param {object.<string, string>} objectHashes - Keys are file paths and values object hashes.
-     * @param callback
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with {string[]} <b>hashes</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
      */
     Artifact.prototype.addMetadataHashes = function (objectHashes, callback) {
         var self = this,
-            fileNames = Object.keys(objectHashes),
-            nbrOfFiles = fileNames.length,
-            hashes = [],
-            error = '',
-            i,
-            counterCallback = function (err, hash) {
-                error = err ? error + err : error;
-                nbrOfFiles -= 1;
-                hashes.push(hash);
-                if (nbrOfFiles === 0) {
-                    if (error) {
-                        return callback('Failed adding objectHashes: ' + error, hashes);
-                    }
-                    callback(null, hashes);
-                }
-            };
+            fileNames = Object.keys(objectHashes);
 
-        if (nbrOfFiles === 0) {
-            callback(null, hashes);
-            return;
-        }
-
-        for (i = 0; i < fileNames.length; i += 1) {
-            self.addMetadataHash(fileNames[i], objectHashes[fileNames[i]], counterCallback);
-        }
+        return Q.all(fileNames.map(function (fileName) {
+            return self.addMetadataHash(fileName, objectHashes[fileName]);
+        })).nodeify(callback);
     };
 
     /**
      * Saves this artifact and uploads the metadata to the server's storage.
-     * @param callback
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with {string} <b>hash</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
      */
     Artifact.prototype.save = function (callback) {
-        this.blobClient.putMetadata(this.descriptor, callback);
+        var deferred = Q.defer();
+
+        this.blobClient.putMetadata(this.descriptor, function (err, hash) {
+            if (err) {
+                deferred.reject(err);
+            } else {
+                deferred.resolve(hash);
+            }
+        });
+
+        return deferred.promise.nodeify(callback);
     };
 
     return Artifact;
 });
 
-/*globals define*/
+/*jshint node: true, browser: true, bitwise: false*/
+
+/**
+ * @author kecso / https://github.com/kecso
+ */
+
+define('common/util/uint',[],function () {
+    'use strict';
+
+    //this helper function is necessary as in case of large json objects,
+    // the library standard function causes stack overflow
+    function uint8ArrayToString(uintArray) {
+        var resultString = '',
+            i;
+        for (i = 0; i < uintArray.byteLength; i++) {
+            resultString += String.fromCharCode(uintArray[i]);
+        }
+        return decodeURIComponent(escape(resultString));
+    }
+
+    return {
+        uint8ArrayToString: uint8ArrayToString
+    };
+});
+/*globals define, console*/
 /*jshint browser: true, node:true*/
-/*
+
+/**
+ * Client module for accessing the blob.
+ *
  * @author lattmann / https://github.com/lattmann
  * @author ksmyth / https://github.com/ksmyth
  */
 
-define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact, BlobMetadata, superagent) {
-    
+define('blob/BlobClient',[
+    'blob/Artifact',
+    'blob/BlobMetadata',
+    'superagent',
+    'q',
+    'common/util/uint'
+], function (Artifact, BlobMetadata, superagent, Q, UINT) {
+    'use strict';
 
+    /**
+     * Client to interact with the blob-storage. <br>
+     * FIXME: For some reason the methods do not show up in the generated docs. See source code.
+     * @param {object} parameters
+     * @param {object} parameters.logger
+     * @constructor
+     * @alias BlobClient
+     */
     var BlobClient = function (parameters) {
         this.artifacts = [];
+        if (parameters && parameters.logger) {
+            this.logger = parameters.logger;
+        } else {
+            var doLog = function () {
+                console.log.apply(console, arguments);
+            };
+            this.logger = {
+                debug: doLog,
+                log: doLog,
+                info: doLog,
+                warn: doLog,
+                error: doLog
+            };
+            console.warn('Since v1.3.0 BlobClient requires a logger, falling back on console.log.');
+        }
+
+        this.logger.debug('ctor', {metadata: parameters});
 
         if (parameters) {
             this.server = parameters.server || this.server;
             this.serverPort = parameters.serverPort || this.serverPort;
             this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
-            this.webgmeclientsession = parameters.webgmeclientsession;
-            this.keepaliveAgentOptions = parameters.keepaliveAgentOptions || {
-                maxSockets: 100,
-                maxFreeSockets: 10,
-                timeout: 60000,
-                keepAliveTimeout: 30000 // free socket keep alive for 30 seconds
-            };
+            this.webgmeToken = parameters.webgmeToken;
+            this.keepaliveAgentOptions = parameters.keepaliveAgentOptions || {/* use defaults */};
+        } else {
+            this.keepaliveAgentOptions = {/* use defaults */};
         }
-        this.blobUrl = '';
+        this.origin = '';
         if (this.httpsecure !== undefined && this.server && this.serverPort) {
-            this.blobUrl = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
+            this.origin = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
         }
-
+        this.relativeUrl = '/rest/blob/';
+        this.blobUrl = this.origin + this.relativeUrl;
         // TODO: TOKEN???
-        this.blobUrl = this.blobUrl + '/rest/blob/'; // TODO: any ways to ask for this or get it from the configuration?
+        // TODO: any ways to ask for this or get it from the configuration?
 
         this.isNodeOrNodeWebKit = typeof process !== 'undefined';
         if (this.isNodeOrNodeWebKit) {
             // node or node-webkit
+            this.logger.debug('Running under node or node-web-kit');
             if (this.httpsecure) {
                 this.Agent = require('agentkeepalive').HttpsAgent;
             } else {
                 this.Agent = require('agentkeepalive');
             }
+            if (this.keepaliveAgentOptions.hasOwnProperty('ca') === false) {
+                this.keepaliveAgentOptions.ca = require('https').globalAgent.options.ca;
+            }
             this.keepaliveAgent = new this.Agent(this.keepaliveAgentOptions);
         }
+
+        this.logger.debug('origin', this.origin);
+        this.logger.debug('blobUrl', this.blobUrl);
     };
 
     BlobClient.prototype.getMetadataURL = function (hash) {
-        var metadataBase = this.blobUrl + 'metadata';
+        return this.origin + this.getRelativeMetadataURL(hash);
+    };
+
+    BlobClient.prototype.getRelativeMetadataURL = function (hash) {
+        var metadataBase = this.relativeUrl + 'metadata';
         if (hash) {
             return metadataBase + '/' + hash;
         } else {
@@ -3390,28 +3529,54 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
         if (subpath) {
             subpathURL = subpath;
         }
-        return this.blobUrl + base + '/' + hash + '/' + encodeURIComponent(subpathURL);
+        return this.relativeUrl + base + '/' + hash + '/' + encodeURIComponent(subpathURL);
     };
 
     BlobClient.prototype.getViewURL = function (hash, subpath) {
+        return this.origin + this.getRelativeViewURL(hash, subpath);
+    };
+
+    BlobClient.prototype.getRelativeViewURL = function (hash, subpath) {
         return this._getURL('view', hash, subpath);
     };
 
     BlobClient.prototype.getDownloadURL = function (hash, subpath) {
+        return this.origin + this.getRelativeDownloadURL(hash, subpath);
+    };
+
+    BlobClient.prototype.getRelativeDownloadURL = function (hash, subpath) {
         return this._getURL('download', hash, subpath);
     };
 
     BlobClient.prototype.getCreateURL = function (filename, isMetadata) {
+        return this.origin + this.getRelativeCreateURL(filename, isMetadata);
+    };
+
+    BlobClient.prototype.getRelativeCreateURL = function (filename, isMetadata) {
         if (isMetadata) {
-            return this.blobUrl + 'createMetadata/';
+            return this.relativeUrl + 'createMetadata/';
         } else {
-            return this.blobUrl + 'createFile/' + encodeURIComponent(filename);
+            return this.relativeUrl + 'createFile/' + encodeURIComponent(filename);
         }
     };
 
+    /**
+     * Adds a file to the blob storage.
+     * @param {string} name - file name.
+     * @param {string|Buffer|ArrayBuffer} data - file content.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise} On success the promise will be resolved with {string} <b>hash</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     BlobClient.prototype.putFile = function (name, data, callback) {
-        var contentLength,
+        var deferred = Q.defer(),
+            self = this,
+            contentLength,
             req;
+
+        this.logger.debug('putFile', name);
+
         function toArrayBuffer(buffer) {
             var ab = new ArrayBuffer(buffer.length);
             var view = new Uint8Array(ab);
@@ -3420,7 +3585,9 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
             }
             return ab;
         }
-        // on node-webkit, we use XMLHttpRequest, but xhr.send thinks a Buffer is a string and encodes it in utf-8. Send an ArrayBuffer instead
+
+        // On node-webkit, we use XMLHttpRequest, but xhr.send thinks a Buffer is a string and encodes it in utf-8 -
+        // send an ArrayBuffer instead.
         if (typeof window !== 'undefined' && typeof Buffer !== 'undefined' && data instanceof Buffer) {
             data = toArrayBuffer(data); // FIXME will this have performance problems
         }
@@ -3437,30 +3604,38 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
             req.agent(this.keepaliveAgent);
         }
 
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
+        if (this.webgmeToken) {
+            req.set('Authorization', 'Bearer ' + this.webgmeToken);
+        }
+        if (typeof data !== 'string' && !(data instanceof String)) {
+            req.set('Content-Length', contentLength);
         }
         req.set('Content-Type', 'application/octet-stream')
-            .set('Content-Length', contentLength)
             .send(data)
             .end(function (err, res) {
                 if (err || res.status > 399) {
-                    callback(err || res.status);
+                    deferred.reject(err || new Error(res.status));
                     return;
                 }
                 var response = res.body;
                 // Get the first one
                 var hash = Object.keys(response)[0];
-                callback(null, hash);
+                self.logger.debug('putFile - result', hash);
+                deferred.resolve(hash);
             });
+
+        return deferred.promise.nodeify(callback);
     };
 
     BlobClient.prototype.putMetadata = function (metadataDescriptor, callback) {
         var metadata = new BlobMetadata(metadataDescriptor),
+            deferred = Q.defer(),
+            self = this,
             blob,
             contentLength,
             req;
         // FIXME: in production mode do not indent the json file.
+        this.logger.debug('putMetadata', {metadata: metadataDescriptor});
         if (typeof Blob !== 'undefined') {
             blob = new Blob([JSON.stringify(metadata.serialize(), null, 4)], {type: 'text/plain'});
             contentLength = blob.size;
@@ -3470,8 +3645,8 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
         }
 
         req = superagent.post(this.getCreateURL(metadataDescriptor.name, true));
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
+        if (this.webgmeToken) {
+            req.set('Authorization', 'Bearer ' + this.webgmeToken);
         }
 
         if (typeof window === 'undefined') {
@@ -3483,39 +3658,57 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
             .send(blob)
             .end(function (err, res) {
                 if (err || res.status > 399) {
-                    callback(err || res.status);
+                    deferred.reject(err || new Error(res.status));
                     return;
                 }
                 // Uploaded.
                 var response = JSON.parse(res.text);
                 // Get the first one
                 var hash = Object.keys(response)[0];
-                callback(null, hash);
+                self.logger.debug('putMetadata - result', hash);
+                deferred.resolve(hash);
             });
+
+        return deferred.promise.nodeify(callback);
     };
 
+    /**
+     * Adds multiple files to the blob storage.
+     * @param {object.<string, string|Buffer|ArrayBuffer>} o - Keys are file names and values the content.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise} On success the promise will be resolved with {object} <b>hashes</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     BlobClient.prototype.putFiles = function (o, callback) {
         var self = this,
-            error = '',
+            deferred = Q.defer(),
+            error,
             filenames = Object.keys(o),
             remaining = filenames.length,
             hashes = {},
             putFile;
+
         if (remaining === 0) {
-            callback(null, hashes);
+            deferred.resolve(hashes);
         }
-        putFile = function(filename, data) {
+        putFile = function (filename, data) {
             self.putFile(filename, data, function (err, hash) {
                 remaining -= 1;
 
                 hashes[filename] = hash;
 
                 if (err) {
-                    error += 'putFile error: ' + err.toString();
+                    error = err;
+                    self.logger.error('putFile failed with error', {metadata: err});
                 }
 
                 if (remaining === 0) {
-                    callback(error, hashes);
+                    if (error) {
+                        deferred.reject(error);
+                    } else {
+                        deferred.resolve(hashes);
+                    }
                 }
             });
         };
@@ -3523,13 +3716,32 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
         for (var j = 0; j < filenames.length; j += 1) {
             putFile(filenames[j], o[filenames[j]]);
         }
+
+        return deferred.promise.nodeify(callback);
     };
 
     BlobClient.prototype.getSubObject = function (hash, subpath, callback) {
         return this.getObject(hash, callback, subpath);
     };
 
+    /**
+     * Retrieves object from blob storage as a Buffer under node and as an ArrayBuffer in the client.
+     * N.B. if the retrieved file is a json-file and running in a browser, the content will be decoded and
+     * the string parsed as a JSON.
+     * @param {string} hash - hash of metadata for object.
+     * @param {function} [callback] - if provided no promise will be returned.
+     * @param {string} [subpath]
+     *
+     * @return {external:Promise} On success the promise will be resolved with {Buffer|ArrayBuffer|object}
+     * <b>content</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     BlobClient.prototype.getObject = function (hash, callback, subpath) {
+        var deferred = Q.defer(),
+            self = this;
+
+        this.logger.debug('getObject', hash, subpath);
+
         superagent.parse['application/zip'] = function (obj, parseCallback) {
             if (parseCallback) {
                 // Running on node; this should be unreachable due to req.pipe() below
@@ -3540,8 +3752,8 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
         //superagent.parse['application/json'] = superagent.parse['application/zip'];
 
         var req = superagent.get(this.getViewURL(hash, subpath));
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
+        if (this.webgmeToken) {
+            req.set('Authorization', 'Bearer ' + this.webgmeToken);
         }
 
         if (typeof window === 'undefined') {
@@ -3559,20 +3771,21 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
             };
             require('util').inherits(BuffersWritable, Writable);
 
-            BuffersWritable.prototype._write = function(chunk, encoding, callback) {
+            BuffersWritable.prototype._write = function (chunk, encoding, cb) {
                 this.buffers.push(chunk);
-                callback();
+                cb();
             };
 
             var buffers = new BuffersWritable();
             buffers.on('finish', function () {
                 if (req.req.res.statusCode > 399) {
-                    return callback(req.req.res.statusCode);
+                    deferred.reject(new Error(req.req.res.statusCode));
+                } else {
+                    deferred.resolve(Buffer.concat(buffers.buffers));
                 }
-                callback(null, Buffer.concat(buffers.buffers));
             });
             buffers.on('error', function (err) {
-                callback(err);
+                deferred.reject(err);
             });
             req.pipe(buffers);
         } else {
@@ -3583,34 +3796,106 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
                 }
             });
             // req.on('error', callback);
-            req.on('end', function() {
+            req.on('end', function () {
                 if (req.xhr.status > 399) {
-                    callback(req.xhr.status);
+                    deferred.reject(new Error(req.xhr.status));
                 } else {
                     var contentType = req.xhr.getResponseHeader('content-type');
                     var response = req.xhr.response; // response is an arraybuffer
                     if (contentType === 'application/json') {
-                        var utf8ArrayToString = function (uintArray) {
-                            var inputString = '',
-                                i;
-                            for (i = 0; i < uintArray.byteLength; i++) {
-                                inputString += String.fromCharCode(uintArray[i]);
-                            }
-                            return decodeURIComponent(escape(inputString));
-                        };
-                        response = JSON.parse(utf8ArrayToString(new Uint8Array(response)));
+                        response = JSON.parse(UINT.uint8ArrayToString(new Uint8Array(response)));
                     }
-                    callback(null, response);
+                    self.logger.debug('getObject - result', {metadata: response});
+                    deferred.resolve(response);
                 }
             });
-            req.end(callback);
+            // TODO: Why is there an end here too? Isn't req.on('end',..) enough?
+            req.end(function (err, result) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    self.logger.debug('getObject - result', {metadata: result});
+                    deferred.resolve(result);
+                }
+            });
         }
+
+        return deferred.promise.nodeify(callback);
     };
 
+    /**
+     * Retrieves object from blob storage and parses the content as a string.
+     * @param {string} hash - hash of metadata for object.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise} On success the promise will be resolved with {string} <b>contentString</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
+    BlobClient.prototype.getObjectAsString = function (hash, callback) {
+        var self = this;
+        return self.getObject(hash)
+            .then(function (content) {
+                if (typeof content === 'string') {
+                    // This does currently not happen..
+                    return content;
+                } else if (typeof Buffer !== 'undefined' && content instanceof Buffer) {
+                    return UINT.uint8ArrayToString(new Uint8Array(content));
+                } else if (content instanceof ArrayBuffer) {
+                    return UINT.uint8ArrayToString(new Uint8Array(content));
+                } else if (content !== null && typeof content === 'object') {
+                    return JSON.stringify(content);
+                } else {
+                    throw new Error('Unknown content encountered: ' + content);
+                }
+            })
+            .nodeify(callback);
+    };
+
+    /**
+     * Retrieves object from blob storage and parses the content as a JSON. (Will resolve with error if not valid JSON.)
+     * @param {string} hash - hash of metadata for object.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise} On success the promise will be resolved with {object} <b>contentJSON</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
+    BlobClient.prototype.getObjectAsJSON = function (hash, callback) {
+        var self = this;
+        return self.getObject(hash)
+            .then(function (content) {
+                if (typeof content === 'string') {
+                    // This does currently not happen..
+                    return JSON.parse(content);
+                } else if (typeof Buffer !== 'undefined' && content instanceof Buffer) {
+                    return JSON.parse(UINT.uint8ArrayToString(new Uint8Array(content)));
+                } else if (content instanceof ArrayBuffer) {
+                    return JSON.parse(UINT.uint8ArrayToString(new Uint8Array(content)));
+                } else if (content !== null && typeof content === 'object') {
+                    return content;
+                } else {
+                    throw new Error('Unknown content encountered: ' + content);
+                }
+            })
+            .nodeify(callback);
+    };
+
+    /**
+     * Retrieves metadata from blob storage.
+     * @param {string} hash - hash of metadata.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise} On success the promise will be resolved with {object} <b>metadata</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     BlobClient.prototype.getMetadata = function (hash, callback) {
-        var req = superagent.get(this.getMetadataURL(hash));
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
+        var req = superagent.get(this.getMetadataURL(hash)),
+            deferred = Q.defer(),
+            self = this;
+
+        this.logger.debug('getMetadata', hash);
+
+        if (this.webgmeToken) {
+            req.set('Authorization', 'Bearer ' + this.webgmeToken);
         }
 
         if (typeof window === 'undefined') {
@@ -3619,197 +3904,441 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
 
         req.end(function (err, res) {
             if (err || res.status > 399) {
-                callback(err || res.status);
+                deferred.reject(err || new Error(res.status));
             } else {
-                callback(null, JSON.parse(res.text));
+                self.logger.debug('getMetadata', res.text);
+                deferred.resolve(JSON.parse(res.text));
             }
         });
+
+        return deferred.promise.nodeify(callback);
     };
 
+    /**
+     * Creates a new artifact and adds it to array of artifacts of the instance.
+     * @param {string} name - Name of artifact
+     * @return {Artifact}
+     */
     BlobClient.prototype.createArtifact = function (name) {
         var artifact = new Artifact(name, this);
         this.artifacts.push(artifact);
         return artifact;
     };
 
+    /**
+     * Retrieves the {@link Artifact} from the blob storage.
+     * @param {hash} metadataHash - SHA hash associated with the artifact.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with
+     * {@link Artifact} <b>artifact</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     BlobClient.prototype.getArtifact = function (metadataHash, callback) {
         // TODO: get info check if complex flag is set to true.
         // TODO: get info get name.
-        var self = this;
+        var self = this,
+            deferred = Q.defer();
+        this.logger.debug('getArtifact', metadataHash);
         this.getMetadata(metadataHash, function (err, info) {
             if (err) {
                 callback(err);
                 return;
             }
 
+            self.logger.debug('getArtifact - return', {metadata: info});
             if (info.contentType === BlobMetadata.CONTENT_TYPES.COMPLEX) {
                 var artifact = new Artifact(info.name, self, info);
                 self.artifacts.push(artifact);
-                callback(null, artifact);
+                deferred.resolve(artifact);
             } else {
-                callback('not supported contentType ' + JSON.stringify(info, null, 4));
+                deferred.reject(new Error('not supported contentType ' + JSON.stringify(info, null, 4)));
             }
 
         });
+
+        return deferred.promise.nodeify(callback);
     };
 
+    /**
+     * Saves all the artifacts associated with the current instance.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with
+     * {string[]} <b>artifactHashes</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     BlobClient.prototype.saveAllArtifacts = function (callback) {
-        var remaining = this.artifacts.length,
-            hashes = [],
-            error = '',
-            saveCallback;
-
-        if (remaining === 0) {
-            callback(null, hashes);
-        }
-
-        saveCallback = function(err, hash) {
-            remaining -= 1;
-
-            hashes.push(hash);
-
-            if (err) {
-                error += 'artifact.save err: ' + err.toString();
-            }
-            if (remaining === 0) {
-                callback(error, hashes);
-            }
-        };
+        var promises = [];
 
         for (var i = 0; i < this.artifacts.length; i += 1) {
-
-            this.artifacts[i].save(saveCallback);
+            promises.push(this.artifacts[i].save());
         }
+
+        return Q.all(promises).nodeify(callback);
+    };
+
+    /**
+     * Converts bytes to a human readable string.
+     * @param {bytes} - File size in bytes.
+     * @param {boolean} [si] - If true decimal conversion will be used (by default binary is used).
+     * @returns {string}
+     */
+    BlobClient.prototype.getHumanSize = function (bytes, si) {
+        var thresh = si ? 1000 : 1024,
+            units = si ?
+                ['kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'] :
+                ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'],
+            u = -1;
+
+        if (bytes < thresh) {
+            return bytes + ' B';
+        }
+
+        do {
+            bytes = bytes / thresh;
+            u += 1;
+        } while (bytes >= thresh);
+
+        return bytes.toFixed(1) + ' ' + units[u];
     };
 
     return BlobClient;
 });
 
-/*globals define, WebGMEGlobal, require*/
+/*globals define*/
+/*jshint browser: true, node:true*/
+
 /**
+ * Client module for creating, monitoring executor jobs.
+ *
  * @author lattmann / https://github.com/lattmann
  * @author ksmyth / https://github.com/ksmyth
+ * @author pmeijer / https://github.com/pmeijer
  */
 
 
-define('executor/ExecutorClient',['superagent'], function (superagent) {
-    
+define('executor/ExecutorClient',['superagent', 'q'], function (superagent, Q) {
+    'use strict';
 
+    /**
+     * Client for creating, monitoring, and receiving output executor jobs.
+     * This client is used by the Executor Workers and some of the API calls are not
+     * meant to be used by "end users".
+     *
+     * @param {object} parameters
+     * @param {object} parameters.logger
+     * @constructor
+     * @alias ExecutorClient
+     */
     var ExecutorClient = function (parameters) {
         parameters = parameters || {};
-        this.isNodeJS = (typeof window === 'undefined') && (typeof process === "object");
-        this.isNodeWebkit = (typeof window === 'object') && (typeof process === "object");
+        if (parameters.logger) {
+            this.logger = parameters.logger;
+        } else {
+            var doLog = function () {
+                console.log.apply(console, arguments);
+            };
+            this.logger = {
+                debug: doLog,
+                log: doLog,
+                info: doLog,
+                warn: doLog,
+                error: doLog
+            };
+            console.warn('Since v1.3.0 ExecutorClient requires a logger, falling back on console.log.');
+        }
+
+        this.logger.debug('ctor', {metadata: parameters});
+
+        this.isNodeJS = (typeof window === 'undefined') && (typeof process === 'object');
+        this.isNodeWebkit = (typeof window === 'object') && (typeof process === 'object');
         //console.log(isNode);
         if (this.isNodeJS) {
+            this.logger.debug('Running under node');
             this.server = '127.0.0.1';
-            this._clientSession = null; // parameters.sessionId;;
         }
+
         this.server = parameters.server || this.server;
         this.serverPort = parameters.serverPort || this.serverPort;
         this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
         if (this.isNodeJS) {
             this.http = this.httpsecure ? require('https') : require('http');
         }
-        this.executorUrl = '';
+
+        this.origin = '';
         if (this.httpsecure !== undefined && this.server && this.serverPort) {
-            this.executorUrl = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
+            this.origin = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
         }
+        this.relativeUrl = '/rest/executor/';
+        this.executorUrl = this.origin + this.relativeUrl;
+
         // TODO: TOKEN???
-        this.executorUrl = this.executorUrl + '/rest/executor/'; // TODO: any ways to ask for this or get it from the configuration?
+        // TODO: any ways to ask for this or get it from the configuration?
         if (parameters.executorNonce) {
             this.executorNonce = parameters.executorNonce;
         }
+
+        this.logger.debug('origin', this.origin);
+        this.logger.debug('executorUrl', this.executorUrl);
     };
 
-    ExecutorClient.prototype.getInfoURL = function (hash) {
-        var metadataBase = this.executorUrl + 'info';
-        if (hash) {
-            return metadataBase + '/' + hash;
-        } else {
-            return metadataBase;
+    /**
+     * Creates a new configuration object for the job execution.
+     *
+     * To make the worker post output either the outputInterval and/or outputSegmentSize must be specified.
+     * <br> - If both are negative (or falsy) no output will be given.
+     * <br> - When both are specified a timeout will be set at start (and after each posted output). If the number of lines
+     *  exceeds outputSegmentSize during that timeout, the output will be posted and a new timeout will be triggered.
+     * <br>
+     * N.B. even though a short outputInterval is set, the worker won't post new output until the responses from
+     * previous posts have returned. Before the job returns with a "completed" status code, all queued outputs will be
+     * posted (and the responses will be ensured to have returned).
+     *
+     * @param {string} cmd - command to execute.
+     * @param {string[]} [args] - command arguments.
+     * @param {number} [outputInterval=-1] - max time [ms] between (non-empty) output posts from worker.
+     * @param {number} [outputSegmentSize=-1] - number of lines before new output is posted from worker. (N.B. posted
+     * segments can still contain more number of lines).
+     * @return {object}
+     */
+    ExecutorClient.prototype.getNewExecutorConfig = function (cmd, args, outputInterval, outputSegmentSize) {
+        var config = {
+            cmd: cmd,
+            resultArtifacts: [],
+            outputSegmentSize: typeof outputSegmentSize === 'number' ? outputSegmentSize : -1,
+            outputInterval: typeof outputInterval === 'number' ? outputInterval : -1
+        };
+
+        if (args) {
+            config.args = args;
         }
+
+        /**
+         *
+         * @param {string} name - name of the artifact.
+         * @param {string[]} [patterns=[]] - inclusive pattern for files to be returned in this artifact.
+         */
+        config.defineResultArtifact = function (name, patterns) {
+            this.resultArtifacts.push({
+                name: name,
+                resultPatterns: patterns || []
+            });
+        };
+
+        return config;
     };
 
-
-    ExecutorClient.prototype.getCreateURL = function (hash) {
-        var metadataBase = this.executorUrl + 'create';
-        if (hash) {
-            return metadataBase + '/' + hash;
-        } else {
-            return metadataBase;
-        }
-    };
-
+    /**
+     * Creates a new job.
+     *
+     * @param {object} jobInfo - initial information about the job must contain the hash.
+     * @param {object} jobInfo.hash - a unique id for the job (e.g. the hash of the artifact containing the executor_config.json).
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with {@link JobInfo} <b>result</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     ExecutorClient.prototype.createJob = function (jobInfo, callback) {
+        var deferred = Q.defer(),
+            self = this;
         if (typeof jobInfo === 'string') {
             jobInfo = { hash: jobInfo }; // old API
         }
+
+        this.logger.debug('createJob', {metadata: jobInfo});
         this.sendHttpRequestWithData('POST', this.getCreateURL(jobInfo.hash), jobInfo, function (err, response) {
             if (err) {
-                callback(err);
+                deferred.reject(err);
                 return;
             }
 
-            callback(null, JSON.parse(response));
+            self.logger.debug('createJob - result', response);
+
+            deferred.resolve(JSON.parse(response));
         });
+
+        return deferred.promise.nodeify(callback);
     };
 
     ExecutorClient.prototype.updateJob = function (jobInfo, callback) {
-        this.sendHttpRequestWithData('POST', this.executorUrl + 'update/' + jobInfo.hash, jobInfo, function (err, response) {
-            if (err) {
-                callback(err);
-                return;
-            }
+        var deferred = Q.defer(),
+            self = this;
+        this.logger.debug('updateJob', {metadata: jobInfo});
+        this.sendHttpRequestWithData('POST', this.executorUrl + 'update/' + jobInfo.hash, jobInfo,
+            function (err, response) {
+                if (err) {
+                    deferred.reject(err);
+                    return;
+                }
 
-            callback(null, response);
-        });
+                self.logger.debug('updateJob - result', response);
+                deferred.resolve(response);
+            }
+        );
+
+        return deferred.promise.nodeify(callback);
     };
 
+    /**
+     * Retrieves the current state of the job in form of a {@link JobInfo}
+     * @param {string} hash - unique id for the job (e.g. the hash of the artifact containing the executor_config.json).
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with {@link JobInfo} <b>jobInfo</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     ExecutorClient.prototype.getInfo = function (hash, callback) {
+        var deferred = Q.defer(),
+            self = this;
+        this.logger.debug('getInfo', hash);
         this.sendHttpRequest('GET', this.getInfoURL(hash), function (err, response) {
             if (err) {
-                callback(err);
+                deferred.reject(err);
                 return;
             }
 
-            callback(null, JSON.parse(response));
+            self.logger.debug('getInfo - result', response);
+            deferred.resolve(JSON.parse(response));
         });
+
+        return deferred.promise.nodeify(callback);
     };
 
     ExecutorClient.prototype.getAllInfo = function (callback) {
-
+        var deferred = Q.defer(),
+            self = this;
+        this.logger.debug('getAllInfo');
         this.sendHttpRequest('GET', this.getInfoURL(), function (err, response) {
             if (err) {
-                callback(err);
+                deferred.reject(err);
                 return;
             }
 
-            callback(null, JSON.parse(response));
+            self.logger.debug('getAllInfo - result', response);
+            deferred.resolve(JSON.parse(response));
         });
+
+        return deferred.promise.nodeify(callback);
     };
 
     ExecutorClient.prototype.getInfoByStatus = function (status, callback) {
-
+        var deferred = Q.defer(),
+            self = this;
+        this.logger.debug('getInfoByStatus', status);
         this.sendHttpRequest('GET', this.executorUrl + '?status=' + status, function (err, response) {
             if (err) {
-                callback(err);
+                deferred.reject(err);
                 return;
             }
-
-            callback(null, JSON.parse(response));
+            self.logger.debug('getInfoByStatus - result', response);
+            deferred.resolve(JSON.parse(response));
         });
+
+        return deferred.promise.nodeify(callback);
     };
 
     ExecutorClient.prototype.getWorkersInfo = function (callback) {
-
+        var deferred = Q.defer(),
+            self = this;
+        this.logger.debug('getWorkersInfo');
         this.sendHttpRequest('GET', this.executorUrl + 'worker', function (err, response) {
             if (err) {
-                callback(err);
+                deferred.reject(err);
                 return;
             }
-
-            callback(null, JSON.parse(response));
+            self.logger.debug('getWorkersInfo - result', response);
+            deferred.resolve(JSON.parse(response));
         });
+
+        return deferred.promise.nodeify(callback);
+    };
+
+    /**
+     * Retrieves the output associated with jobHash, to limit the output pass start and/or end.
+     * The outputs are identified by 0, 1, 2, ...
+     * @param {string} hash - hash of job related to output.
+     * @param {number} [start] - number/id of the output segment to start from (inclusive).
+     * @param {number} [end] - number/id of segment to end at (exclusive).
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with {@link OutputInfo} <b>result</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
+    ExecutorClient.prototype.getOutput = function (hash, start, end, callback) {
+        var deferred = Q.defer(),
+            url = this.executorUrl + 'output/' + hash,
+            query = '';
+
+        if (typeof start === 'number') {
+            query += '?start=' + start;
+        }
+
+        if (typeof end === 'number') {
+            if (query) {
+                query += '&end=' + end;
+            } else {
+                query += '?end=' + end;
+            }
+        }
+
+        url += query;
+
+        this.logger.debug('getOutput, url=', url);
+
+        this.sendHttpRequest('GET', url, function (err, response) {
+            if (err) {
+                deferred.reject(err);
+            } else {
+                deferred.resolve(JSON.parse(response));
+            }
+        });
+
+        return deferred.promise.nodeify(callback);
+    };
+
+    ExecutorClient.prototype.sendOutput = function (outputInfo, callback) {
+        var deferred = Q.defer(),
+            url = this.executorUrl + 'output/' + outputInfo.hash;
+
+        this.logger.debug('sendOuput', outputInfo._id);
+
+        this.sendHttpRequestWithData('POST', url, outputInfo, function (err) {
+            if (err) {
+                deferred.reject(err);
+            } else {
+                deferred.resolve();
+            }
+        });
+
+        return deferred.promise.nodeify(callback);
+    };
+
+    //<editor-fold desc="Helper methods">
+    ExecutorClient.prototype.getInfoURL = function (hash) {
+        return this.origin + this.getRelativeInfoURL(hash);
+    };
+
+    ExecutorClient.prototype.getRelativeInfoURL = function (hash) {
+        var metadataBase = this.relativeUrl + 'info';
+        if (hash) {
+            return metadataBase + '/' + hash;
+        } else {
+            return metadataBase;
+        }
+    };
+
+    ExecutorClient.prototype.getCreateURL = function (hash) {
+        return this.origin + this.getRelativeCreateURL(hash);
+    };
+
+    ExecutorClient.prototype.getRelativeCreateURL = function (hash) {
+        var metadataBase = this.relativeUrl + 'create';
+        if (hash) {
+            return metadataBase + '/' + hash;
+        } else {
+            return metadataBase;
+        }
     };
 
     ExecutorClient.prototype.sendHttpRequest = function (method, url, callback) {
@@ -3849,102 +4378,402 @@ define('executor/ExecutorClient',['superagent'], function (superagent) {
 //        }
         callback(null, options);
     };
+    //</editor-fold>
 
     return ExecutorClient;
 });
 
+/*globals define*/
+/*jshint node:true*/
+
+/**
+ * @author ksmyth / https://github.com/ksmyth
+ */
+
 define('executor/WorkerInfo',[], function () {
-    var ClientRequest = function(parameters) {
+    'use strict';
+
+    var ClientRequest = function (parameters) {
         this.clientId = parameters.clientId || undefined;
         this.availableProcesses = parameters.availableProcesses || 0;
         this.labels = parameters.labels || [];
-    }
+    };
 
-    var ServerResponse = function(parameters) {
+    var ServerResponse = function (parameters) {
         this.jobsToStart = parameters.jobsToStart || [];
         this.refreshPeriod = parameters.refreshPeriod || 30 * 1000;
         this.labelJobs = parameters.labelJobs;
     };
 
-    return { ClientRequest: ClientRequest, ServerResponse: ServerResponse };
+    return {
+        ClientRequest: ClientRequest,
+        ServerResponse: ServerResponse
+    };
 });
 
 
-define('executor/JobInfo',[], function() {
+/*globals define*/
+/*jshint node:true*/
+
+/**
+ * @author lattmann / https://github.com/lattmann
+ */
+
+define('executor/JobInfo',[], function () {
+    'use strict';
+
+    /**
+     * Class describing an executor job. The data is used for communication between the
+     * initiator/a monitor of the job and the worker executing the job.
+     *
+     * @param {object} parameters
+     * @param {hash} parameters.hash - Job identifier.
+     * @constructor
+     * @alias JobInfo
+     */
     var JobInfo = function (parameters) {
+
+        /**
+         * Job identifier.
+         * @type {string}
+         */
         this.hash = parameters.hash;
+
+        /**
+         * Array of hashes to {@link Artifact}s containing each requested result.
+         * @type {string[]}
+         */
         this.resultHashes = parameters.resultHashes || [];
+
+        /**
+         * Hash to an {@link Artifact} containing the union of all requests results.
+         * @type {string}
+         */
         this.resultSuperSet = parameters.resultSuperSet || null;
+
         this.userId = parameters.userId || [];
+
+        /**
+         * Current status of the job.
+         * @type {string}
+         */
         this.status = parameters.status || null;
+
+        /**
+         * Timestamp of when the job was created.
+         * @type {string}
+         */
         this.createTime = parameters.createTime || null;
+
+        /**
+         * Timestamp of when the job execution started by a worker.
+         * @type {string}
+         */
         this.startTime = parameters.startTime || null;
+
+        /**
+         * Timestamp of when the job execution finished on the worker.
+         * @type {string}
+         */
         this.finishTime = parameters.finishTime || null;
+
+        /**
+         * Id/label of the worker processing the job.
+         * @type {string}
+         */
         this.worker = parameters.worker || null;
+
+        /**
+         * Array of labels for the job.
+         * @type {string[]}
+         */
         this.labels = parameters.labels || [];
+
+        /**
+         * The (id) outputNumber (0, 1, 2, ...) of the latest {@link OutputInfo} (for this job) available on the server.
+         * When no output is available the number is <b>null</b>.
+         * @type {number}
+         */
+        this.outputNumber = typeof parameters.outputNumber === 'number' ? parameters.outputNumber : null;
     };
 
-    JobInfo.finishedStatuses = [ 'SUCCESS', 'FAILED_TO_EXECUTE', 'FAILED_TO_GET_SOURCE_METADATA', 'FAILED_SOURCE_COULD_NOT_BE_OBTAINED',
-        'FAILED_CREATING_SOURCE_ZIP', 'FAILED_UNZIP', 'FAILED_EXECUTOR_CONFIG', 'FAILED_TO_ARCHIVE_FILE', 'FAILED_TO_SAVE_JOINT_ARTIFACT', 'FAILED_TO_ADD_OBJECT_HASHES',
+    /**
+     * Array of statuses where the job hash finished and won't proceed.
+     * @type {string[]}
+     */
+    JobInfo.finishedStatuses = [
+        'SUCCESS',
+        'FAILED_TO_EXECUTE',
+        'FAILED_TO_GET_SOURCE_METADATA',
+        'FAILED_SOURCE_COULD_NOT_BE_OBTAINED',
+        'FAILED_CREATING_SOURCE_ZIP',
+        'FAILED_UNZIP',
+        'FAILED_EXECUTOR_CONFIG',
+        'FAILED_TO_ARCHIVE_FILE',
+        'FAILED_TO_SAVE_JOINT_ARTIFACT',
+        'FAILED_TO_ADD_OBJECT_HASHES',
         'FAILED_TO_SAVE_ARTIFACT'];
+
+    /**
+     * Returns true of the provided status is a finished status.
+     * @param {string} status - The status of a job.
+     * @returns {boolean}
+     */
     JobInfo.isFinishedStatus = function (status) {
         return JobInfo.finishedStatuses.indexOf(status) !== -1;
     };
 
+    /**
+     * Returns true if the provided status is a failed finished status.
+     * @param {string} status - The status of a job.
+     * @returns {boolean}
+     */
     JobInfo.isFailedFinishedStatus = function (status) {
         return JobInfo.isFinishedStatus(status) && status !== 'SUCCESS';
     };
 
     return JobInfo;
 });
-/*globals require, nodeRequire, process, console*/
+/*globals define*/
+
 /**
- * Created by Zsolt on 5/16/2014.
- *
+ * @author pmeijer / https://github.com/pmeijer
  */
 
-// eb.executorClient.createJob('1092dd2b135af5d164b9d157b5360391246064db', function (err, res) { console.log(require('util').inspect(res)); })
-// eb.executorClient.getInfoByStatus('CREATED', function(err, res) { console.log("xxx " + require('util').inspect(res)); })
+define('executor/OutputInfo',[], function () {
+    'use strict';
 
-define('executor/ExecutorWorker',['blob/BlobClient',
-        'blob/BlobMetadata',
-        'fs',
-        'util',
-        'events',
-        'path',
-        'child_process',
-        'minimatch',
-        'executor/ExecutorClient',
-        'executor/WorkerInfo',
-        'executor/JobInfo',
-        'superagent',
-        'rimraf'
-    ],
-    function (BlobClient, BlobMetadata, fs, util, events, path, child_process, minimatch, ExecutorClient, WorkerInfo, JobInfo, superagent, rimraf) {
-        var UNZIP_EXE;
-        var UNZIP_ARGS;
-        if (process.platform === "win32") {
-            UNZIP_EXE = "c:\\Program Files\\7-Zip\\7z.exe";
-            UNZIP_ARGS = ["x", "-y"];
-        } else if (process.platform === "linux" || process.platform === 'darwin') {
-            UNZIP_EXE = "/usr/bin/unzip";
-            UNZIP_ARGS = ["-o"];
-        } else {
-            UNZIP_EXE = "unknown";
-        }
+    /**
+     * Class describing an output from an execution. The data is used for communication between the
+     * initiator/a monitor of the job and the worker executing the job.
+     * @param {string} jobHash - Identifier for the job.
+     * @param {object} params
+     * @param {string} params.output - The output string.
+     * @param {number} params.outputNumber - Ordered id of output (0, 1, 2..)
+     * @alias OutputInfo
+     * @constructor
+     */
+    function OutputInfo(jobHash, params) {
+        /**
+         * Job identifier
+         * @type {string}
+         */
+        this.hash = jobHash;
 
-        var walk = function(dir, done) {
+        /**
+         * Ordered id of output (0, 1, 2..)
+         * @type {number}
+         */
+        this.outputNumber = params.outputNumber;
+
+        /**
+         * String output.
+         * @type {string}
+         */
+        this.output = params.output;
+
+        this._id = this.hash + '+' + this.outputNumber;
+    }
+
+    return OutputInfo;
+});
+/*globals define*/
+/*jshint node:true*/
+/**
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('executor/ExecutorOutputQueue',[], function () {
+    'use strict';
+
+    function ExecutorOutputQueue(worker, jobInfo, interval, segmentSize) {
+        var self = this;
+        this.logger = worker.logger; //TODO: Consider using gmeLogger for ExecutorWorker
+        this.jobInfo = jobInfo;
+
+        this.currOutput = {
+            lines: [],
+            callback: null,
+            finishFn: null
+        };
+        this.outputQueue = [];
+
+        this.timeoutId = null;
+
+        /**
+         * Adds a string to the current output (which will be queued based on interval and/or segmentSize).
+         * @param {string} outputStr
+         */
+        this.addOutput = function (outputStr) {
+            var lines = outputStr.split(/\r\n|\r|\n/);
+
+            self.currOutput.lines = self.currOutput.lines.concat(lines);
+            self.logger.debug('length', self.currOutput.lines.length);
+            if (segmentSize > -1 && self.currOutput.lines.length >= segmentSize) {
+                self._setNewTimeout();
+                self._queueCurrOutput();
+            }
+        };
+
+        /**
+         * Stops any timeouts, queues the current output (if any) and empties the outputQueue.
+         * This can be invoked to ensure that all output has been sent before sending the final jobInfo update.
+         * @param {function} callback
+         */
+        this.sendAllOutputs = function (callback) {
+            var nbrOfQueued;
+            clearTimeout(self.timeoutId);
+
+            // Add the remaining stored output.
+            self._queueCurrOutput();
+            nbrOfQueued = self.outputQueue.length;
+
+            self.logger.debug('sending out all outputs');
+            if (nbrOfQueued > 0) {
+                // Attach a finishFn to the last output in the queue.
+                self.outputQueue[self.outputQueue.length - 1].finishFn = function (err) {
+                    callback(err);
+                };
+            } else {
+                callback(null);
+            }
+        };
+
+        this._queueCurrOutput = function () {
+            if (self.currOutput.lines.length === 0) {
+                return;
+            }
+
+            // Add a callback to the output batch that will be invoked when it has been sent to the server.
+            self.currOutput.callback = function (err) {
+                var sentOutput;
+                if (err) {
+                    self.logger.error('output failed to be sent', err.toString());
+                } else {
+                    self.logger.debug('output sent');
+                }
+
+                // When it has been sent, it is removed from the queue and if an additional finishFn has been attached
+                // it is invoked.
+                sentOutput = self.outputQueue.shift();
+                if (typeof sentOutput.finishFn === 'function') {
+                    sentOutput.finishFn(err || null);
+                }
+
+                // If there are more queued outputs after the one just sent, send the first one in the queue.
+                if (self.outputQueue.length > 0) {
+                    worker.sendOutput(self.jobInfo, self.outputQueue[0].lines.join('\n'), self.outputQueue[0].callback);
+                }
+            };
+
+            // Queue the new output and reset the current output.
+            self.outputQueue.push(self.currOutput);
+
+            self.currOutput = {
+                lines: [],
+                callback: null,
+                finishFn: null
+            };
+
+            if (self.outputQueue.length === 1) {
+                worker.sendOutput(self.jobInfo, self.outputQueue[0].lines.join('\n'), self.outputQueue[0].callback);
+            }
+        };
+
+        this._setNewTimeout = function () {
+            if (interval < 0) {
+                return;
+            }
+            clearTimeout(self.timeoutId);
+            self.timeoutId = setTimeout(function () {
+                self._queueCurrOutput();
+                self._setNewTimeout();
+            }, interval);
+        };
+
+        // Start a new timeout at construction.
+        self._setNewTimeout();
+    }
+
+    return ExecutorOutputQueue;
+});
+/*globals define, File, alert*/
+/*jshint node:true*/
+
+/**
+ * @author lattmann / https://github.com/lattmann
+ * @author ksmyth / https://github.com/ksmyth
+ */
+
+// eb.executorClient.createJob('1092dd2b135af5d164b9d157b5360391246064db',
+//  function (err, res) { console.log(require('util').inspect(res)); })
+
+// eb.executorClient.getInfoByStatus('CREATED',
+// function(err, res) { console.log('xxx ' + require('util').inspect(res)); })
+
+define('executor/ExecutorWorker',[
+    'blob/BlobClient',
+    'blob/BlobMetadata',
+    'fs',
+    'util',
+    'events',
+    'path',
+    'child_process',
+    'minimatch',
+    'executor/ExecutorClient',
+    'executor/WorkerInfo',
+    'executor/JobInfo',
+    'executor/OutputInfo',
+    'executor/ExecutorOutputQueue',
+    'superagent',
+    'rimraf'
+], function (BlobClient,
+             BlobMetadata,
+             fs,
+             util,
+             events,
+             path,
+             childProcess,
+             minimatch,
+             ExecutorClient,
+             WorkerInfo,
+             JobInfo,
+             OutputInfo,
+             ExecutorOutputQueue,
+             superagent,
+             rimraf) {
+    'use strict';
+
+    var UNZIP_EXE,
+        UNZIP_ARGS;
+    if (process.platform === 'win32') {
+        UNZIP_EXE = 'c:\\Program Files\\7-Zip\\7z.exe';
+        UNZIP_ARGS = ['x', '-y'];
+    } else if (process.platform === 'linux' || process.platform === 'darwin') {
+        UNZIP_EXE = '/usr/bin/unzip';
+        UNZIP_ARGS = ['-o'];
+    } else {
+        UNZIP_EXE = 'unknown';
+    }
+
+    var walk = function (dir, done) {
         var results = [];
-        fs.readdir(dir, function(err, list) {
-            if (err) return done(err);
+        fs.readdir(dir, function (err, list) {
+            if (err) {
+                done(err);
+                return;
+            }
             var i = 0;
             (function next() {
                 var file = list[i++];
-                if (!file) return done(null, results);
+                if (!file) {
+                    done(null, results);
+                    return;
+                }
                 file = dir + '/' + file;
-                fs.stat(file, function(err, stat) {
+                fs.stat(file, function (err, stat) {
                     if (stat && stat.isDirectory()) {
-                        walk(file, function(err, res) {
+                        walk(file, function (err, res) {
                             results = results.concat(res);
                             next();
                         });
@@ -3957,12 +4786,23 @@ define('executor/ExecutorWorker',['blob/BlobClient',
         });
     };
 
-    //here you can define global variables for your middleware
-
     var ExecutorWorker = function (parameters) {
-        this.blobClient = new BlobClient({server: parameters.server, serverPort: parameters.serverPort, httpsecure: parameters.httpsecure });
+        this.logger = parameters.logger;
 
-        this.executorClient = new ExecutorClient({server: parameters.server, serverPort: parameters.serverPort, httpsecure: parameters.httpsecure });
+        this.blobClient = new BlobClient({
+            server: parameters.server,
+            serverPort: parameters.serverPort,
+            httpsecure: parameters.httpsecure,
+            logger: parameters.logger
+        });
+
+        this.executorClient = new ExecutorClient({
+            server: parameters.server,
+            serverPort: parameters.serverPort,
+            httpsecure: parameters.httpsecure,
+            logger: parameters.logger
+        });
+
         if (parameters.executorNonce) {
             this.executorClient.executorNonce = parameters.executorNonce;
         }
@@ -3977,8 +4817,8 @@ define('executor/ExecutorWorker',['blob/BlobClient',
         if (!fs.existsSync(this.workingDirectory)) {
             fs.mkdirSync(this.workingDirectory);
         }
-        this.availableProcessesContainer = parameters.availableProcessesContainer || { availableProcesses: 1 };
-        this.clientRequest = new WorkerInfo.ClientRequest({ clientId: null });
+        this.availableProcessesContainer = parameters.availableProcessesContainer || {availableProcesses: 1};
+        this.clientRequest = new WorkerInfo.ClientRequest({clientId: null});
         this.labelJobs = {};
     };
     util.inherits(ExecutorWorker, events.EventEmitter);
@@ -3990,7 +4830,7 @@ define('executor/ExecutorWorker',['blob/BlobClient',
         // TODO: what if job is already running?
 
         // get metadata for hash
-        self.blobClient.getMetadata(jobInfo.hash, function (err, metadata) {
+        self.blobClient.getMetadata(jobInfo.hash, function (err/*, metadata*/) {
             if (err) {
                 jobInfo.status = 'FAILED_TO_GET_SOURCE_METADATA';
                 errorCallback(err);
@@ -4026,57 +4866,106 @@ define('executor/ExecutorWorker',['blob/BlobClient',
 
                     var args = [path.basename(zipPath)];
                     args.unshift.apply(args, UNZIP_ARGS);
-                    var child = child_process.execFile(UNZIP_EXE, args, {cwd: jobDir},
+                    childProcess.execFile(UNZIP_EXE, args, {cwd: jobDir},
                         function (err, stdout, stderr) {
-                        if (err) {
-                            jobInfo.status = 'FAILED_UNZIP';
-                            console.error(stderr);
-                            errorCallback(err);
-                            return;
-                        }
-
-                        // delete downloaded file
-                        fs.unlinkSync(zipPath);
-
-                        jobInfo.startTime = new Date().toISOString();
-
-                        // get cmd file dynamically from the this.executorConfigFilename file
-                        fs.readFile(path.join(jobDir, self.executorConfigFilename), 'utf8', function (err, data) {
                             if (err) {
-                                jobInfo.status = 'FAILED_EXECUTOR_CONFIG';
-                                errorCallback('Could not read ' + self.executorConfigFilename + ' err:' + err);
+                                jobInfo.status = 'FAILED_UNZIP';
+                                jobInfo.finishTime = new Date().toISOString();
+                                self.logger.error(stderr);
+                                errorCallback(err);
                                 return;
                             }
-                            var executorConfig = JSON.parse(data);
-                            if (typeof executorConfig.cmd !== 'string' || typeof executorConfig.resultArtifacts !== 'object') {
-                                jobInfo.status = 'FAILED_EXECUTOR_CONFIG';
-                                errorCallback(self.executorConfigFilename +
-                                    ' is missing or wrong type for cmd and/or resultArtifacts.');
-                                return;
-                            }
-                            var cmd = executorConfig.cmd;
-                            var args = executorConfig.args || [];
-                            console.log('working directory: ' + jobDir + ' executing: ' + cmd + ' with args: ' + args.toString());
-                            var child = child_process.spawn(cmd, args, {cwd: jobDir, stdio: ['ignore', 'pipe', 'pipe']});
-                            var outlog = fs.createWriteStream(path.join(jobDir, 'job_stdout.txt'));
-                            child.stdout.pipe(outlog);
-                            child.stdout.pipe(fs.createWriteStream(path.join(self.workingDirectory, jobInfo.hash.substr(0, 6) + '_stdout.txt')));
-                            child.stderr.pipe(fs.createWriteStream(path.join(jobDir, 'job_stderr.txt'))); // TODO: maybe put in the same file as stdout
-                            child.on('close', function (code, signal) {
 
+                            // delete downloaded file
+                            fs.unlinkSync(zipPath);
+
+                            jobInfo.startTime = new Date().toISOString();
+
+                            // get cmd file dynamically from the this.executorConfigFilename file
+                            fs.readFile(path.join(jobDir, self.executorConfigFilename), 'utf8', function (err, data) {
+                                if (err) {
+                                    jobInfo.status = 'FAILED_EXECUTOR_CONFIG';
+                                    jobInfo.finishTime = new Date().toISOString();
+                                    errorCallback('Could not read ' + self.executorConfigFilename + ' err:' + err);
+                                    return;
+                                }
+                                var executorConfig;
+                                try {
+                                    executorConfig = JSON.parse(data);
+                                } catch (e) {
+                                }
+
+                                self.logger.debug('executorConfig', executorConfig);
+                                if (typeof executorConfig !== 'object' ||
+                                    typeof executorConfig.cmd !== 'string' ||
+                                    typeof executorConfig.resultArtifacts !== 'object') {
+
+                                    jobInfo.status = 'FAILED_EXECUTOR_CONFIG';
+                                    jobInfo.finishTime = new Date().toISOString();
+                                    errorCallback(self.executorConfigFilename +
+                                        ' is missing or wrong type for cmd and/or resultArtifacts.');
+                                    return;
+                                }
+                                var cmd = executorConfig.cmd;
+                                var args = executorConfig.args || [];
+                                self.logger.debug('working directory: ' + jobDir + ' executing: ' + cmd +
+                                    ' with args: ' + args.toString());
+                                var outputSegmentSize = executorConfig.outputSegmentSize || -1;
+                                var outputInterval = executorConfig.outputInterval || -1;
+                                var outputQueue;
+                                var child = childProcess.spawn(cmd, args, {
+                                    cwd: jobDir,
+                                    stdio: ['ignore', 'pipe', 'pipe']
+                                }), childExit = function (err) {
+
+                                    childExit = function () {
+                                    }; // "Note that the exit-event may or may not fire after an error has occurred"
                                     jobInfo.finishTime = new Date().toISOString();
 
-                                    if (code !== 0) {
-                                        console.error(jobInfo.hash + ' exec error: ' + code);
+                                    if (err) {
+                                        self.logger.error(jobInfo.hash + ' exec error: ' + util.inspect(err));
                                         jobInfo.status = 'FAILED_TO_EXECUTE';
                                     }
 
                                     // TODO: save stderr and stdout to files.
+                                    if (outputQueue) {
+                                        outputQueue.sendAllOutputs(function (/*err*/) {
+                                            successCallback(jobInfo, jobDir, executorConfig);
+                                        });
+                                    } else {
+                                        successCallback(jobInfo, jobDir, executorConfig);
+                                    }
+                                    // normally self.saveJobResults(jobInfo, jobDir, executorConfig);
+                                };
+                                var outlog = fs.createWriteStream(path.join(jobDir, 'job_stdout.txt'));
 
-                                    successCallback(jobInfo, jobDir, executorConfig); // normally self.saveJobResults(jobInfo, jobDir, executorConfig);
+                                child.stdout.pipe(outlog);
+                                child.stdout.pipe(fs.createWriteStream(path.join(self.workingDirectory,
+                                    jobInfo.hash.substr(0, 6) + '_stdout.txt')));
+                                // TODO: maybe put in the same file as stdout
+                                child.stderr.pipe(fs.createWriteStream(path.join(jobDir, 'job_stderr.txt')));
+
+                                // Need to use logger here since node webkit does not have process.stdout/err.
+                                child.stdout.on('data', function (data) {
+                                    self.logger.info(data.toString());
                                 });
+                                child.stderr.on('data', function (data) {
+                                    self.logger.error(data.toString());
+                                });
+
+                                // FIXME can it happen that the close event arrives before error?
+                                child.on('error', childExit);
+                                child.on('close', childExit);
+
+                                if (outputInterval > - 1 || outputSegmentSize > -1) {
+                                    outputQueue = new ExecutorOutputQueue(self, jobInfo,
+                                        outputInterval, outputSegmentSize);
+                                    child.stdout.on('data', function (data) {
+                                        outputQueue.addOutput(data.toString());
+                                    });
+                                }
+                            });
                         });
-                    });
 
                 });
             });
@@ -4126,7 +5015,7 @@ define('executor/ExecutorWorker',['blob/BlobClient',
                 };
             counter = filesToArchive.length;
             if (filesToArchive.length === 0) {
-                console.info(jobInfo.hash + ' There were no files to archive..');
+                self.logger.info(jobInfo.hash + ' There were no files to archive..');
                 counterCallback(null);
             }
             for (i = 0; i < filesToArchive.length; i += 1) {
@@ -4139,9 +5028,9 @@ define('executor/ExecutorWorker',['blob/BlobClient',
                 jointArtifact.addFileAsSoftLink(filename, data, function (err, hash) {
                     var j;
                     if (err) {
-                        console.error(jobInfo.hash + ' Failed to archive as "' + filename + '" from "' +
-                        filePath + '", err: ' + err);
-                        console.error(err);
+                        self.logger.error(jobInfo.hash + ' Failed to archive as "' + filename + '" from "' +
+                            filePath + '", err: ' + err);
+                        self.logger.error(err);
                         callback('FAILED_TO_ARCHIVE_FILE');
                     } else {
                         // Add the file-hash to the results artifacts containing the filename.
@@ -4149,8 +5038,8 @@ define('executor/ExecutorWorker',['blob/BlobClient',
                         for (j = 0; j < resultsArtifacts.length; j += 1) {
                             if (resultsArtifacts[j].files[filename] === true) {
                                 resultsArtifacts[j].files[filename] = hash;
-                                //console.log('Replaced! filename: "' + filename + '", artifact "' + resultsArtifacts[j].name
-                                //    + '" with hash: ' + hash);
+                                //console.log('Replaced! filename: "' + filename + '", artifact "'
+                                // + resultsArtifacts[j].name + '" with hash: ' + hash);
                             }
                         }
                         callback(null);
@@ -4160,7 +5049,8 @@ define('executor/ExecutorWorker',['blob/BlobClient',
             if (typeof File === 'undefined') { // nodejs doesn't have File
                 fs.readFile(filePath, function (err, data) {
                     if (err) {
-                        console.error(jobInfo.hash + ' Failed to archive as "' + filename + '" from "' + filePath + '", err: ' + err);
+                        self.logger.error(jobInfo.hash + ' Failed to archive as "' + filename + '" from "' + filePath +
+                            '", err: ' + err);
                         return callback('FAILED_TO_ARCHIVE_FILE');
                     }
                     archiveData(null, data);
@@ -4177,7 +5067,7 @@ define('executor/ExecutorWorker',['blob/BlobClient',
                     i,
                     counterCallback;
                 if (err) {
-                    console.error(jobInfo.hash + " " + err);
+                    self.logger.error(jobInfo.hash + ' ' + err);
                     jobInfo.status = 'FAILED_TO_SAVE_JOINT_ARTIFACT';
                     self.sendJobUpdate(jobInfo);
                 } else {
@@ -4203,7 +5093,7 @@ define('executor/ExecutorWorker',['blob/BlobClient',
                     }
                     rimraf(directory, function (err) {
                         if (err) {
-                            console.error('Could not delete executor-temp file, err: ' + err);
+                            self.logger.error('Could not delete executor-temp file, err: ' + err);
                         }
                         jobInfo.resultSuperSetHash = resultHash;
                         for (i = 0; i < resultsArtifacts.length; i += 1) {
@@ -4215,14 +5105,14 @@ define('executor/ExecutorWorker',['blob/BlobClient',
         };
 
         addObjectHashesAndSaveArtifact = function (resultArtifact, callback) {
-            resultArtifact.artifact.addMetadataHashes(resultArtifact.files, function (err, hashes) {
+            resultArtifact.artifact.addMetadataHashes(resultArtifact.files, function (err/*, hashes*/) {
                 if (err) {
-                    console.error(jobInfo.hash + " " + err);
+                    self.logger.error(jobInfo.hash + ' ' + err);
                     return callback('FAILED_TO_ADD_OBJECT_HASHES');
                 }
                 resultArtifact.artifact.save(function (err, resultHash) {
                     if (err) {
-                        console.error(jobInfo.hash + " " + err);
+                        self.logger.error(jobInfo.hash + ' ' + err);
                         return callback('FAILED_TO_SAVE_ARTIFACT');
                     }
                     jobInfo.resultHashes[resultArtifact.name] = resultHash;
@@ -4239,18 +5129,20 @@ define('executor/ExecutorWorker',['blob/BlobClient',
                 matched;
             //console.log('Walking the walk..');
             for (i = 0; i < results.length; i += 1) {
-                filename = path.relative(directory, results[i]).replace(/\\/g,'/');
+                filename = path.relative(directory, results[i]).replace(/\\/g, '/');
                 archive = false;
                 for (a = 0; a < resultsArtifacts.length; a += 1) {
                     if (resultsArtifacts[a].patterns.length === 0) {
-                        //console.log('Matched! filename: "' + filename + '", artifact "' + resultsArtifacts[a].name + '"');
+                        //console.log('Matched! filename: "' + filename + '", artifact "' +
+                        // resultsArtifacts[a].name + '"');
                         resultsArtifacts[a].files[filename] = true;
                         archive = true;
                     } else {
                         for (j = 0; j < resultsArtifacts[a].patterns.length; j += 1) {
                             matched = minimatch(filename, resultsArtifacts[a].patterns[j]);
                             if (matched) {
-                                //console.log('Matched! filename: "' + filename + '", artifact "' + resultsArtifacts[a].name + '"');
+                                //console.log('Matched! filename: "' + filename + '", artifact "' +
+                                // resultsArtifacts[a].name + '"');
                                 resultsArtifacts[a].files[filename] = true;
                                 archive = true;
                                 break;
@@ -4259,20 +5151,21 @@ define('executor/ExecutorWorker',['blob/BlobClient',
                     }
                 }
                 if (archive) {
-                    filesToArchive.push({ filename: filename, filePath: results[i]});
+                    filesToArchive.push({filename: filename, filePath: results[i]});
                 }
             }
             afterWalk(filesToArchive);
         });
     };
 
-    ExecutorWorker.prototype.sendJobUpdate = function(jobInfo) {
+    ExecutorWorker.prototype.sendJobUpdate = function (jobInfo) {
+        var self = this;
         if (JobInfo.isFinishedStatus(jobInfo.status)) {
             this.availableProcessesContainer.availableProcesses += 1;
         }
         this.executorClient.updateJob(jobInfo, function (err) {
             if (err) {
-                console.log(err); // TODO
+                self.logger.error(err); // TODO
             }
         });
         this.emit('jobUpdate', jobInfo);
@@ -4282,12 +5175,13 @@ define('executor/ExecutorWorker',['blob/BlobClient',
 
     };
 
-    ExecutorWorker.prototype.checkForUnzipExe = function() {
-        this.checkForUnzipExe = function() { };
+    ExecutorWorker.prototype.checkForUnzipExe = function () {
+        this.checkForUnzipExe = function () {
+        };
         fs.exists(UNZIP_EXE, function (exists) {
             if (exists) {
             } else {
-                alert("Unzip exe \"" + UNZIP_EXE + "\" does not exist. Please install it.");
+                alert('Unzip exe "' + UNZIP_EXE + '" does not exist. Please install it.');
             }
         });
     };
@@ -4296,7 +5190,7 @@ define('executor/ExecutorWorker',['blob/BlobClient',
         var self = this;
         self.checkForUnzipExe();
 
-        var _queryWorkerAPI = function() {
+        var _queryWorkerAPI = function () {
 
             this.clientRequest.availableProcesses = Math.max(0, this.availableProcessesContainer.availableProcesses);
             var req = superagent.post(self.executorClient.executorUrl + 'worker');
@@ -4330,9 +5224,9 @@ define('executor/ExecutorWorker',['blob/BlobClient',
                                 self.availableProcessesContainer.availableProcesses -= 1;
                                 self.emit('jobUpdate', info);
                                 self.startJob(info, function (err) {
-                                    console.error(info.hash + " failed to run: " + err + ". Status: " + info.status);
+                                    self.logger.error(info.hash + ' failed to run: ' + err + '. Status: ' + info.status);
                                     self.sendJobUpdate(info);
-                                }, function(jobInfo, jobDir, executorConfig) {
+                                }, function (jobInfo, jobDir, executorConfig) {
                                     self.saveJobResults(jobInfo, jobDir, executorConfig);
                                 });
                             });
@@ -4343,17 +5237,20 @@ define('executor/ExecutorWorker',['blob/BlobClient',
                                     self.labelJobs[label] = response.labelJobs[label];
                                     self.availableProcessesContainer.availableProcesses -= 1;
                                     (function (label) {
-                                        var info = { hash: response.labelJobs[label] };
+                                        var info = {hash: response.labelJobs[label]};
                                         self.startJob(info, function (err) {
                                             this.availableProcessesContainer.availableProcesses += 1;
-                                            console.error("Label job " + label + "(" + info.hash + ") failed to run: " + err + ". Status: " + info.status);
-                                        }, function(jobInfo, jobDir, executorConfig) {
+                                            self.logger.error('Label job ' + label + '(' + info.hash + ') failed to run: ' +
+                                                err + '. Status: ' + info.status);
+                                        }, function (jobInfo/*, jobDir, executorConfig*/) {
                                             this.availableProcessesContainer.availableProcesses += 1;
                                             if (jobInfo.status !== 'FAILED_TO_EXECUTE') {
                                                 self.clientRequest.labels.push(label);
-                                                console.info("Label job " + label + " succeeded. Labels are " + JSON.stringify(self.clientRequest.labels));
+                                                self.logger.info('Label job ' + label + ' succeeded. Labels are ' +
+                                                    JSON.stringify(self.clientRequest.labels));
                                             } else {
-                                                console.error("Label job " + label + "(" + info.hash + ") run failed: " + err + ". Status: " + info.status);
+                                                self.logger.error('Label job ' + label + '(' + info.hash +
+                                                    ') run failed: ' + err + '. Status: ' + info.status);
                                             }
                                         });
                                     })(label);
@@ -4369,21 +5266,40 @@ define('executor/ExecutorWorker',['blob/BlobClient',
         if (self.clientRequest.clientId) {
             _queryWorkerAPI.call(self);
         } else {
-            var child = child_process.execFile("hostname", [], {}, function (err, stdout, stderr) {
-                self.clientRequest.clientId = (stdout.trim() || "unknown") + "_" + process.pid;
+            childProcess.execFile('hostname', [], {}, function (err, stdout/*, stderr*/) {
+                self.clientRequest.clientId = (stdout.trim() || 'unknown') + '_' + process.pid;
                 _queryWorkerAPI.call(self);
             });
         }
     };
 
+    ExecutorWorker.prototype.sendOutput = function (jobInfo, output, callback) {
+        var outputInfo;
+
+        jobInfo.outputNumber = typeof jobInfo.outputNumber === 'number' ?
+        jobInfo.outputNumber + 1 : 0;
+
+        outputInfo = new OutputInfo(jobInfo.hash, {
+            output: output,
+            outputNumber: jobInfo.outputNumber
+        });
+
+        this.logger.debug('sending output', outputInfo);
+        this.executorClient.sendOutput(outputInfo, callback);
+    };
+
     return ExecutorWorker;
 });
 
+/*globals define*/
+/*jshint node:true*/
+
 /**
- * Created by kevin on 7/14/2014.
+ * @author ksmyth / https://github.com/ksmyth
  */
 
 define('executor/ExecutorWorkerController',[], function () {
+    'use strict';
     var ExecutorWorkerController = function ($scope, worker) {
         this.$scope = $scope;
         this.$scope.jobs = { };
@@ -4413,8 +5329,18 @@ define('executor/ExecutorWorkerController',[], function () {
     ExecutorWorkerController.prototype.initTestData = function () {
         var self = this,
             i,
-            statuses = [ 'CREATED', 'SUCCESS', 'FAILED_TO_EXECUTE', 'FAILED_TO_GET_SOURCE_METADATA', 'FAILED_SOURCE_COULD_NOT_BE_OBTAINED',
-                'FAILED_CREATING_SOURCE_ZIP', 'FAILED_UNZIP', 'FAILED_EXECUTOR_CONFIG', 'FAILED_TO_ARCHIVE_FILE', 'FAILED_TO_SAVE_JOINT_ARTIFACT', 'FAILED_TO_ADD_OBJECT_HASHES',
+            statuses = [
+                'CREATED',
+                'SUCCESS',
+                'FAILED_TO_EXECUTE',
+                'FAILED_TO_GET_SOURCE_METADATA',
+                'FAILED_SOURCE_COULD_NOT_BE_OBTAINED',
+                'FAILED_CREATING_SOURCE_ZIP',
+                'FAILED_UNZIP',
+                'FAILED_EXECUTOR_CONFIG',
+                'FAILED_TO_ARCHIVE_FILE',
+                'FAILED_TO_SAVE_JOINT_ARTIFACT',
+                'FAILED_TO_ADD_OBJECT_HASHES',
                 'FAILED_TO_SAVE_ARTIFACT'];
 
         self.$scope.jobs = { };
@@ -4435,8 +5361,34 @@ define('executor/ExecutorWorkerController',[], function () {
     return ExecutorWorkerController;
 });
 
+/*globals define*/
 /*jshint node:true*/
-var nodeRequire = require;
+/**
+ * @module Executor:NodeWorker
+ * @author lattmann / https://github.com/lattmann
+ * @author ksmyth / https://github.com/ksmyth
+ */
+
+var nodeRequire = require,
+    log = function () {
+        'use strict';
+        var args = Array.prototype.slice.call(arguments);
+        args.splice(0, 0, new Date().toISOString());
+        console.log.apply(console, args);
+    },
+    err = function () {
+        'use strict';
+        var args = Array.prototype.slice.call(arguments);
+        args.splice(0, 0, new Date().toISOString());
+        console.error.apply(console, args);
+    },
+    logger = {
+        debug: log,
+        log: log,
+        info: log,
+        warn: log,
+        error: err
+    };
 
 if (typeof define !== 'undefined') {
 
@@ -4448,42 +5400,50 @@ if (typeof define !== 'undefined') {
         'executor/ExecutorWorkerController',
         'url'
     ], function (eventDispatcher, BlobClient, ExecutorWorker, JobInfo, ExecutorWorkerController, url) {
-        return function (webGMEUrl, tempPath, parameters) {
-            var worker;
-            var webGMEPort = url.parse(webGMEUrl).port || (url.parse(webGMEUrl).protocol === 'https:' ? 443 : 80);
+        'use strict';
+
+        return function (webGMEUrl, tempPath, parameters, availableProcessesContainer) {
+            var worker,
+                webGMEPort = url.parse(webGMEUrl).port || (url.parse(webGMEUrl).protocol === 'https:' ? 443 : 80);
+
+
             worker = new ExecutorWorker({
                 server: url.parse(webGMEUrl).hostname,
                 serverPort: webGMEPort,
                 httpsecure: url.parse(webGMEUrl).protocol === 'https:',
-                sessionId: undefined,
+                webgmeToken: undefined,
                 availableProcessesContainer: availableProcessesContainer,
                 workingDirectory: tempPath,
-                executorNonce: parameters.executorNonce
+                executorNonce: parameters.executorNonce,
+                logger: logger
             });
 
-            console.log("Connecting to " + webGMEUrl);
+            log('Connecting to ' + webGMEUrl);
 
             var callback;
             worker.queryWorkerAPI(function (err, response) {
                 if (!err) {
-                    console.log("Connected to " + webGMEUrl);
+                    log('Connected to ' + webGMEUrl);
                 }
                 var refreshPeriod = 60 * 1000;
                 callback = callback || function (err, response) {
                     if (err) {
-                        console.log("Error connecting to " + webGMEUrl + " " + err);
-                    } else {}
+                        log('Error connecting to ' + webGMEUrl + ' ' + err);
+                    } else {
+                    }
                     if (response && response.refreshPeriod) {
                         refreshPeriod = response.refreshPeriod;
                     }
-                    var timeoutID = setTimeout(function () {
+                    /*var timeoutID = */
+                    setTimeout(function () {
                         worker.queryWorkerAPI(callback);
                     }, refreshPeriod);
                 };
                 callback(err, response);
             });
-            var cancel = function() {
-                callback = function() {};
+            var cancel = function () {
+                callback = function () {
+                };
             };
             return cancel;
         };
@@ -4496,8 +5456,8 @@ if (nodeRequire.main === module) {
         cas = nodeRequire('ssl-root-cas/latest'),
         superagent = nodeRequire('superagent'),
         configFileName = 'config.json',
-        workingDirectory = 'executor-temp',
-        https = nodeRequire('https');
+        workingDirectory = 'executor-temp';
+    //https = nodeRequire('https'); FIXME take into use or remove it
 
     // This is used for tests
     if (process.argv.length > 2) {
@@ -4509,9 +5469,10 @@ if (nodeRequire.main === module) {
 
     cas.inject();
     fs.readdirSync(__dirname).forEach(function (file) {
+        'use strict';
         var filename = path.resolve(__dirname, file);
-        if ((filename.indexOf('.pem') == filename.length - 4) || (filename.indexOf('.crt') == filename.length - 4)) {
-            console.log('Adding ' + file + ' to trusted CAs');
+        if ((filename.indexOf('.pem') === filename.length - 4) || (filename.indexOf('.crt') === filename.length - 4)) {
+            log('Adding ' + file + ' to trusted CAs');
             cas.addFile(filename);
         }
     });
@@ -4527,26 +5488,30 @@ if (nodeRequire.main === module) {
         'child_process',
         'minimatch',
         'rimraf',
-        'url'
+        'url',
+        'q'
     ].forEach(function (name) {
-        requirejs.s.contexts._.defined[name] = nodeRequire(name);
-    });
+            'use strict';
+            requirejs.s.contexts._.defined[name] = nodeRequire(name);
+        });
 
     GLOBAL.WebGMEGlobal = {
         getConfig: function () {
+            'use strict';
             return {};
         }
-    } // server: config.server, serverPort: config.port, httpsecure: config.protocol==='https' }; } };
+    }; // server: config.server, serverPort: config.port, httpsecure: config.protocol==='https' }; } };
 
-    var webGMEUrls = Object.create(null);
-    var maxConcurrentJobs = 1;
-    var availableProcessesContainer = {
-        availableProcesses: maxConcurrentJobs
-    }; // shared among all ExecutorWorkers
+    var webGMEUrls = Object.create(null),
+        maxConcurrentJobs = 1,
+        availableProcessesContainer = { //FIXME check why the definition cannot be moved to global namespace
+            availableProcesses: maxConcurrentJobs
+        }; // shared among all ExecutorWorkers
 
     requirejs(['node_worker'], function (addWebGMEConnection) {
-        var fs = nodeRequire('fs');
-        var path = nodeRequire('path');
+        'use strict';
+        var fs = nodeRequire('fs'),
+            path = nodeRequire('path');
 
         function readConfig() {
             var config = {
@@ -4563,46 +5528,49 @@ if (nodeRequire.main === module) {
                     oldConfig.forEach(function (webGMEUrl) {
                         config[webGMEUrl] = {};
                     });
-                } else if (typeof (config) === "string") {
+                } else if (typeof (config) === 'string') {
                     config = {
                         config: {}
                     };
-                } else {}
+                } else {
+                }
             } catch (e) {
-                if (e.code !== "ENOENT") {
+                if (e.code !== 'ENOENT') {
                     throw e;
                 }
             }
             Object.getOwnPropertyNames(config).forEach(function (key) {
                 var webGMEUrl;
-                if (key.indexOf("http") === 0) {
+                if (key.indexOf('http') === 0) {
                     webGMEUrl = key;
                     if (Object.prototype.hasOwnProperty.call(webGMEUrls, webGMEUrl)) {
                     } else {
-                        webGMEUrls[webGMEUrl] = addWebGMEConnection(webGMEUrl, path.join(workingDirectory, '' + workingDirectoryCount++), config[webGMEUrl]);
+                        webGMEUrls[webGMEUrl] = addWebGMEConnection(webGMEUrl,
+                            path.join(workingDirectory, '' + workingDirectoryCount++),
+                            config[webGMEUrl], availableProcessesContainer);
                     }
-                } else if (key === "maxConcurrentJobs") {
-                    availableProcessesContainer.availableProcesses += config[maxConcurrentJobs] - maxConcurrentJobs;
-                    maxConcurrentJobs = config[maxConcurrentJobs];
+                } else if (key === 'maxConcurrentJobs') {
+                    availableProcessesContainer.availableProcesses += config.maxConcurrentJobs - maxConcurrentJobs;
+                    maxConcurrentJobs = config.maxConcurrentJobs;
                 } else {
-                    console.log("Unknown configuration key " + key);
+                    log('Unknown configuration key ' + key);
                 }
             });
             // remove webGMEUrls no longer in config
             Object.getOwnPropertyNames(webGMEUrls).forEach(function (webGMEUrl) {
                 if (Object.prototype.hasOwnProperty.call(config, webGMEUrl) === false) {
-                    console.log("Removing " + webGMEUrl);
+                    log('Removing ' + webGMEUrl);
                     webGMEUrls[webGMEUrl]();
                     delete webGMEUrls[webGMEUrl];
                 }
-                });
+            });
         }
 
         var workingDirectoryCount = 0;
         var rimraf = nodeRequire('rimraf');
         rimraf(workingDirectory, function (err) {
             if (err) {
-                console.log('Could not delete working directory (' + workingDirectory + '), err: ' + err);
+                log('Could not delete working directory (' + workingDirectory + '), err: ' + err);
                 process.exit(2);
             }
             if (!fs.existsSync(workingDirectory)) {
@@ -4612,11 +5580,13 @@ if (nodeRequire.main === module) {
             readConfig();
             fs.watch(configFileName, function () {
                 setTimeout(readConfig, 200);
-            }); // setTimeout: likely handle O_TRUNC of config.json (though `move config.json.tmp config.json` is preferred)
+            }); // setTimeout: likely handle O_TRUNC of config.json
+            // (though `move config.json.tmp config.json` is preferred)
         });
     });
 
-};
+}
+;
 module.exports.require = require;
 module.exports.requirejs = requirejs;
 module.exports.define = define;

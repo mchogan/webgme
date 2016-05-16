@@ -1,13 +1,32 @@
+@import url("../bower_components/bootstrap/dist/css/bootstrap.min.css");
+@import url("../bower_components/bootstrap/dist/css/bootstrap-theme.min.css");
+@import url("../bower_components/codemirror/lib/codemirror.css");
+@import url("codemirror/codemirror.bootstrap.css");
+
 @import url("webgme_bootstrap_overrides.css");
-@import url("jquery/jquery-ui-1.10.4.css");
+@import url("../bower_components/jquery-ui/themes/base/jquery-ui.min.css");
 @import url("jquery/jquery.layout.css");
 @import url("jquery/jquery.layout.webgme.css");
 @import url("jquery/jquery.dataTables.bootstrapped.css");
-@import url("jquery/jquery.gritter.css");
-@import url("jquery/jquery.csszoom.css");
-@import url("jquery/jquery.spectrum.css");
+@import url("../bower_components/jquery.gritter/css/jquery.gritter.css");
+@import url("../bower_components/spectrum/spectrum.css");
+@import url("../bower_components/bootstrap-multiselect/dist/css/bootstrap-multiselect.css");
+@import url("../bower_components/jquery.fancytree/dist/skin-vista/ui.fancytree.css");
+@import url("webgme_fancytree_overrides.css");
+@import url("contextmenu/jquery.contextMenu.min.css");
+@import url("webgme_contextmenu_overrides.css");
+
+@import url("print.css");
+@import url("themes/dawn.css");
+@import url("../fonts/font-awesome/css/font-awesome.min.css");
+@import url("../fonts/webgme-icons/style.css");
+@import url("../bower_components/isis-ui-components/dist/isis-ui-components.css");
 
 /* OWN STYLES */
+.gme-icon {
+    background-image: url('../img/gme-icon.png');
+}
+
 html,body {
     margin: 0;
     padding: 0;
@@ -35,6 +54,14 @@ ul.unstyled,
 ol.unstyled {
     margin-left: 0;
     list-style: none;
+}
+
+* {
+    -moz-user-select:-moz-none;
+    -webkit-user-select:none;
+    -o-user-select:none;
+    user-select:none;
+    -ms-user-select:none;
 }
 
 .user-select-off {
@@ -127,6 +154,18 @@ div.spacer {
 .context-menu-list {
     z-index: 10 !important;
 }
+
+.context-menu-item.hover > .context-menu-list {
+    /* if the modeling language has many elements right click on the root and select create sub-menu
+       we have to make it scrollable in y direction, but not in x direction.
+       https://github.com/medialize/jQuery-contextMenu/issues/60#issuecomment-30870663
+       http://stackoverflow.com/a/13347579
+     */
+    max-height: 400px; /* ~18 elements without scroll */
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
 
 /*FIX line-height so text and icons are nicely aligned to the middle*/
 .context-menu-item {

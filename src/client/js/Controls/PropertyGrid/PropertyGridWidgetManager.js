@@ -15,6 +15,11 @@ define([
     'js/Utils/ColorUtil',
     'js/Controls/PropertyGrid/Widgets/DialogWidget',
     'js/Controls/PropertyGrid/Widgets/AssetWidget',
+    'js/Controls/PropertyGrid/Widgets/FloatWidget',
+    'js/Controls/PropertyGrid/Widgets/IntegerWidget',
+    'js/Controls/PropertyGrid/Widgets/PointerWidget',
+    'js/Controls/PropertyGrid/Widgets/MetaTypeWidget',
+    'js/Controls/PropertyGrid/Widgets/MultiSelectWidget',
     './PropertyGridWidgets'
 ], function (StringWidget,
              NumberBoxWidget,
@@ -26,7 +31,12 @@ define([
              colorUtil,
              DialogWidget,
              AssetWidget,
-             PropertyGridWidgets) {
+             FloatWidget,
+             IntegerWidget,
+             PointerWidget,
+             MetaTypeWidget,
+             MultiSelectWidget,
+             PROPERTY_GRID_WIDGETS) {
 
     'use strict';
 
@@ -42,15 +52,23 @@ define([
             isOption = _.isArray(propDesc.valueItems),
             isColor = colorUtil.isColor(propDesc.value),
             SpecificWidget = propDesc.widget,
-            isAsset = type === 'asset',
             widget;
 
         if (readOnly && type !== 'boolean') {
             widget = new LabelWidget(propDesc);
         } else if (SpecificWidget) {
             switch (SpecificWidget) {
-                case PropertyGridWidgets.DIALOG_WIDGET:
+                case PROPERTY_GRID_WIDGETS.DIALOG_WIDGET:
                     widget = new DialogWidget(propDesc);
+                    break;
+                case PROPERTY_GRID_WIDGETS.META_TYPE_WIDGET:
+                    widget = new MetaTypeWidget(propDesc);
+                    break;
+                case PROPERTY_GRID_WIDGETS.POINTER_WIDGET:
+                    widget = new PointerWidget(propDesc);
+                    break;
+                case PROPERTY_GRID_WIDGETS.MULTI_SELECT_WIDGET:
+                    widget = new MultiSelectWidget(propDesc);
                     break;
                 default:
                     widget = new SpecificWidget(propDesc);
@@ -60,11 +78,15 @@ define([
             widget = new OptionWidget(propDesc);
         } else if (isColor) {
             widget = new ColorPickerWidget(propDesc);
+        } else if (type === 'asset') {
+            widget = new AssetWidget(propDesc);
+        } else if (type === 'float') {
+            widget = new FloatWidget(propDesc);
+        } else if (type === 'integer') {
+            widget = new IntegerWidget(propDesc);
         } else {
             if (this._registeredWidgets[type]) {
                 widget = new this._registeredWidgets[type](propDesc);
-            } else if (isAsset) {
-                widget = new AssetWidget(propDesc);
             } else if (type === 'number') {
                 widget = new NumberBoxWidget(propDesc);
             } else if (type === 'boolean') {

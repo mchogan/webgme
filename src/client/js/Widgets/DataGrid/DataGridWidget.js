@@ -11,6 +11,7 @@ define([
     'js/Constants',
     'js/Widgets/DataGrid/DataGridWidget.Droppable',
     'text!./templates/DataTableTemplate.html',
+    'jquery-dataTables-bootstrapped',
     'css!./styles/DataGridWidget.css'
 ], function (Logger, util, CONSTANTS, DataGridWidgetDroppable, dataTableTemplate) {
     'use strict';
@@ -586,7 +587,7 @@ define([
         this.onRowDelete(id, aData);
     };
 
-    DataGridWidget.prototype.$_editSaveCancel = $('<i class="glyphicon glyphicon-ok glyphicon glyphicon-ok editSave">' +
+    DataGridWidget.prototype.$_editSaveCancel = $('<i class="glyphicon glyphicon-ok editSave">' +
     '</i> <i class="glyphicon glyphicon-remove editCancel"></i>');
 
     DataGridWidget.prototype._onRowEdit = function (rowIndex, id /*, aData*/) {

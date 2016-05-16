@@ -18,6 +18,13 @@ define([
     var _WebGMEState,
         logger,
         WebGMEStateModel = Backbone.Model.extend({
+
+            /**
+             * Sets the active node to the given id.
+             * N.B. Do NOT call this unless the node is guaranteed to be loaded. Either check that getNode(objId) is
+             * defined or (even better) create a territory and check if the node could be loaded.
+             * @param {string} objId
+             */
             registerActiveObject: function (objId) {
                 objId = objId === 'root' ? '' : objId;
                 logger.debug('registerActiveObject, objId: ', objId);
@@ -38,7 +45,7 @@ define([
             },
 
             registerActiveAspect: function (aspect) {
-                this.set(CONSTANTS.STATE_ACTIVE_ASPECT, aspect);
+                this.set(CONSTANTS.STATE_ACTIVE_ASPECT, aspect, {silent: true});
             },
 
             getActiveAspect: function () {
@@ -62,27 +69,41 @@ define([
             },
 
             registerActiveBranchName: function (branchName) {
-                this.set(CONSTANTS.STATE_ACTIVE_BRANCH_NAME, branchName);
+                var newState = {};
+                newState[CONSTANTS.STATE_ACTIVE_BRANCH_NAME] = branchName;
+                newState[CONSTANTS.STATE_ACTIVE_COMMIT] = null;
+                this.set(newState);
             },
 
             getActiveBranch: function () {
                 return this.get(CONSTANTS.STATE_ACTIVE_BRANCH_NAME);
             },
 
-            registerActiveCommit: function (project) {
-                this.set(CONSTANTS.STATE_ACTIVE_COMMIT, project);
+            registerActiveCommit: function (commitHash) {
+                var newState = {};
+                newState[CONSTANTS.STATE_ACTIVE_BRANCH_NAME] = null;
+                newState[CONSTANTS.STATE_ACTIVE_COMMIT] = commitHash;
+                this.set(newState);
             },
 
             getActiveCommit: function () {
                 return this.get(CONSTANTS.STATE_ACTIVE_COMMIT);
             },
 
-            getIsInitPhase: function () {
-                return this.get(CONSTANTS.STATE_IS_INIT_PHASE);
+            registerActiveTab: function (tab) {
+                this.set(CONSTANTS.STATE_ACTIVE_TAB, parseInt(tab, 10));
             },
 
-            setIsInitPhase: function (initPhase) {
-                return this.set(CONSTANTS.STATE_IS_INIT_PHASE, initPhase);
+            getActiveTab: function () {
+                return this.get(CONSTANTS.STATE_ACTIVE_TAB);
+            },
+
+            registerSuppressVisualizerFromNode: function (trueOrFalse) {
+                this.set(CONSTANTS.STATE_SUPPRESS_VISUALIZER_FROM_NODE, trueOrFalse);
+            },
+
+            getSuppressVisualizerFromNode: function () {
+                return this.get(CONSTANTS.STATE_SUPPRESS_VISUALIZER_FROM_NODE);
             }
 
         }),
@@ -92,6 +113,8 @@ define([
                 logger = Logger.create('gme:Utils:StateManager', WebGMEGlobal.gmeConfig.client.log);
                 _WebGMEState = new WebGMEStateModel();
                 _WebGMEState.registerActiveAspect(CONSTANTS.ASPECT_ALL);
+                _WebGMEState.registerSuppressVisualizerFromNode(false);
+                //_WebGMEState.registerActiveTab('0');
                 _WebGMEState.on('change', function (model, options) {
                     logger.debug('', model, options);
                 });
@@ -99,7 +122,6 @@ define([
 
             return _WebGMEState;
         };
-
 
     //return utility functions
     return {

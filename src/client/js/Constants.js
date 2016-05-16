@@ -6,7 +6,11 @@
  * @author rkereskenyi / https://github.com/rkereskenyi
  */
 
-define(['underscore', 'common/Constants'], function (underscore, COMMON_CONSTANTS) {
+define([
+    'underscore',
+    'common/Constants',
+    'js/client/constants'
+], function (underscore, COMMON_CONSTANTS, CLIENT_CONSTANTS) {
 
     'use strict';
 
@@ -40,6 +44,7 @@ define(['underscore', 'common/Constants'], function (underscore, COMMON_CONSTANT
             PATTERNS: {
                 SOLID: '',
                 DASH: '-',
+                LONGDASH: '- ',
                 DOT: '.',
                 DASH_DOT: '-.',
                 DASH_DOT_DOT: '-..'
@@ -78,7 +83,8 @@ define(['underscore', 'common/Constants'], function (underscore, COMMON_CONSTANT
         STATE_ACTIVE_COMMIT: 'activeCommit',
         STATE_ACTIVE_BRANCH_NAME: 'activeBranchName',
         STATE_ACTIVE_CROSSCUT: 'activeCrosscut',
-        STATE_IS_INIT_PHASE: 'isInitPhase',
+        STATE_ACTIVE_TAB: 'activeTab',
+        STATE_SUPPRESS_VISUALIZER_FROM_NODE: 'suppressVisualizerFromNode',
 
         /* ASPECTS */
         ASPECT_ALL: 'All',
@@ -87,9 +93,13 @@ define(['underscore', 'common/Constants'], function (underscore, COMMON_CONSTANT
         PROPERTY_GROUP_META: 'META',
         PROPERTY_GROUP_PREFERENCES: 'Preferences',
         PROPERTY_GROUP_ATTRIBUTES: 'Attributes',
-        PROPERTY_GROUP_POINTERS: 'Pointers'
+        PROPERTY_GROUP_POINTERS: 'Pointers',
+
+        /* Visualizer */
+        DEFAULT_VISUALIZER: 'ModelEditor'
     });
 
+    clientConstants.CLIENT = CLIENT_CONSTANTS;
 
     return clientConstants;
 });

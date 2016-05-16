@@ -13,8 +13,7 @@ define(['js/logger',
     'js/Constants',
     'js/Utils/DisplayFormat',
     'js/Dialogs/DecoratorSVGExplorer/DecoratorSVGExplorerDialog',
-    'js/Controls/PropertyGrid/PropertyGridWidgets',
-    './PointerWidget'
+    'js/Controls/PropertyGrid/PropertyGridWidgets'
 ], function (Logger,
              util,
              nodePropertyNames,
@@ -22,12 +21,12 @@ define(['js/logger',
              CONSTANTS,
              displayFormat,
              DecoratorSVGExplorerDialog,
-             PropertyGridWidgets,
-             PointerWidget) {
+             PROPERTY_GRID_WIDGETS) {
 
     'use strict';
 
     var PropertyEditorController,
+        NO_COMMON_VALUE_COLOR = '#f89406',
         META_REGISTRY_KEYS = [
             REGISTRY_KEYS.IS_PORT,
             REGISTRY_KEYS.IS_ABSTRACT,
@@ -39,13 +38,16 @@ define(['js/logger',
         PREFERENCES_REGISTRY_KEYS = [REGISTRY_KEYS.DECORATOR,
             REGISTRY_KEYS.DISPLAY_FORMAT,
             REGISTRY_KEYS.SVG_ICON,
+            REGISTRY_KEYS.TREE_ITEM_COLLAPSED_ICON,
+            REGISTRY_KEYS.TREE_ITEM_EXPANDED_ICON,
+            REGISTRY_KEYS.SVG_ICON,
             REGISTRY_KEYS.PORT_SVG_ICON],
+        NON_INVALID_PTRS = [CONSTANTS.POINTER_BASE];
 
-        NON_RESETABLE_POINTRS = [CONSTANTS.POINTER_BASE, CONSTANTS.POINTER_SOURCE, CONSTANTS.POINTER_TARGET];
-
-    PropertyEditorController = function (client, propertyGrid) {
+    PropertyEditorController = function (client, propertyGrid, type) {
         this._client = client;
         this._propertyGrid = propertyGrid;
+        this._type = type || null; // CONSTANTS.PROPERTY_GROUP_ATTRIBUTES ...
         this._logger = Logger.create('gme:Panels:PropertyEditor:PropertyEditorController',
             WebGMEGlobal.gmeConfig.client.log);
         //it should be sorted alphabetically
@@ -66,19 +68,10 @@ define(['js/logger',
             self._logger.debug('activeSelection changed', activeSelection);
             var activeNodeId = WebGMEGlobal.State.getActiveObject();
             if (activeSelection && activeSelection.length > 0) {
-                if (activeSelection.length === 1) {
-                    //https://github.com/webgme/webgme/issues/326
-                    if (self.startsWith(activeSelection[0], activeNodeId)) {
-                        self._selectedObjectsChanged(activeSelection);
-                    } else {
-                        self._logger.debug('Selected node is not a child or the activeNode', activeNodeId,
-                            activeSelection[0]);
-                    }
-                } else {
-                    self._selectedObjectsChanged(activeSelection);
-                }
+                self._selectedObjectsChanged(activeSelection);
             } else {
                 self._selectObjectsUsingActiveObject(activeNodeId);
+
             }
         });
 
@@ -134,13 +127,16 @@ define(['js/logger',
     PropertyEditorController.prototype._refreshPropertyList = function () {
         var propList = this._getCommonPropertiesForSelection(this._idList);
         this._logger.debug('propList', this._idList, propList);
+        this._initializeReadOnlyForSelection(this._idList);
         this._propertyGrid.setPropertyList(propList);
     };
 
     PropertyEditorController.prototype._getCommonPropertiesForSelection = function (selectedObjIDs) {
-        var propList = {},
+        var self = this,
+            propList = {},
             selectionLength = selectedObjIDs.length,
             cNode,
+            metaTypeId,
             i,
             flattenedAttrs,
             flattenedPreferences,
@@ -150,21 +146,10 @@ define(['js/logger',
             commonPreferences = {},
             commonMeta = {},
             commonPointers = {},
-            noCommonValueColor = '#f89406',
-            _getNodeAttributeValues, //fn
-            _getNodeRegistryValues, //fn
-            _filterCommon, //fn
-            _addItemsToResultList,  //fn
-            _getPointerInfo,
             commonAttrMeta = {},
-            buildCommonAttrMeta,     //fn
-            _client = this._client,
-            _isResetableAttribute,
-            _isResetableRegistry,
-            _isResetablePointer,
-            rootNode = _client.getNode(CONSTANTS.PROJECT_ROOT_ID),
+            rootNode = this._client.getNode(CONSTANTS.PROJECT_ROOT_ID),
             validDecorators = null,
-            decoratorNames = _client.getAvailableDecoratorNames();
+            decoratorNames = WebGMEGlobal.allDecorators;
 
         if (rootNode && rootNode.getRegistry(REGISTRY_KEYS.VALID_DECORATORS)) {
             validDecorators = rootNode.getRegistry(REGISTRY_KEYS.VALID_DECORATORS).split(' ');
@@ -178,6 +163,7 @@ define(['js/logger',
                 this._logger.warn('rootNode was not avaliable');
             }
         }
+
         decoratorNames.sort(function (a, b) {
             if (a.toLowerCase() < b.toLowerCase()) {
                 return -1;
@@ -186,452 +172,628 @@ define(['js/logger',
             }
         });
 
-        _getNodeAttributeValues = function (node) {
-            var result = {},
-                attrNames = node.getAttributeNames(),
-                len = attrNames.length;
+        if (selectedObjIDs.length === 0) {
+            return propList;
+        }
 
-            while (--len >= 0) {
-                result[attrNames[len]] = node.getAttribute(attrNames[len]);
+        //get all attributes
+        //get all registry elements
+        i = selectionLength;
+        while (--i >= 0) {
+            cNode = this._client.getNode(selectedObjIDs[i]);
+
+            if (cNode) {
+                flattenedAttrs = this._getNodeAttributeValues(cNode);
+                this._buildCommonAttrMeta(commonAttrMeta, cNode, i === selectionLength - 1);
+                this._filterCommon(commonAttrMeta, commonAttrs, flattenedAttrs, i === selectionLength - 1);
+
+                flattenedPreferences = this._getNodeRegistryValues(cNode, PREFERENCES_REGISTRY_KEYS);
+                this._filterCommon(commonAttrMeta, commonPreferences, flattenedPreferences,
+                    i === selectionLength - 1);
+
+                flattenedMeta = this._getNodeRegistryValues(cNode, META_REGISTRY_KEYS);
+                this._filterCommon(commonAttrMeta, commonMeta, flattenedMeta, i === selectionLength - 1);
+
+                flattenedPointers = self._getPointerInfo(cNode);
+                this._filterCommon(commonAttrMeta, commonPointers, flattenedPointers, i === selectionLength - 1);
             }
+        }
 
-            return util.flattenObject(result);
-        };
-
-        _getNodeRegistryValues = function (node, registryNames) {
-            var result = {},
-                len = registryNames.length;
-
-            while (--len >= 0) {
-                result[registryNames[len]] = node.getRegistry(registryNames[len]);
-            }
-
-            return util.flattenObject(result);
-        };
-
-        _filterCommon = function (resultList, otherList, initPhase) {
-            var it;
-
-            if (initPhase === true) {
-                for (it in otherList) {
-                    if (otherList.hasOwnProperty(it)) {
-                        if (commonAttrMeta.hasOwnProperty(it)) {
-                            resultList[it] = {
-                                value: otherList[it],
-                                valueType: commonAttrMeta[it].type,
-                                isCommon: true
-                            };
-                        } else {
-                            resultList[it] = {
-                                value: otherList[it],
-                                valueType: typeof otherList[it],
-                                isCommon: true
-                            };
-                        }
-                    }
-                }
-            } else {
-                for (it in resultList) {
-                    if (resultList.hasOwnProperty(it)) {
-                        if (otherList.hasOwnProperty(it)) {
-                            if (resultList[it].isCommon) {
-                                resultList[it].isCommon = resultList[it].value === otherList[it];
-                            }
-                        } else {
-                            delete resultList[it];
-                        }
-                    }
-                }
-            }
-        };
-
-        _getPointerInfo = function (node) {
-            var result = {},
-                availablePointers = node.getPointerNames(),
-                len = availablePointers.length,
-                ptrTo;
-
-            while (len--) {
-                ptrTo = node.getPointer(availablePointers[len]).to;
-                result[availablePointers[len]] = ptrTo || '';
-            }
-
-            return util.flattenObject(result);
-        };
-
-        buildCommonAttrMeta = function (node, initPhase) {
-            var nodeId = node.getId(),
-                nodeAttributeNames = _client.getValidAttributeNames(nodeId) || [],
-                len = nodeAttributeNames.length,
-                attrMetaDescriptor,
-                attrName,
-                isCommon,
-                commonEnumValues,
-                isEnumCommon,
-                isEnumAttrMeta;
-
-            //first delete the ones from the common that does not exist in this node
-            for (attrName in commonAttrMeta) {
-                if (commonAttrMeta.hasOwnProperty(attrName)) {
-                    if (nodeAttributeNames.indexOf(attrName) === -1) {
-                        delete commonAttrMeta[attrName];
-                    }
-                }
-            }
-
-            //for the remaining list check if still common
-            //common: type is the same
-            //if type is enum, the common types should be the intersection of the individual enum types
-            while (len--) {
-                attrName = nodeAttributeNames[len];
-                attrMetaDescriptor = _client.getAttributeSchema(nodeId, attrName);
-                if (commonAttrMeta.hasOwnProperty(attrName)) {
-                    isCommon = true;
-                    //this attribute already exist in the attribute meta map
-                    //let's see if it is still common
-                    if (attrMetaDescriptor) {
-                        if (commonAttrMeta[attrName].type === attrMetaDescriptor.type) {
-                            isEnumCommon = commonAttrMeta[attrName].enum && commonAttrMeta[attrName].enum.length > 0;
-                            isEnumAttrMeta = attrMetaDescriptor.enum && attrMetaDescriptor.enum.length > 0;
-                            if (isEnumCommon && isEnumAttrMeta) {
-                                //same type, both enum
-                                //get the intersection of the enum values
-                                commonEnumValues = _.intersection(commonAttrMeta[attrName].enum,
-                                    attrMetaDescriptor.enum);
-
-                                if (commonEnumValues.length !== commonAttrMeta[attrName].enum.length) {
-                                    if (commonEnumValues.length === 0) {
-                                        //0 common enum values, can not consider common attribute anymore
-                                        isCommon = false;
-                                    } else {
-                                        //has common values but less than before
-                                        //store the new common values
-                                        commonAttrMeta[attrName].enum = commonEnumValues.slice(0);
-                                    }
-                                }
-                            } else {
-                                //not both are enum
-                                //if only one is enum --> not common anymore
-                                //if both are not enum --> still common
-                                if (!(!isEnumCommon && !isEnumAttrMeta)) {
-                                    isCommon = false;
-                                }
-                            }
-                        } else {
-                            //different types, for sure it's not common anymore
-                            isCommon = false;
-                        }
-                    } else {
-                        //node meta descriptor in this node
-                        //it's not common then
-                        //NOTE: it should never happen probably
-                        isCommon = false;
-                    }
-
-                    //if not common, delete it from attribute map
-                    if (!isCommon) {
-                        delete commonAttrMeta[attrName];
-                    }
-                } else {
-                    //no entry for this attribute
-                    //in init phase, create entry
-                    if (initPhase) {
-                        if (attrMetaDescriptor) {
-                            commonAttrMeta[attrName] = {};
-                            _.extend(commonAttrMeta[attrName], attrMetaDescriptor);
-                        }
-                    }
-                }
-            }
-        };
-
-        if (selectionLength > 0) {
-            //get all attributes
-            //get all registry elements
-            i = selectionLength;
-            while (--i >= 0) {
-                cNode = this._client.getNode(selectedObjIDs[i]);
-
-                if (cNode) {
-                    flattenedAttrs = _getNodeAttributeValues(cNode);
-                    buildCommonAttrMeta(cNode, i === selectionLength - 1);
-                    _filterCommon(commonAttrs, flattenedAttrs, i === selectionLength - 1);
-
-                    flattenedPreferences = _getNodeRegistryValues(cNode, PREFERENCES_REGISTRY_KEYS);
-                    _filterCommon(commonPreferences, flattenedPreferences, i === selectionLength - 1);
-
-                    flattenedMeta = _getNodeRegistryValues(cNode, META_REGISTRY_KEYS);
-                    _filterCommon(commonMeta, flattenedMeta, i === selectionLength - 1);
-
-                    flattenedPointers = _getPointerInfo(cNode);
-                    _filterCommon(commonPointers, flattenedPointers, i === selectionLength - 1);
-                }
-            }
-
-            _isResetableAttribute = function (attrName) {
-                var resetable = true,
-                    i = selectionLength,
-                    ownAttrNames,
-                    baseNode;
-
-                while (i--) {
-                    cNode = _client.getNode(selectedObjIDs[i]);
-
-                    if (cNode) {
-                        //get parentnode
-                        baseNode = _client.getNode(cNode.getBaseId());
-
-                        //get own attribute names
-                        ownAttrNames = cNode.getOwnAttributeNames();
-
-                        if (ownAttrNames.indexOf(attrName) !== -1) {
-                            //there are 1 options:
-                            //#1: the attribute is defined on this level, and that's why it is in the onwAttributeNames
-                            //#2: the attribute is inherited and overridden on this level
-                            //      (but defined somewhere up in the hierarchy)
-                            if (baseNode) {
-                                resetable = baseNode.getAttributeNames().indexOf(attrName) !== -1;
-                            } else {
-                                resetable = false;
-                            }
-                        } else {
-                            resetable = false;
-                        }
-                    }
-
-                    if (!resetable) {
-                        break;
-                    }
-                }
-
-                return resetable;
+        if (selectedObjIDs.length === 1) {
+            propList[' ID'] = {
+                name: 'ID',
+                value: selectedObjIDs[0],
+                valueType: typeof selectedObjIDs[0],
+                isCommon: true,
+                readOnly: true
             };
 
-            _isResetableRegistry = function (regName) {
-                var resetable = true,
-                    i = selectionLength,
-                    ownRegistryNames,
-                    baseNode;
-
-                while (i--) {
-                    cNode = _client.getNode(selectedObjIDs[i]);
-
-                    if (cNode) {
-                        //get parentnode
-                        baseNode = _client.getNode(cNode.getBaseId());
-
-                        //get own registry names
-                        ownRegistryNames = cNode.getOwnRegistryNames();
-
-                        if (ownRegistryNames.indexOf(regName) !== -1) {
-                            //there are 1 options:
-                            //#1: the registry is defined on this level, and that's why it is in the ownRegistryNames
-                            //#2: the registry is inherited and overridden on this level
-                            //      (but defined somewhere up in the hierarchy)
-                            if (baseNode) {
-                                resetable = baseNode.getRegistryNames().indexOf(regName) !== -1;
-                            } else {
-                                resetable = false;
-                            }
-                        } else {
-                            resetable = false;
-                        }
-                    }
-
-                    if (!resetable) {
-                        break;
-                    }
-                }
-
-                return resetable;
-            };
-
-            _isResetablePointer = function (pointerName) {
-                var resetable = true,
-                    i = selectionLength,
-                    ownPointerNames,
-                    baseNode;
-
-                while (i--) {
-                    cNode = _client.getNode(selectedObjIDs[i]);
-
-                    if (cNode) {
-                        //get parentnode
-                        baseNode = _client.getNode(cNode.getBaseId());
-
-                        //get own registry names
-                        ownPointerNames = cNode.getOwnPointerNames();
-
-                        if (ownPointerNames.indexOf(pointerName) !== -1) {
-                            //there are 1 options:
-                            //#1: the registry is defined on this level, and that's why it is in the ownRegistryNames
-                            //#2: the registry is inherited and overridden on this level
-                            //      (but defined somewhere up in the hierarchy)
-                            if (baseNode) {
-                                resetable = baseNode.getPointerNames().indexOf(pointerName) !== -1;
-                            } else {
-                                resetable = false;
-                            }
-                        } else {
-                            resetable = false;
-                        }
-                    }
-
-                    if (!resetable) {
-                        break;
-                    }
-                }
-
-                return resetable;
-            };
-
-            _addItemsToResultList = function (srcList, prefix, dstList, isAttribute, isRegistry, isPointer) {
-                var i,
-                    extKey,
-                    keyParts,
-                    doDisplay;
-
-                if (prefix !== '') {
-                    prefix += '.';
-                }
-
-                for (i in srcList) {
-                    if (srcList.hasOwnProperty(i)) {
-
-
-                        doDisplay = !(isAttribute && !commonAttrMeta.hasOwnProperty(i));
-
-                        if (doDisplay) {
-                            extKey = prefix + i;
-                            keyParts = i.split('.');
-
-                            dstList[extKey] = {
-                                name: keyParts[keyParts.length - 1],
-                                value: srcList[i].value,
-                                valueType: srcList[i].valueType,
-                                options: srcList[i].options
-                            };
-
-                            if (i === 'position.x' || i === 'position.y') {
-                                dstList[extKey].minValue = 0;
-                                dstList[extKey].stepValue = 10;
-                            }
-
-                            if (srcList[i].readOnly === false || srcList[i].readOnly === true) {
-                                dstList[extKey].readOnly = srcList[i].readOnly;
-                            }
-
-                            if (srcList[i].isCommon === false) {
-                                dstList[extKey].value = '';
-                                dstList[extKey].options = {textColor: noCommonValueColor};
-                            }
-
-                            //is it inherited??? if so, it can be reseted to the inherited value
-                            if (isAttribute && _isResetableAttribute(keyParts[0]) ||
-                                isRegistry && _isResetableRegistry(keyParts[0])) {
-                                dstList[extKey].options = dstList[extKey].options || {};
-                                dstList[extKey].options.resetable = true;
-                            }
-
-                            if (isPointer &&
-                                NON_RESETABLE_POINTRS.indexOf(keyParts[0]) === -1 &&
-                                _isResetablePointer(keyParts[0])) {
-                                dstList[extKey].options = dstList[extKey].options || {};
-                                dstList[extKey].options.resetable = true;
-                            }
-
-                            //decorator value should be rendered as an option list
-                            if (i === REGISTRY_KEYS.DECORATOR) {
-                                //dstList[extKey].valueType = "option";
-                                //TODO: only the decorators for DiagramDesigner are listed so far, needs to be fixed...
-                                dstList[extKey].valueItems = decoratorNames;
-                            }
-
-                            //if the attribute value is an enum, display the enum values
-                            if (isAttribute && commonAttrMeta[i].enum && commonAttrMeta[i].enum.length > 0) {
-                                dstList[extKey].valueItems = commonAttrMeta[i].enum.slice(0);
-                                dstList[extKey].valueItems.sort();
-                            }
-
-                            //if it is the SVG decorator's SVG Icon name
-                            //list the
-                            if (i === REGISTRY_KEYS.SVG_ICON ||
-                                i === REGISTRY_KEYS.PORT_SVG_ICON) {
-                                dstList[extKey].widget = PropertyGridWidgets.DIALOG_WIDGET;
-                                dstList[extKey].dialog = DecoratorSVGExplorerDialog;
-                            }
-
-                            //pointers have a custom widget that allows following the pointer
-                            if (isPointer === true) {
-                                dstList[extKey].widget = PointerWidget;
-                                //add custom widget specific values
-                                dstList[extKey].client = _client;
-                            }
-                        }
-                    }
-                }
-            };
-
-            if (selectedObjIDs.length === 1) {
-                propList[' ID'] = {
-                    name: 'ID',
-                    value: selectedObjIDs[0],
+            cNode = self._client.getNode(selectedObjIDs[0]);
+            if (cNode) {
+                propList[' GUID'] = {
+                    name: 'GUID',
+                    value: cNode.getGuid(),
                     valueType: typeof selectedObjIDs[0],
                     isCommon: true,
                     readOnly: true
                 };
 
-                cNode = _client.getNode(selectedObjIDs[0]);
-                if (cNode) {
-                    propList[' GUID'] = {
-                        name: 'GUID',
-                        value: cNode.getGuid(),
+                if (cNode.isLibraryElement()) {
+                    propList[' GUIDl'] = {
+                        name: 'GUID (library)',
+                        value: cNode.getLibraryGuid(),
                         valueType: typeof selectedObjIDs[0],
                         isCommon: true,
                         readOnly: true
                     };
+                };
+
+                metaTypeId = cNode.getMetaTypeId();
+                if (metaTypeId) {
+                    propList[' Meta Type'] = {
+                        name: 'Meta type',
+                        value: metaTypeId,
+                        isCommon: true,
+                        widget: PROPERTY_GRID_WIDGETS.META_TYPE_WIDGET,
+                        client: self._client
+                    };
                 }
             }
+        }
 
+        if (self._type === null || self._type === CONSTANTS.PROPERTY_GROUP_ATTRIBUTES) {
             propList[CONSTANTS.PROPERTY_GROUP_ATTRIBUTES] = {
                 name: CONSTANTS.PROPERTY_GROUP_ATTRIBUTES,
                 text: CONSTANTS.PROPERTY_GROUP_ATTRIBUTES,
-                value: undefined
+                value: undefined,
+                isFolder: true
             };
 
+            this._addItemsToResultList(selectedObjIDs, commonAttrMeta, decoratorNames,
+                commonAttrs, CONSTANTS.PROPERTY_GROUP_ATTRIBUTES, propList, true, false, false);
+        }
+
+        if (self._type === null || self._type === CONSTANTS.PROPERTY_GROUP_PREFERENCES) {
             propList[CONSTANTS.PROPERTY_GROUP_PREFERENCES] = {
                 name: CONSTANTS.PROPERTY_GROUP_PREFERENCES,
                 text: CONSTANTS.PROPERTY_GROUP_PREFERENCES,
-                value: undefined
+                value: undefined,
+                isFolder: true
             };
 
+            this._addItemsToResultList(selectedObjIDs, commonAttrMeta, decoratorNames,
+                commonPreferences, CONSTANTS.PROPERTY_GROUP_PREFERENCES, propList, false, true, false);
+        }
+
+        if (self._type === null || self._type === CONSTANTS.PROPERTY_GROUP_META) {
             propList[CONSTANTS.PROPERTY_GROUP_META] = {
                 name: CONSTANTS.PROPERTY_GROUP_META,
                 text: CONSTANTS.PROPERTY_GROUP_META,
-                value: undefined
+                value: undefined,
+                isFolder: true
             };
 
+            this._addItemsToResultList(selectedObjIDs, commonAttrMeta, decoratorNames,
+                commonMeta, CONSTANTS.PROPERTY_GROUP_META, propList, false, true, false);
+        }
+
+        if (self._type === null || self._type === CONSTANTS.PROPERTY_GROUP_POINTERS) {
             propList[CONSTANTS.PROPERTY_GROUP_POINTERS] = {
                 name: CONSTANTS.PROPERTY_GROUP_POINTERS,
                 text: CONSTANTS.PROPERTY_GROUP_POINTERS,
-                value: undefined
+                value: undefined,
+                isFolder: true
             };
 
-            _addItemsToResultList(commonAttrs, CONSTANTS.PROPERTY_GROUP_ATTRIBUTES, propList, true, false, false);
-
-            _addItemsToResultList(commonPreferences,
-                CONSTANTS.PROPERTY_GROUP_PREFERENCES,
-                propList,
-                false,
-                true,
-                false);
-
-            _addItemsToResultList(commonMeta, CONSTANTS.PROPERTY_GROUP_META, propList, false, true, false);
-
-            _addItemsToResultList(commonPointers, CONSTANTS.PROPERTY_GROUP_POINTERS, propList, false, false, true);
+            this._addItemsToResultList(selectedObjIDs, commonAttrMeta, decoratorNames,
+                commonPointers, CONSTANTS.PROPERTY_GROUP_POINTERS, propList, false, false, true);
         }
 
         return propList;
+    };
+
+    PropertyEditorController.prototype._addItemsToResultList = function (selectedObjIDs, commonAttrMeta, decoratorNames,
+                                                                         src, prefix, dst,
+                                                                         isAttribute, isRegistry, isPointer) {
+        var onlyRootSelected = selectedObjIDs.length === 1 && selectedObjIDs[0] === CONSTANTS.PROJECT_ROOT_ID,
+            keys = Object.keys(src),
+            key,
+            range,
+            i,
+            extKey,
+            keyParts;
+
+        if (prefix !== '') {
+            prefix += '.';
+        }
+
+        for (i = 0; i < keys.length; i += 1) {
+            key = keys[i];
+
+            if (isAttribute) {
+                if (commonAttrMeta.hasOwnProperty(key) === false) {
+                    continue;
+                }
+            }
+
+            extKey = prefix + key;
+            keyParts = key.split('.');
+
+            dst[extKey] = {
+                name: keyParts[keyParts.length - 1],
+                value: src[key].value,
+                valueType: src[key].valueType,
+                options: src[key].options
+            };
+
+            if (key === 'position.x' || key === 'position.y') {
+                dst[extKey].minValue = 0;
+                dst[extKey].stepValue = 10;
+            }
+
+            if (src[key].readOnly === false || src[key].readOnly === true) {
+                dst[extKey].readOnly = src[key].readOnly;
+            }
+
+            if (src[key].isCommon === false) {
+                dst[extKey].value = '';
+                dst[extKey].options = {textColor: NO_COMMON_VALUE_COLOR};
+            }
+
+            if (isAttribute === true) {
+                //is it inherited??? if so, it can be reseted to the inherited value
+                if (this._isResettableAttribute(selectedObjIDs, keyParts[0])) {
+                    dst[extKey].options = dst[extKey].options || {};
+                    dst[extKey].options.resetable = true;
+                }
+
+                //if it is an attribute it might be invalid according the current meta rules
+                if (this._isInvalidAttribute(selectedObjIDs, keyParts[0])) {
+                    dst[extKey].options = dst[extKey].options || {};
+                    dst[extKey].options.invalid = true;
+                }
+
+                //if the attribute value is an enum, display the enum values
+                if (commonAttrMeta[key].enum && commonAttrMeta[key].enum.length > 0) {
+                    dst[extKey].valueItems = commonAttrMeta[key].enum.slice(0);
+                    dst[extKey].valueItems.sort();
+                }
+
+                // Get the min max for floats and integers
+                if (dst[extKey].valueType === 'float' || dst[extKey].valueType === 'integer') {
+                    range = this._getAttributeRange(selectedObjIDs, keyParts[0]);
+                    dst[extKey].minValue = range.min;
+                    dst[extKey].maxValue = range.max;
+                }
+            } else if (isRegistry === true) {
+                //is it inherited??? if so, it can be reseted to the inherited value
+                if (this._isResettableRegistry(selectedObjIDs, keyParts[0])) {
+                    dst[extKey].options = dst[extKey].options || {};
+                    dst[extKey].options.resetable = true;
+                }
+
+                if (prefix === CONSTANTS.PROPERTY_GROUP_PREFERENCES + '.') {
+                    if (onlyRootSelected === false) {
+                        //decorator value should be rendered as an option list
+                        if (key === REGISTRY_KEYS.DECORATOR) {
+                            //dstList[extKey].valueType = "option";
+                            //FIXME: only the decorators for DiagramDesigner are listed so far
+                            dst[extKey].valueItems = decoratorNames;
+                        } else if (key === REGISTRY_KEYS.SVG_ICON || key === REGISTRY_KEYS.PORT_SVG_ICON ||
+                            key === REGISTRY_KEYS.TREE_ITEM_COLLAPSED_ICON ||
+                            key === REGISTRY_KEYS.TREE_ITEM_EXPANDED_ICON) {
+
+                            dst[extKey].widget = PROPERTY_GRID_WIDGETS.DIALOG_WIDGET;
+                            dst[extKey].dialog = DecoratorSVGExplorerDialog;
+                            dst[extKey].value = dst[extKey].value === undefined ?
+                                '' : dst[extKey].value;
+                        }
+                    } else {
+                        if (key === REGISTRY_KEYS.TREE_ITEM_COLLAPSED_ICON ||
+                            key === REGISTRY_KEYS.TREE_ITEM_EXPANDED_ICON) {
+                            dst[extKey].widget = PROPERTY_GRID_WIDGETS.DIALOG_WIDGET;
+                            dst[extKey].dialog = DecoratorSVGExplorerDialog;
+                            dst[extKey].value = dst[extKey].value === undefined ?
+                                '' : dst[extKey].value;
+                        }
+                    }
+                } else if (prefix === CONSTANTS.PROPERTY_GROUP_META + '.') {
+                    if (key === REGISTRY_KEYS.VALID_VISUALIZERS) {
+                        dst[extKey].value = dst[extKey].value === undefined ?
+                            '' : dst[extKey].value;
+                        dst[extKey].regex = '/[^\w\W]/';
+                        dst[extKey].regexMessage = this._getHintMessage('Visualizers');
+                    } else if (key === REGISTRY_KEYS.VALID_PLUGINS) {
+                        dst[extKey].value = dst[extKey].value === undefined ?
+                            '' : dst[extKey].value;
+                        dst[extKey].valueItems = WebGMEGlobal.allPlugins;
+                        dst[extKey].widget = PROPERTY_GRID_WIDGETS.MULTI_SELECT_WIDGET;
+                    } else if (onlyRootSelected) {
+                        if (key === REGISTRY_KEYS.VALID_DECORATORS) {
+                            dst[extKey].value = dst[extKey].value === undefined ?
+                                '' : dst[extKey].value;
+                            dst[extKey].valueItems = WebGMEGlobal.allDecorators;
+                            dst[extKey].widget = PROPERTY_GRID_WIDGETS.MULTI_SELECT_WIDGET;
+                        } else if (key === REGISTRY_KEYS.USED_ADDONS) {
+                            dst[extKey].value = dst[extKey].value === undefined ?
+                                '' : dst[extKey].value;
+                            dst[extKey].valueItems = WebGMEGlobal.allAddOns;
+                            dst[extKey].widget = PROPERTY_GRID_WIDGETS.MULTI_SELECT_WIDGET;
+                        }
+                    }
+                }
+            } else if (isPointer === true) {
+                if (NON_INVALID_PTRS.indexOf(keyParts[0]) === -1 &&
+                    this._isResettablePointer(selectedObjIDs, keyParts[0])) {
+                    //what is non_invalid, cannot be reset
+                    dst[extKey].options = dst[extKey].options || {};
+                    dst[extKey].options.resetable = true;
+                }
+
+                if (this._isInvalidPointer(selectedObjIDs, keyParts[0])) {
+                    dst[extKey].options = dst[extKey].options || {};
+                    dst[extKey].options.invalid = true;
+                }
+
+                //pointers have a custom widget that allows following the pointer
+                dst[extKey].widget = PROPERTY_GRID_WIDGETS.POINTER_WIDGET;
+                //add custom widget specific values
+                dst[extKey].client = this._client;
+            }
+            if (dst[extKey].value === undefined) {
+                delete dst[extKey];
+            }
+        }
+    };
+
+    PropertyEditorController.prototype._getNodeAttributeValues = function (node) {
+        var result = {},
+            attrNames = _.union(node.getAttributeNames() || [], node.getValidAttributeNames() || []),
+            len = attrNames.length;
+
+        while (--len >= 0) {
+            result[attrNames[len]] = node.getAttribute(attrNames[len]) || '';
+        }
+
+        return util.flattenObject(result);
+    };
+
+    PropertyEditorController.prototype._getNodeRegistryValues = function (node, registryNames) {
+        var result = {},
+            len = registryNames.length;
+
+        while (--len >= 0) {
+            result[registryNames[len]] = node.getRegistry(registryNames[len]);
+        }
+
+        return util.flattenObject(result);
+    };
+
+    PropertyEditorController.prototype._getPointerInfo = function (node) {
+        var result = {},
+            availablePointers = node.getPointerNames(),
+            len = availablePointers.length,
+            ptrTo;
+
+        while (len--) {
+            ptrTo = node.getPointer(availablePointers[len]).to;
+            ptrTo = ptrTo === null ? CONSTANTS.CORE.NULLPTR_RELID : ptrTo;
+            result[availablePointers[len]] = ptrTo || '';
+        }
+
+        return util.flattenObject(result);
+    };
+
+    PropertyEditorController.prototype._isInvalidAttribute = function (selectedObjIDs, attrName) {
+        var i = selectedObjIDs.length,
+            node,
+            validNames;
+
+        while (i--) {
+            node = this._client.getNode(selectedObjIDs[i]);
+            if (node) {
+                validNames = node.getValidAttributeNames();
+
+                if (validNames.indexOf(attrName) !== -1) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    };
+
+    PropertyEditorController.prototype._getAttributeRange = function (selectedObjIDs, attrName) {
+        var i = selectedObjIDs.length,
+            range = {},
+            schema;
+
+        while (i--) {
+            schema = this._client.getAttributeSchema(selectedObjIDs[i], attrName);
+            if (schema.hasOwnProperty('min')) {
+                if (range.hasOwnProperty('min')) {
+                    range.min = schema.min > range.min ? schema.min : range.min;
+                } else {
+                    range.min = schema.min;
+                }
+            }
+
+            if (schema.hasOwnProperty('max')) {
+                if (range.hasOwnProperty('max')) {
+                    range.max = schema.max < range.max ? schema.max : range.max;
+                } else {
+                    range.max = schema.max;
+                }
+            }
+        }
+
+        return range;
+    };
+
+    PropertyEditorController.prototype._isInvalidPointer = function (selectedObjIDs, pointerName) {
+        var i = selectedObjIDs.length,
+            node,
+            validNames;
+
+        while (i--) {
+            node = this._client.getNode(selectedObjIDs[i]);
+            if (node) {
+                validNames = node.getValidPointerNames();
+
+                if (validNames.indexOf(pointerName) !== -1 || NON_INVALID_PTRS.indexOf(pointerName) !== -1) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    };
+
+    PropertyEditorController.prototype._isResettableRegistry = function (selectedObjIDs, regName) {
+        var i = selectedObjIDs.length,
+            ownRegistryNames,
+            baseRegistryNames,
+            node,
+            baseNode;
+
+        while (i--) {
+            node = this._client.getNode(selectedObjIDs[i]);
+
+            if (node) {
+                baseNode = this._client.getNode(node.getBaseId());
+                ownRegistryNames = node.getOwnRegistryNames();
+                baseRegistryNames = baseNode === null ? [] : baseNode.getRegistryNames();
+
+                if (ownRegistryNames.indexOf(regName) === -1) {
+                    return false;
+                }
+
+                if (baseRegistryNames.indexOf(regName) === -1) {
+                    return false;
+                }
+
+            }
+        }
+        return true;
+    };
+
+    PropertyEditorController.prototype._isResettableAttribute = function (selectedObjIDs, attrName) {
+        var i = selectedObjIDs.length,
+            ownAttrNames,
+            validNames,
+            baseValidNames,
+            node,
+            baseNode;
+
+        while (i--) {
+            node = this._client.getNode(selectedObjIDs[i]);
+
+            if (node) {
+                baseNode = this._client.getNode(node.getBaseId());
+                validNames = this._client.getValidAttributeNames(selectedObjIDs[i]);
+                baseValidNames = baseNode === null ? [] : this._client.getValidAttributeNames(baseNode.getId());
+                ownAttrNames = node.getOwnAttributeNames();
+
+                if (ownAttrNames.indexOf(attrName) === -1) {
+                    return false;
+                }
+
+                if (baseValidNames.indexOf(attrName) === -1 && validNames.indexOf(attrName) !== -1) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    };
+
+    PropertyEditorController.prototype._isResettablePointer = function (selectedObjIDs, pointerName) {
+        var i = selectedObjIDs.length,
+            ownPointerNames,
+            node,
+            validNames,
+            baseValidNames,
+            baseNode;
+
+        while (i--) {
+            node = this._client.getNode(selectedObjIDs[i]);
+
+            if (node) {
+                baseNode = this._client.getNode(node.getBaseId());
+                ownPointerNames = node.getOwnPointerNames();
+                validNames = node.getValidPointerNames();
+                baseValidNames = baseNode === null ? [] : baseNode.getValidPointerNames();
+
+                if (ownPointerNames.indexOf(pointerName) === -1) {
+                    return false;
+                }
+
+                if (baseValidNames.indexOf(pointerName) === -1 && validNames.indexOf(pointerName) !== -1) {
+                    return false;
+                }
+
+            }
+        }
+
+        return true;
+    };
+
+    PropertyEditorController.prototype._filterCommon = function (commonAttrMeta, result, other, initPhase) {
+        var it,
+            i,
+            keys;
+
+        if (initPhase === true) {
+            keys = Object.keys(other);
+            for (i = 0; i < keys.length; i += 1) {
+                it = keys[i];
+                if (commonAttrMeta.hasOwnProperty(it)) {
+                    result[it] = {
+                        value: other[it],
+                        valueType: commonAttrMeta[it].type,
+                        isCommon: true
+                    };
+                } else {
+                    result[it] = {
+                        value: other[it],
+                        valueType: typeof other[it],
+                        isCommon: true
+                    };
+                }
+
+            }
+        } else {
+            keys = Object.keys(result);
+            for (i = 0; i < keys.length; i += 1) {
+                it = keys[i];
+                if (other.hasOwnProperty(it)) {
+                    if (result[it].isCommon) {
+                        result[it].isCommon = result[it].value === other[it];
+                    }
+                } else {
+                    delete result[it];
+                }
+            }
+        }
+    };
+
+    PropertyEditorController.prototype._getHintMessage = function (name) {
+        var msg = '',
+            available = WebGMEGlobal['all' + name],
+            debugList = [],
+            i;
+
+        if (!available) {
+            this._logger.error('Could not get all' + name + ' from WebGMEGlobal');
+        } else if (available.length > 0) {
+            msg = 'Available ' + name + ':';
+            if (name === 'Visualizers') {
+                for (i = 0; i < available.length; i += 1) {
+                    if (available[i].DEBUG_ONLY) {
+                        debugList.push(available[i].id);
+                    } else {
+                        msg += '\n - ' + available[i].id;
+                    }
+                }
+                if (debugList.length > 0) {
+                    msg += '\nIn debug mode only:\n - ' + debugList.join('\n - ');
+
+                }
+            } else {
+                msg += '\n - ' + available.join('\n - ');
+            }
+        } else {
+            msg = 'No ' + name + ' available.';
+        }
+
+        return msg;
+    };
+
+    PropertyEditorController.prototype._buildCommonAttrMeta = function (commonAttrMeta, node, initPhase) {
+        var nodeId = node.getId(),
+            nodeAttributeNames = _.union(node.getAttributeNames() || [], node.getValidAttributeNames() || []),
+            len = nodeAttributeNames.length,
+            attrMetaDescriptor,
+            attrName,
+            attrNames,
+            i,
+            isCommon,
+            commonEnumValues,
+            isEnumCommon,
+            isEnumAttrMeta;
+
+        attrNames = Object.keys(commonAttrMeta);
+        //first delete the ones from the common that does not exist in this node
+        for (i = 0; i < attrNames.length; i += 1) {
+            if (nodeAttributeNames.indexOf(attrNames[i]) === -1) {
+                delete commonAttrMeta[attrName];
+            }
+        }
+
+        //for the remaining list check if still common
+        //common: type is the same
+        //if type is enum, the common types should be the intersection of the individual enum types
+        while (len--) {
+            attrName = nodeAttributeNames[len];
+            attrMetaDescriptor = this._client.getAttributeSchema(nodeId, attrName) || {type: 'string'};
+            if (commonAttrMeta.hasOwnProperty(attrName)) {
+                isCommon = true;
+                //this attribute already exist in the attribute meta map
+                //let's see if it is still common
+                if (attrMetaDescriptor) {
+                    if (commonAttrMeta[attrName].type === attrMetaDescriptor.type) {
+                        isEnumCommon = commonAttrMeta[attrName].enum && commonAttrMeta[attrName].enum.length > 0;
+                        isEnumAttrMeta = attrMetaDescriptor.enum && attrMetaDescriptor.enum.length > 0;
+                        if (isEnumCommon && isEnumAttrMeta) {
+                            //same type, both enum
+                            //get the intersection of the enum values
+                            commonEnumValues = _.intersection(commonAttrMeta[attrName].enum,
+                                attrMetaDescriptor.enum);
+
+                            if (commonEnumValues.length !== commonAttrMeta[attrName].enum.length) {
+                                if (commonEnumValues.length === 0) {
+                                    //0 common enum values, can not consider common attribute anymore
+                                    isCommon = false;
+                                } else {
+                                    //has common values but less than before
+                                    //store the new common values
+                                    commonAttrMeta[attrName].enum = commonEnumValues.slice(0);
+                                }
+                            }
+                        } else {
+                            //not both are enum
+                            //if only one is enum --> not common anymore
+                            //if both are not enum --> still common
+                            if (!(!isEnumCommon && !isEnumAttrMeta)) {
+                                isCommon = false;
+                            }
+                        }
+                    } else {
+                        //different types, for sure it's not common anymore
+                        isCommon = false;
+                    }
+                } else {
+                    //node meta descriptor in this node
+                    //it's not common then
+                    //NOTE: it should never happen probably
+                    isCommon = false;
+                }
+
+                //if not common, delete it from attribute map
+                if (!isCommon) {
+                    delete commonAttrMeta[attrName];
+                }
+            } else {
+                //no entry for this attribute
+                //in init phase, create entry
+                if (initPhase) {
+                    if (attrMetaDescriptor) {
+                        commonAttrMeta[attrName] = {};
+                        _.extend(commonAttrMeta[attrName], attrMetaDescriptor);
+                    }
+                }
+            }
+        }
     };
 
     PropertyEditorController.prototype._onPropertyChanged = function (args) {
@@ -656,9 +818,11 @@ define(['js/logger',
                 setterFn = 'setAttributes';
                 getterFn = 'getEditableAttribute';
             } else if (keyArr[0] === CONSTANTS.PROPERTY_GROUP_PREFERENCES ||
-                       keyArr[0] === CONSTANTS.PROPERTY_GROUP_META) {
+                keyArr[0] === CONSTANTS.PROPERTY_GROUP_META) {
                 setterFn = 'setRegistry';
                 getterFn = 'getEditableRegistry';
+            } else if (keyArr[0] === CONSTANTS.PROPERTY_GROUP_POINTERS) {
+                this._client.makePointer(gmeID, keyArr[1], args.newValue);
             }
 
             if (setterFn && getterFn) {
@@ -710,10 +874,9 @@ define(['js/logger',
             if (keyArr[0] === CONSTANTS.PROPERTY_GROUP_ATTRIBUTES) {
                 delFn = 'delAttributes';
             } else if (keyArr[0] === CONSTANTS.PROPERTY_GROUP_PREFERENCES ||
-                       keyArr[0] === CONSTANTS.PROPERTY_GROUP_META) {
+                keyArr[0] === CONSTANTS.PROPERTY_GROUP_META) {
                 delFn = 'delRegistry';
-            } else if (keyArr[0] === CONSTANTS.PROPERTY_GROUP_POINTERS &&
-                       NON_RESETABLE_POINTRS.indexOf(keyArr[1]) === -1) {
+            } else if (keyArr[0] === CONSTANTS.PROPERTY_GROUP_POINTERS) {
                 delFn = 'delPointer';
             }
 
@@ -727,12 +890,26 @@ define(['js/logger',
         this._client.completeTransaction();
     };
 
-    PropertyEditorController.prototype.startsWith = function (str, start) {
-        if (start === '') {
-            return true;
-        }
-        return start.length > 0 && str.substring(0, start.length) === start;
-    };
+    PropertyEditorController.prototype._initializeReadOnlyForSelection = function (objectIds) {
+        var i,
+            node,
+            isReadOnly = false;
 
+        if (this._client.isProjectReadOnly()) {
+            isReadOnly = true;
+        } else {
+            for (i = 0; i < objectIds.length; i += 1) {
+                node = this._client.getNode(objectIds[i]);
+                if (node && (node.isLibraryRoot() || node.isLibraryElement())) {
+                    isReadOnly = true;
+                    break;
+                }
+            }
+        }
+
+        this._propertyGrid.setReadOnly(isReadOnly);
+        this.setReadOnly(isReadOnly);
+    };
+    
     return PropertyEditorController;
 });

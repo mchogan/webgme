@@ -5,8 +5,11 @@ bin
 */.settings
 */.idea
 *.class
+*csproj.user
+*.css.map
 
 node_modules
+src/client/bower_components
 
 *.log
 .idea
@@ -32,9 +35,12 @@ blob-local-storage
 config/config.dev*.js
 
 *.swp
+*~
 
 webgme-*.tgz
 
 executor-temp/
 jobList.nedb
 workerList.nedb
+
+docs/source/

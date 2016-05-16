@@ -16,8 +16,13 @@ define(['jquery', 'css!./styles/PopoverBox.css'], function () {
         this._el = el;
     };
 
-    PopoverBox.prototype.show = function (message, alertLevel, autoHide) {
-        var el = this._el;
+    PopoverBox.prototype.show = function (message, alertLevel, autoHideOrDelay) {
+        var el = this._el,
+            autoHide = autoHideOrDelay === true || autoHideOrDelay > 0;
+
+        if (autoHideOrDelay === true) {
+            autoHideOrDelay = AUTO_HIDE_MILLISEC;
+        }
 
         el.addClass('pobox');
 
@@ -42,7 +47,7 @@ define(['jquery', 'css!./styles/PopoverBox.css'], function () {
         if (autoHide === true) {
             setTimeout(function () {
                 el.popover('destroy');
-            }, AUTO_HIDE_MILLISEC);
+            }, autoHideOrDelay);
         }
     };
 
@@ -50,7 +55,12 @@ define(['jquery', 'css!./styles/PopoverBox.css'], function () {
         SUCCESS: 'ddwa-success',
         WARNING: 'ddwa-warning',
         ERROR: 'ddwa-error',
-        INFO: 'ddwa-info'
+        INFO: 'ddwa-info',
+        success: 'ddwa-success',
+        warning: 'ddwa-warning',
+        warn: 'ddwa-warning',
+        error: 'ddwa-error',
+        info: 'ddwa-info'
     };
 
     return PopoverBox;

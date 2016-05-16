@@ -12,20 +12,18 @@ define(['js/logger',
     'js/RegistryKeys',
     'js/PanelBase/PanelBaseWithHeader',
     'js/Panels/SplitPanel/SplitPanel',
-    '/listAllVisualizerDescriptors',
     'css!./styles/VisualizerPanel.css'
 ], function (Logger,
              LoaderProgressBar,
              CONSTANTS,
              REGISTRY_KEYS,
              PanelBaseWithHeader,
-             SplitPanel,
-             VisualizersJSON) {
+             SplitPanel) {
 
     'use strict';
 
     var VisualizerPanel,
-        DEFAULT_VISUALIZER = 'ModelEditor';
+        VisualizersJSON = WebGMEGlobal.allVisualizers;
 
     VisualizerPanel = function (layoutManager, params) {
         var options = {};
@@ -47,6 +45,7 @@ define(['js/logger',
         this._currentNodeID = null;
         this._visualizers = {};
         this._validVisualizers = null;
+        this.defaultVisualizer = VisualizersJSON[0] || null;
 
         this._loadVisualizers();
 
@@ -55,6 +54,17 @@ define(['js/logger',
 
     //inherit from PanelBaseWithHeader
     _.extend(VisualizerPanel.prototype, PanelBaseWithHeader.prototype);
+
+    VisualizerPanel.prototype._isAvailableVisualizer = function (visualizerId) {
+        var i;
+
+        for (i = 0; i < VisualizersJSON.length; i += 1) {
+            if (visualizerId === VisualizersJSON[i].id) {
+                return true;
+            }
+        }
+        return false;
+    };
 
     VisualizerPanel.prototype._initialize = function () {
         var self = this,
@@ -97,27 +107,26 @@ define(['js/logger',
             self.selectedObjectChanged(activeObjectId);
         });
 
-        this._client.addEventListener(this._client.events.PROJECT_CLOSED, function (/* __project, nodeId */) {
+        this._client.addEventListener(CONSTANTS.CLIENT.PROJECT_CLOSED, function (/* __project, nodeId */) {
             self._p2Editor(false);
             self._validVisualizers = null;
         });
 
-        this._client.addEventListener(this._client.events.PROJECT_OPENED, function (/* __project, nodeId */) {
+        this._client.addEventListener(CONSTANTS.CLIENT.PROJECT_OPENED, function (/* __project, nodeId */) {
             self._p2Editor(false);
             self._validVisualizers = null;
         });
 
-        this._client.addEventListener(this._client.events.BRANCH_CHANGED, function (/* __project, nodeId */) {
+        this._client.addEventListener(CONSTANTS.CLIENT.BRANCH_CHANGED, function (/* __project, nodeId */) {
             self._p2Editor(false);
             self._validVisualizers = null;
         });
 
         WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_VISUALIZER, function (model, activeVisualizer) {
             if (self._settingVisualizer !== true) {
-                WebGMEGlobal.State.registerActiveVisualizer(activeVisualizer);
+                self._setActiveVisualizer(activeVisualizer, self._ul1);
             }
         });
-
 
         this._splitPanel = new SplitPanel();
         this._layoutManager.addPanel('visualizerSplitPanel', this._splitPanel, 'center');
@@ -126,8 +135,15 @@ define(['js/logger',
     VisualizerPanel.prototype._loadVisualizers = function () {
         var self = this;
 
+        // Set the default visualizer
+        for (var i = VisualizersJSON.length; i--;) {
+            if (VisualizersJSON[i].default) {
+                self.defaultVisualizer = VisualizersJSON[i];
+            }
+        }
+
         this.addRange(VisualizersJSON, function () {
-            self._setActiveVisualizer(DEFAULT_VISUALIZER, self._ul1);
+            self._setActiveVisualizer(self.defaultVisualizer.id, self._ul1);
         });
     };
 
@@ -138,6 +154,10 @@ define(['js/logger',
         this._settingVisualizer = true;
 
         if (this._activeVisualizer[panel] !== visualizer && this._visualizers.hasOwnProperty(visualizer)) {
+            //we should change the selected tab to 0 in case of visualizer change to get the 'default' behaviour
+            //WebGMEGlobal.State.registerActiveTab(0);
+            //WebGMEGlobal.State.set(CONSTANTS.STATE_ACTIVE_ASPECT, 'All');
+
             //destroy current visualizer
             if (this._activePanel[panel]) {
                 this._activePanel[panel].destroy();
@@ -181,6 +201,7 @@ define(['js/logger',
                 validVisuals = node.getRegistry(REGISTRY_KEYS.VALID_VISUALIZERS);
                 if (validVisuals) {
                     this._validVisualizers = validVisuals.split(' ');
+
                     return;
                 }
             } else {
@@ -197,17 +218,29 @@ define(['js/logger',
         return panelListName === 'p1' ? this._ul1 : this._ul2;
     };
 
-    VisualizerPanel.prototype._updateListedVisualizers = function () {
+    VisualizerPanel.prototype._updateListedVisualizers = function (setActiveViz) {
         var self = this,
-            ul = this._getActivePanelElem();
+            ul = this._getActivePanelElem(),
+            activeVisualizer,
+            currentNode = self._client.getNode(self._currentNodeID),
+            libraryRoot = false;
+
+        if (currentNode) {
+            libraryRoot = currentNode.isLibraryRoot();
+        }
         // For the active panel hide/show listed visualizers
         ul.children('li').each(function (index, _li) {
             var li = $(_li);
             if (self._validVisualizers === null) {
                 // By default fall back on showing all loaded visualizers.
-                li.show();
+                if (libraryRoot && li.attr('data-id') === 'SetEditor') {
+                    li.hide();
+                } else {
+                    li.show();
+                }
             } else {
-                if (self._validVisualizers.indexOf(li.attr('data-id')) > -1) {
+                if (self._validVisualizers.indexOf(li.attr('data-id')) > -1 &&
+                    (!libraryRoot || (libraryRoot && li.attr('data-id') !== 'SetEditor'))) {
                     li.show();
                 } else {
                     li.hide();
@@ -216,9 +249,31 @@ define(['js/logger',
         });
 
         this.updateContainerSize();
+
         if (self._validVisualizers) {
+            activeVisualizer = self._validVisualizers[0];
+            if (!self._isAvailableVisualizer(activeVisualizer)) {
+                //fallback to the global default
+                activeVisualizer = self.defaultVisualizer.id;
+            }
+        } else {
+            // Set this to the global default if it is valid for the project
+            activeVisualizer = self.defaultVisualizer.id;
+        }
+
+        if (!self._isAvailableVisualizer(activeVisualizer)) {
+            if (self._isAvailableVisualizer(CONSTANTS.DEFAULT_VISUALIZER)) {
+                //fall back to model editor if nothing else works
+                activeVisualizer = CONSTANTS.DEFAULT_VISUALIZER;
+            } else {
+                activeVisualizer = null;
+            }
+        }
+
+        // Only set the visualizer only if we were able to select some valid one.
+        if (setActiveViz && activeVisualizer) {
             setTimeout(function () {
-                self._setActiveVisualizer(self._validVisualizers[0], ul);
+                self._setActiveVisualizer(activeVisualizer, ul);
             }, 0);
         }
     };
@@ -236,11 +291,9 @@ define(['js/logger',
         loaderDiv.remove();
     };
 
-
     /**********************************************************************/
     /***************     P U B L I C     A P I             ****************/
     /**********************************************************************/
-
 
     VisualizerPanel.prototype.add = function (menuDesc, callback) {
         var li = $('<li class="center pointer"><a class="btn-env" id=""></a></li>'),
@@ -326,7 +379,7 @@ define(['js/logger',
     VisualizerPanel.prototype.selectedObjectChanged = function (currentNodeId) {
         this._currentNodeID = currentNodeId;
         this._updateValidVisualizers(currentNodeId);
-        this._updateListedVisualizers();
+        this._updateListedVisualizers(!WebGMEGlobal.State.getSuppressVisualizerFromNode());
     };
 
     VisualizerPanel.prototype._p2Editor = function (enabled) {
@@ -357,14 +410,17 @@ define(['js/logger',
             this._activePanel[panel] = null;
             this._activeVisualizer[panel] = null;
 
-
             if (this._panel2VisContainer) {
                 this._panel2VisContainer.remove();
                 this._panel2VisContainer = undefined;
                 this._splitPanel.deletePanel('p2');
                 delete this._ul2;
             }
+
+            WebGMEGlobal.State.registerActiveObject(this._currentNodeID);
         }
+
+        this.updateContainerSize();
     };
 
     return VisualizerPanel;

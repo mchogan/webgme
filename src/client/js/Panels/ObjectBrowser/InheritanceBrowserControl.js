@@ -9,11 +9,13 @@
 define(['js/logger',
     'js/Utils/GMEConcepts',
     'js/NodePropertyNames',
-    'js/Constants'
+    'js/Constants',
+    './ObjectBrowserControlBase',
 ], function (Logger,
              GMEConcepts,
              nodePropertyNames,
-             CONSTANTS) {
+             CONSTANTS,
+             ObjectBrowserControlBase) {
     'use strict';
 
     var NODE_PROGRESS_CLASS = 'node-progress',
@@ -26,8 +28,9 @@ define(['js/logger',
     var InheritanceBrowserControl = function (client, treeBrowser) {
         var self = this;
 
-        self._client = client;
-        self._treeBrowser = treeBrowser;
+        ObjectBrowserControlBase.call(self, client, treeBrowser);
+
+
         self._treeBrowser._enableNodeRename = false;
         self._logger = Logger.create('gme:Panels:ObjectBrowser:InheritanceBrowserControl',
             WebGMEGlobal.gmeConfig.client.log);
@@ -36,6 +39,10 @@ define(['js/logger',
             self._initialize();
         }, 250);
     };
+
+    // Prototypical inheritance
+    InheritanceBrowserControl.prototype = Object.create(ObjectBrowserControlBase.prototype);
+    InheritanceBrowserControl.prototype.constructor = InheritanceBrowserControl;
 
     InheritanceBrowserControl.prototype.destroy = function () {
     };
@@ -116,6 +123,8 @@ define(['js/logger',
     InheritanceBrowserControl.prototype._onNodeOpen = function (nodeId) {
         //first create dummy elements under the parent representing the children being loaded
         var parent = this._client.getNode(nodeId),
+            childrenDescriptors = [],
+            newNodes,
             parentNode,
             inheritedIDs,
             i,
@@ -144,41 +153,69 @@ define(['js/logger',
                 //check if the node could be retreived from the client
                 if (childNode) {
                     //the node was present on the client side, render ist full data
-                    childTreeNode = this._treeBrowser.createNode(parentNode, {
+                    childrenDescriptors.push({
                         id: currentChildId,
-                        name: childNode.getAttribute('name'),
+                        name: childNode.getFullyQualifiedName(),
                         hasChildren: (childNode.getCollectionPaths(CONSTANTS.POINTER_BASE)).length > 0,
-                        class: this._getNodeClass(childNode)
+                        class: this._getNodeClass(childNode),
+                        icon: this.getIcon(childNode),
+                        // Data used locally here.
+                        STATE: STATE_LOADED,
+                        INHERITANCE: childNode.getCollectionPaths(CONSTANTS.POINTER_BASE),
                     });
 
-                    //store the node's info in the local hashmap
-                    this._nodes[currentChildId] = {
-                        treeNode: childTreeNode,
-                        inheritance: childNode.getCollectionPaths(CONSTANTS.POINTER_BASE),
-                        state: STATE_LOADED
-                    };
+                    //childTreeNode = this._treeBrowser.createNode(parentNode, {
+                    //    id: currentChildId,
+                    //    name: childNode.getAttribute('name'),
+                    //    hasChildren: (childNode.getCollectionPaths(CONSTANTS.POINTER_BASE)).length > 0,
+                    //    class: this._getNodeClass(childNode)
+                    //});
+                    //
+                    ////store the node's info in the local hashmap
+                    //this._nodes[currentChildId] = {
+                    //    treeNode: childTreeNode,
+                    //    inheritance: childNode.getCollectionPaths(CONSTANTS.POINTER_BASE),
+                    //    state: STATE_LOADED
+                    //};
                 } else {
                     //the node is not present on the client side, render a loading node instead
-                    //create a new node for it in the tree
-                    childTreeNode = this._treeBrowser.createNode(parentNode, {
+                    childrenDescriptors.push({
                         id: currentChildId,
                         name: 'Loading...',
                         hasChildren: false,
-                        class: NODE_PROGRESS_CLASS
+                        class: NODE_PROGRESS_CLASS,
+                        // Data used locally here.
+                        STATE: STATE_LOADING,
+                        INHERITANCE: []
                     });
+                    //childTreeNode = this._treeBrowser.createNode(parentNode, {
+                    //    id: currentChildId,
+                    //    name: 'Loading...',
+                    //    hasChildren: false,
+                    //    class: NODE_PROGRESS_CLASS
+                    //});
+                    //
+                    ////store the node's info in the local hashmap
+                    //this._nodes[currentChildId] = {
+                    //    treeNode: childTreeNode,
+                    //    inheritance: [],
+                    //    state: STATE_LOADING
+                    //};
 
-                    //store the node's info in the local hashmap
-                    this._nodes[currentChildId] = {
-                        treeNode: childTreeNode,
-                        inheritance: [],
-                        state: STATE_LOADING
-                    };
-
-                    this._selfPatterns[currentChildId] = {'children': 0};
+                    this._selfPatterns[currentChildId] = {children: 0};
                 }
             }
 
-            this._treeBrowser.enableUpdate(true);
+            newNodes = this._treeBrowser.createNodes(parentNode, childrenDescriptors);
+            for (i = 0; i < childrenDescriptors.length; i += 1) {
+                this._nodes[childrenDescriptors[i].id] = {
+                    treeNode: newNodes[i],
+                    inheritance: childrenDescriptors[i].INHERITANCE,
+                    state: childrenDescriptors[i].STATE
+                };
+            }
+
+            this._treeBrowser.updateNode(parentNode, {icon: this.getIcon(parent, true)});
         }
 
         //need to expand the territory
@@ -215,6 +252,7 @@ define(['js/logger',
         //call the cleanup recursively and mark this node (being closed)
         // as non removable (from local hashmap neither from territory)
         deleteNodeAndChildrenFromLocalHash(nodeId, false);
+        this._treeBrowser.updateNode(this._nodes[nodeId].treeNode, {icon: this.getIcon(nodeId)});
 
         //if there is anything to remove from the territory, do it
         if (removeFromTerritory.length > 0) {
@@ -237,7 +275,6 @@ define(['js/logger',
             settings[CONSTANTS.STATE_ACTIVE_OBJECT] = nodeId;
         }
 
-        settings[CONSTANTS.STATE_ACTIVE_ASPECT] = CONSTANTS.ASPECT_ALL;
         settings[CONSTANTS.STATE_ACTIVE_VISUALIZER] = DEFAULT_VISUALIZER;
         WebGMEGlobal.State.set(settings);
     };
@@ -322,9 +359,10 @@ define(['js/logger',
 
                         //create the node's descriptor for the tree-browser widget
                         nodeDescriptor = {
-                            name: updatedObject.getAttribute('name'),
+                            name: updatedObject.getFullyQualifiedName(),
                             hasChildren: (updatedObject.getCollectionPaths(CONSTANTS.POINTER_BASE)).length > 0,
-                            class: objType
+                            class: objType,
+                            icon: self.getIcon(updatedObject),
                         };
 
                         //update the node's representation in the tree
@@ -343,19 +381,20 @@ define(['js/logger',
 
                         //create the node's descriptor for the treebrowser widget
                         nodeDescriptor = {
-                            name: updatedObject.getAttribute('name'),
+                            name: updatedObject.getFullyQualifiedName(),
                             hasChildren: (updatedObject.getCollectionPaths(CONSTANTS.POINTER_BASE)).length > 0,
-                            class: objType
+                            class: objType,
+                            icon: self.getIcon(updatedObject)
                         };
 
-                        //update the node's representation in the tree
-                        this._treeBrowser.updateNode(this._nodes[objectId].treeNode, nodeDescriptor);
+
 
                         oldInheritance = this._nodes[objectId].inheritance;
                         currentInheritance = updatedObject.getCollectionPaths(CONSTANTS.POINTER_BASE);
 
                         //the concrete child deletion is important only if the node is open in the tree
                         if (this._treeBrowser.isExpanded(this._nodes[objectId].treeNode)) {
+                            nodeDescriptor.icon = self.getIcon(updatedObject, true);
                             //figure out what are the deleted children's IDs
                             inheritanceDeleted = _.difference(oldInheritance, currentInheritance);
 
@@ -416,9 +455,10 @@ define(['js/logger',
                                     //the node was present on the client side, render ist full data
                                     childTreeNode = this._treeBrowser.createNode(this._nodes[objectId].treeNode, {
                                         id: currentChildId,
-                                        name: childNode.getAttribute('name'),
+                                        name: childNode.getFullyQualifiedName(),
                                         hasChildren: (childNode.getCollectionPaths(CONSTANTS.POINTER_BASE)).length > 0,
-                                        class: this._getNodeClass(childNode)
+                                        class: this._getNodeClass(childNode),
+                                        icon: this.getIcon(childNode)
                                     });
 
                                     //store the node's info in the local hashmap
@@ -448,6 +488,9 @@ define(['js/logger',
                         }
 
                         this._nodes[objectId].inheritance = updatedObject.getCollectionPaths(CONSTANTS.POINTER_BASE);
+
+                        //update the node's representation in the tree
+                        this._treeBrowser.updateNode(this._nodes[objectId].treeNode, nodeDescriptor);
 
                         //finally update the object's state showing loaded
                         this._nodes[objectId].state = STATE_LOADED;

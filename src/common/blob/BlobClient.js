@@ -1,4 +1,4 @@
-/*globals define, escape*/
+/*globals define, console*/
 /*jshint browser: true, node:true*/
 
 /**
@@ -8,41 +8,86 @@
  * @author ksmyth / https://github.com/ksmyth
  */
 
-define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact, BlobMetadata, superagent) {
+define([
+    'blob/Artifact',
+    'blob/BlobMetadata',
+    'superagent',
+    'q',
+    'common/util/uint'
+], function (Artifact, BlobMetadata, superagent, Q, UINT) {
     'use strict';
 
+    /**
+     * Client to interact with the blob-storage. <br>
+     * FIXME: For some reason the methods do not show up in the generated docs. See source code.
+     * @param {object} parameters
+     * @param {object} parameters.logger
+     * @constructor
+     * @alias BlobClient
+     */
     var BlobClient = function (parameters) {
         this.artifacts = [];
+        if (parameters && parameters.logger) {
+            this.logger = parameters.logger;
+        } else {
+            var doLog = function () {
+                console.log.apply(console, arguments);
+            };
+            this.logger = {
+                debug: doLog,
+                log: doLog,
+                info: doLog,
+                warn: doLog,
+                error: doLog
+            };
+            console.warn('Since v1.3.0 BlobClient requires a logger, falling back on console.log.');
+        }
+
+        this.logger.debug('ctor', {metadata: parameters});
 
         if (parameters) {
             this.server = parameters.server || this.server;
             this.serverPort = parameters.serverPort || this.serverPort;
             this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
-            this.webgmeclientsession = parameters.webgmeclientsession;
-            this.keepaliveAgentOptions = parameters.keepaliveAgentOptions || { /* use defaults */ };
+            this.webgmeToken = parameters.webgmeToken;
+            this.keepaliveAgentOptions = parameters.keepaliveAgentOptions || {/* use defaults */};
+        } else {
+            this.keepaliveAgentOptions = {/* use defaults */};
         }
-        this.blobUrl = '';
+        this.origin = '';
         if (this.httpsecure !== undefined && this.server && this.serverPort) {
-            this.blobUrl = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
+            this.origin = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
         }
-
+        this.relativeUrl = '/rest/blob/';
+        this.blobUrl = this.origin + this.relativeUrl;
         // TODO: TOKEN???
-        this.blobUrl = this.blobUrl + '/rest/blob/'; // TODO: any ways to ask for this or get it from the configuration?
+        // TODO: any ways to ask for this or get it from the configuration?
 
         this.isNodeOrNodeWebKit = typeof process !== 'undefined';
         if (this.isNodeOrNodeWebKit) {
             // node or node-webkit
+            this.logger.debug('Running under node or node-web-kit');
             if (this.httpsecure) {
                 this.Agent = require('agentkeepalive').HttpsAgent;
             } else {
                 this.Agent = require('agentkeepalive');
             }
+            if (this.keepaliveAgentOptions.hasOwnProperty('ca') === false) {
+                this.keepaliveAgentOptions.ca = require('https').globalAgent.options.ca;
+            }
             this.keepaliveAgent = new this.Agent(this.keepaliveAgentOptions);
         }
+
+        this.logger.debug('origin', this.origin);
+        this.logger.debug('blobUrl', this.blobUrl);
     };
 
     BlobClient.prototype.getMetadataURL = function (hash) {
-        var metadataBase = this.blobUrl + 'metadata';
+        return this.origin + this.getRelativeMetadataURL(hash);
+    };
+
+    BlobClient.prototype.getRelativeMetadataURL = function (hash) {
+        var metadataBase = this.relativeUrl + 'metadata';
         if (hash) {
             return metadataBase + '/' + hash;
         } else {
@@ -55,28 +100,53 @@ define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact,
         if (subpath) {
             subpathURL = subpath;
         }
-        return this.blobUrl + base + '/' + hash + '/' + encodeURIComponent(subpathURL);
+        return this.relativeUrl + base + '/' + hash + '/' + encodeURIComponent(subpathURL);
     };
 
     BlobClient.prototype.getViewURL = function (hash, subpath) {
+        return this.origin + this.getRelativeViewURL(hash, subpath);
+    };
+
+    BlobClient.prototype.getRelativeViewURL = function (hash, subpath) {
         return this._getURL('view', hash, subpath);
     };
 
     BlobClient.prototype.getDownloadURL = function (hash, subpath) {
+        return this.origin + this.getRelativeDownloadURL(hash, subpath);
+    };
+
+    BlobClient.prototype.getRelativeDownloadURL = function (hash, subpath) {
         return this._getURL('download', hash, subpath);
     };
 
     BlobClient.prototype.getCreateURL = function (filename, isMetadata) {
+        return this.origin + this.getRelativeCreateURL(filename, isMetadata);
+    };
+
+    BlobClient.prototype.getRelativeCreateURL = function (filename, isMetadata) {
         if (isMetadata) {
-            return this.blobUrl + 'createMetadata/';
+            return this.relativeUrl + 'createMetadata/';
         } else {
-            return this.blobUrl + 'createFile/' + encodeURIComponent(filename);
+            return this.relativeUrl + 'createFile/' + encodeURIComponent(filename);
         }
     };
 
+    /**
+     * Adds a file to the blob storage.
+     * @param {string} name - file name.
+     * @param {string|Buffer|ArrayBuffer} data - file content.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise} On success the promise will be resolved with {string} <b>hash</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     BlobClient.prototype.putFile = function (name, data, callback) {
-        var contentLength,
+        var deferred = Q.defer(),
+            self = this,
+            contentLength,
             req;
+
+        this.logger.debug('putFile', name);
 
         function toArrayBuffer(buffer) {
             var ab = new ArrayBuffer(buffer.length);
@@ -105,30 +175,38 @@ define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact,
             req.agent(this.keepaliveAgent);
         }
 
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
+        if (this.webgmeToken) {
+            req.set('Authorization', 'Bearer ' + this.webgmeToken);
+        }
+        if (typeof data !== 'string' && !(data instanceof String)) {
+            req.set('Content-Length', contentLength);
         }
         req.set('Content-Type', 'application/octet-stream')
-            .set('Content-Length', contentLength)
             .send(data)
             .end(function (err, res) {
                 if (err || res.status > 399) {
-                    callback(err || res.status);
+                    deferred.reject(err || new Error(res.status));
                     return;
                 }
                 var response = res.body;
                 // Get the first one
                 var hash = Object.keys(response)[0];
-                callback(null, hash);
+                self.logger.debug('putFile - result', hash);
+                deferred.resolve(hash);
             });
+
+        return deferred.promise.nodeify(callback);
     };
 
     BlobClient.prototype.putMetadata = function (metadataDescriptor, callback) {
         var metadata = new BlobMetadata(metadataDescriptor),
+            deferred = Q.defer(),
+            self = this,
             blob,
             contentLength,
             req;
         // FIXME: in production mode do not indent the json file.
+        this.logger.debug('putMetadata', {metadata: metadataDescriptor});
         if (typeof Blob !== 'undefined') {
             blob = new Blob([JSON.stringify(metadata.serialize(), null, 4)], {type: 'text/plain'});
             contentLength = blob.size;
@@ -138,8 +216,8 @@ define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact,
         }
 
         req = superagent.post(this.getCreateURL(metadataDescriptor.name, true));
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
+        if (this.webgmeToken) {
+            req.set('Authorization', 'Bearer ' + this.webgmeToken);
         }
 
         if (typeof window === 'undefined') {
@@ -151,26 +229,39 @@ define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact,
             .send(blob)
             .end(function (err, res) {
                 if (err || res.status > 399) {
-                    callback(err || res.status);
+                    deferred.reject(err || new Error(res.status));
                     return;
                 }
                 // Uploaded.
                 var response = JSON.parse(res.text);
                 // Get the first one
                 var hash = Object.keys(response)[0];
-                callback(null, hash);
+                self.logger.debug('putMetadata - result', hash);
+                deferred.resolve(hash);
             });
+
+        return deferred.promise.nodeify(callback);
     };
 
+    /**
+     * Adds multiple files to the blob storage.
+     * @param {object.<string, string|Buffer|ArrayBuffer>} o - Keys are file names and values the content.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise} On success the promise will be resolved with {object} <b>hashes</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     BlobClient.prototype.putFiles = function (o, callback) {
         var self = this,
-            error = '',
+            deferred = Q.defer(),
+            error,
             filenames = Object.keys(o),
             remaining = filenames.length,
             hashes = {},
             putFile;
+
         if (remaining === 0) {
-            callback(null, hashes);
+            deferred.resolve(hashes);
         }
         putFile = function (filename, data) {
             self.putFile(filename, data, function (err, hash) {
@@ -179,11 +270,16 @@ define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact,
                 hashes[filename] = hash;
 
                 if (err) {
-                    error += 'putFile error: ' + err.toString();
+                    error = err;
+                    self.logger.error('putFile failed with error', {metadata: err});
                 }
 
                 if (remaining === 0) {
-                    callback(error, hashes);
+                    if (error) {
+                        deferred.reject(error);
+                    } else {
+                        deferred.resolve(hashes);
+                    }
                 }
             });
         };
@@ -191,13 +287,32 @@ define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact,
         for (var j = 0; j < filenames.length; j += 1) {
             putFile(filenames[j], o[filenames[j]]);
         }
+
+        return deferred.promise.nodeify(callback);
     };
 
     BlobClient.prototype.getSubObject = function (hash, subpath, callback) {
         return this.getObject(hash, callback, subpath);
     };
 
+    /**
+     * Retrieves object from blob storage as a Buffer under node and as an ArrayBuffer in the client.
+     * N.B. if the retrieved file is a json-file and running in a browser, the content will be decoded and
+     * the string parsed as a JSON.
+     * @param {string} hash - hash of metadata for object.
+     * @param {function} [callback] - if provided no promise will be returned.
+     * @param {string} [subpath]
+     *
+     * @return {external:Promise} On success the promise will be resolved with {Buffer|ArrayBuffer|object}
+     * <b>content</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     BlobClient.prototype.getObject = function (hash, callback, subpath) {
+        var deferred = Q.defer(),
+            self = this;
+
+        this.logger.debug('getObject', hash, subpath);
+
         superagent.parse['application/zip'] = function (obj, parseCallback) {
             if (parseCallback) {
                 // Running on node; this should be unreachable due to req.pipe() below
@@ -208,8 +323,8 @@ define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact,
         //superagent.parse['application/json'] = superagent.parse['application/zip'];
 
         var req = superagent.get(this.getViewURL(hash, subpath));
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
+        if (this.webgmeToken) {
+            req.set('Authorization', 'Bearer ' + this.webgmeToken);
         }
 
         if (typeof window === 'undefined') {
@@ -227,20 +342,21 @@ define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact,
             };
             require('util').inherits(BuffersWritable, Writable);
 
-            BuffersWritable.prototype._write = function (chunk, encoding, callback) {
+            BuffersWritable.prototype._write = function (chunk, encoding, cb) {
                 this.buffers.push(chunk);
-                callback();
+                cb();
             };
 
             var buffers = new BuffersWritable();
             buffers.on('finish', function () {
                 if (req.req.res.statusCode > 399) {
-                    return callback(req.req.res.statusCode);
+                    deferred.reject(new Error(req.req.res.statusCode));
+                } else {
+                    deferred.resolve(Buffer.concat(buffers.buffers));
                 }
-                callback(null, Buffer.concat(buffers.buffers));
             });
             buffers.on('error', function (err) {
-                callback(err);
+                deferred.reject(err);
             });
             req.pipe(buffers);
         } else {
@@ -253,32 +369,104 @@ define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact,
             // req.on('error', callback);
             req.on('end', function () {
                 if (req.xhr.status > 399) {
-                    callback(req.xhr.status);
+                    deferred.reject(new Error(req.xhr.status));
                 } else {
                     var contentType = req.xhr.getResponseHeader('content-type');
                     var response = req.xhr.response; // response is an arraybuffer
                     if (contentType === 'application/json') {
-                        var utf8ArrayToString = function (uintArray) {
-                            var inputString = '',
-                                i;
-                            for (i = 0; i < uintArray.byteLength; i++) {
-                                inputString += String.fromCharCode(uintArray[i]);
-                            }
-                            return decodeURIComponent(escape(inputString));
-                        };
-                        response = JSON.parse(utf8ArrayToString(new Uint8Array(response)));
+                        response = JSON.parse(UINT.uint8ArrayToString(new Uint8Array(response)));
                     }
-                    callback(null, response);
+                    self.logger.debug('getObject - result', {metadata: response});
+                    deferred.resolve(response);
                 }
             });
-            req.end(callback);
+            // TODO: Why is there an end here too? Isn't req.on('end',..) enough?
+            req.end(function (err, result) {
+                if (err) {
+                    deferred.reject(err);
+                } else {
+                    self.logger.debug('getObject - result', {metadata: result});
+                    deferred.resolve(result);
+                }
+            });
         }
+
+        return deferred.promise.nodeify(callback);
     };
 
+    /**
+     * Retrieves object from blob storage and parses the content as a string.
+     * @param {string} hash - hash of metadata for object.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise} On success the promise will be resolved with {string} <b>contentString</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
+    BlobClient.prototype.getObjectAsString = function (hash, callback) {
+        var self = this;
+        return self.getObject(hash)
+            .then(function (content) {
+                if (typeof content === 'string') {
+                    // This does currently not happen..
+                    return content;
+                } else if (typeof Buffer !== 'undefined' && content instanceof Buffer) {
+                    return UINT.uint8ArrayToString(new Uint8Array(content));
+                } else if (content instanceof ArrayBuffer) {
+                    return UINT.uint8ArrayToString(new Uint8Array(content));
+                } else if (content !== null && typeof content === 'object') {
+                    return JSON.stringify(content);
+                } else {
+                    throw new Error('Unknown content encountered: ' + content);
+                }
+            })
+            .nodeify(callback);
+    };
+
+    /**
+     * Retrieves object from blob storage and parses the content as a JSON. (Will resolve with error if not valid JSON.)
+     * @param {string} hash - hash of metadata for object.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise} On success the promise will be resolved with {object} <b>contentJSON</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
+    BlobClient.prototype.getObjectAsJSON = function (hash, callback) {
+        var self = this;
+        return self.getObject(hash)
+            .then(function (content) {
+                if (typeof content === 'string') {
+                    // This does currently not happen..
+                    return JSON.parse(content);
+                } else if (typeof Buffer !== 'undefined' && content instanceof Buffer) {
+                    return JSON.parse(UINT.uint8ArrayToString(new Uint8Array(content)));
+                } else if (content instanceof ArrayBuffer) {
+                    return JSON.parse(UINT.uint8ArrayToString(new Uint8Array(content)));
+                } else if (content !== null && typeof content === 'object') {
+                    return content;
+                } else {
+                    throw new Error('Unknown content encountered: ' + content);
+                }
+            })
+            .nodeify(callback);
+    };
+
+    /**
+     * Retrieves metadata from blob storage.
+     * @param {string} hash - hash of metadata.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise} On success the promise will be resolved with {object} <b>metadata</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     BlobClient.prototype.getMetadata = function (hash, callback) {
-        var req = superagent.get(this.getMetadataURL(hash));
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
+        var req = superagent.get(this.getMetadataURL(hash)),
+            deferred = Q.defer(),
+            self = this;
+
+        this.logger.debug('getMetadata', hash);
+
+        if (this.webgmeToken) {
+            req.set('Authorization', 'Bearer ' + this.webgmeToken);
         }
 
         if (typeof window === 'undefined') {
@@ -287,67 +475,103 @@ define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact,
 
         req.end(function (err, res) {
             if (err || res.status > 399) {
-                callback(err || res.status);
+                deferred.reject(err || new Error(res.status));
             } else {
-                callback(null, JSON.parse(res.text));
+                self.logger.debug('getMetadata', res.text);
+                deferred.resolve(JSON.parse(res.text));
             }
         });
+
+        return deferred.promise.nodeify(callback);
     };
 
+    /**
+     * Creates a new artifact and adds it to array of artifacts of the instance.
+     * @param {string} name - Name of artifact
+     * @return {Artifact}
+     */
     BlobClient.prototype.createArtifact = function (name) {
         var artifact = new Artifact(name, this);
         this.artifacts.push(artifact);
         return artifact;
     };
 
+    /**
+     * Retrieves the {@link Artifact} from the blob storage.
+     * @param {hash} metadataHash - SHA hash associated with the artifact.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with
+     * {@link Artifact} <b>artifact</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     BlobClient.prototype.getArtifact = function (metadataHash, callback) {
         // TODO: get info check if complex flag is set to true.
         // TODO: get info get name.
-        var self = this;
+        var self = this,
+            deferred = Q.defer();
+        this.logger.debug('getArtifact', metadataHash);
         this.getMetadata(metadataHash, function (err, info) {
             if (err) {
                 callback(err);
                 return;
             }
 
+            self.logger.debug('getArtifact - return', {metadata: info});
             if (info.contentType === BlobMetadata.CONTENT_TYPES.COMPLEX) {
                 var artifact = new Artifact(info.name, self, info);
                 self.artifacts.push(artifact);
-                callback(null, artifact);
+                deferred.resolve(artifact);
             } else {
-                callback('not supported contentType ' + JSON.stringify(info, null, 4));
+                deferred.reject(new Error('not supported contentType ' + JSON.stringify(info, null, 4)));
             }
 
         });
+
+        return deferred.promise.nodeify(callback);
     };
 
+    /**
+     * Saves all the artifacts associated with the current instance.
+     * @param {function} [callback] - if provided no promise will be returned.
+     *
+     * @return {external:Promise}  On success the promise will be resolved with
+     * {string[]} <b>artifactHashes</b>.<br>
+     * On error the promise will be rejected with {@link Error} <b>error</b>.
+     */
     BlobClient.prototype.saveAllArtifacts = function (callback) {
-        var remaining = this.artifacts.length,
-            hashes = [],
-            error = '',
-            saveCallback;
-
-        if (remaining === 0) {
-            callback(null, hashes);
-        }
-
-        saveCallback = function (err, hash) {
-            remaining -= 1;
-
-            hashes.push(hash);
-
-            if (err) {
-                error += 'artifact.save err: ' + err.toString();
-            }
-            if (remaining === 0) {
-                callback(error, hashes);
-            }
-        };
+        var promises = [];
 
         for (var i = 0; i < this.artifacts.length; i += 1) {
-
-            this.artifacts[i].save(saveCallback);
+            promises.push(this.artifacts[i].save());
         }
+
+        return Q.all(promises).nodeify(callback);
+    };
+
+    /**
+     * Converts bytes to a human readable string.
+     * @param {bytes} - File size in bytes.
+     * @param {boolean} [si] - If true decimal conversion will be used (by default binary is used).
+     * @returns {string}
+     */
+    BlobClient.prototype.getHumanSize = function (bytes, si) {
+        var thresh = si ? 1000 : 1024,
+            units = si ?
+                ['kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'] :
+                ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'],
+            u = -1;
+
+        if (bytes < thresh) {
+            return bytes + ' B';
+        }
+
+        do {
+            bytes = bytes / thresh;
+            u += 1;
+        } while (bytes >= thresh);
+
+        return bytes.toFixed(1) + ' ' + units[u];
     };
 
     return BlobClient;

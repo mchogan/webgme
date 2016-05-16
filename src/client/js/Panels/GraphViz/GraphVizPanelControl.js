@@ -69,9 +69,7 @@ define(['js/logger',
 
                     if (node) {
                         childrenIDs = node.childrenIDs;
-                        i = childrenIDs.length;
-
-                        while (i--) {
+                        for (i = 0; i < childrenIDs.length; i += 1) {
                             deleteRecursive(childrenIDs[i]);
                         }
                     }
@@ -201,7 +199,7 @@ define(['js/logger',
                 node.children = node.children || [];
                 if (self._nodes[node.childrenIDs[len]]) {
                     if ((self._displayModelsOnly === true &&
-                         self._nodes[node.childrenIDs[len]].isConnection !== true) ||
+                        self._nodes[node.childrenIDs[len]].isConnection !== true) ||
                         self._displayModelsOnly === false) {
                         node.children.push(_.extend({}, self._nodes[node.childrenIDs[len]]));
                         loadRecursive(node.children[node.children.length - 1]);
@@ -233,7 +231,12 @@ define(['js/logger',
     };
 
     GraphVizControl.prototype._stateActiveObjectChanged = function (model, activeObjectId) {
-        this.selectedObjectChanged(activeObjectId);
+        if (this._currentNodeId === activeObjectId) {
+            // [patrik] added this check to avoid redrawing when becoming active in split panel mode.
+            this._logger.debug('Disregarding activeObject changed when it is already the same.');
+        } else {
+            this.selectedObjectChanged(activeObjectId);
+        }
     };
 
     GraphVizControl.prototype._attachClientEventListeners = function () {
@@ -248,6 +251,11 @@ define(['js/logger',
     GraphVizControl.prototype.onActivate = function () {
         this._attachClientEventListeners();
         this._displayToolbarItems();
+
+        //setting the active object to the root of the graph
+        if (typeof this._currentNodeId === 'string') {
+            WebGMEGlobal.State.registerActiveObject(this._currentNodeId);
+        }
     };
 
     GraphVizControl.prototype.onDeactivate = function () {

@@ -1,113 +1,180 @@
 /*jshint node: true*/
 /**
+ * @module Bin:Export
  * @author kecso / https://github.com/kecso
+ * @author brollb / https://github.com/brollb
  */
-
+'use strict';
 var webgme = require('../../webgme'),
-    program = require('commander'),
     FS = require('fs'),
-    openContext,
-    Storage,
-    Serialization,
+    Q = require('q'),
+    cliStorage,
+    gmeAuth,
+    blobClient,
+    MongoURI = require('mongo-uri'),
     path = require('path'),
-    gmeConfig = require(path.join(process.cwd(), 'config')),
-    logger = webgme.Logger.create('gme:bin:export', gmeConfig.bin.log, false),
-    REGEXP = webgme.REGEXP,
-    openContext = webgme.openContext,
-    Storage = webgme.serverUserStorage,
-    Serialization = webgme.serializer;
+    gmeConfig,
+    logger,
+    STORAGE_CONSTANTS = webgme.requirejs('common/storage/constants'),
+    REGEXP = webgme.requirejs('common/regexp'),
+    main,
+    mainDeferred,
+    getMissingRequiredParam,
+    BlobClient = require('../../src/server/middleware/blob/BlobClientWithFSBackend'),
+    storageUtils = webgme.requirejs('common/storage/util'),
+    blobUtil = webgme.requirejs('blob/util');
 
-
-webgme.addToRequireJsPaths(gmeConfig);
-
-var exportProject = function (mongoUri, projectId, branchOrCommit, callback) {
-    'use strict';
-    var storage,
-        project,
-        contextParams,
-        closeContext = function (error, data) {
-            try {
-                project.closeProject(function () {
-                    storage.closeDatabase(function () {
-                        callback(error, data);
-                    });
-                });
-            } catch (err) {
-                storage.closeDatabase(function () {
-                    callback(error, data);
-                });
-            }
-        };
-
-    gmeConfig.mongo.uri = mongoUri || gmeConfig.mongo.uri;
-    storage = new Storage({globConf: gmeConfig, logger: logger.fork('storage')});
-
-    contextParams = {
-        projectName: projectId,
-        branchOrCommit: branchOrCommit
-    };
-
-    openContext(storage, gmeConfig, logger, contextParams, function (err, context) {
-        if (err) {
-            callback(err);
-            return;
+/**
+ * Check for missing required parameters
+ *
+ * @param {Object} params
+ * @return {String|null} missing param
+ */
+getMissingRequiredParam = function (params) {
+    var requiredParams = ['projectName', 'source', 'outFile'];
+    for (var i = requiredParams.length; i--;) {
+        if (!params[requiredParams[i]]) {
+            return requiredParams[i];
         }
-        project = context.project;
-        Serialization.export(context.core, context.rootNode, closeContext);
-    });
+    }
+    return null;
 };
 
-module.exports.export = exportProject;
+main = function (argv) {
+    var Command = require('commander').Command,
+        program = new Command(),
+        syntaxFailure = false;
 
-if (require.main === module) {
+    gmeConfig = require(path.join(process.cwd(), 'config'));
+    logger = webgme.Logger.create('gme:bin:export', gmeConfig.bin.log, false);
+    blobClient = new BlobClient(gmeConfig, logger.fork('BlobClient'));
+    webgme.addToRequireJsPaths(gmeConfig);
+    mainDeferred = Q.defer();
     program
-        .version('0.1.0')
-        .option('-m, --mongo-database-uri [url]', 'URI to connect to mongoDB where the project is stored')
-        .option('-p, --project-identifier [value]', 'project identifier')
+        .version('1.7.2')
+        .option('-m, --mongo-database-uri [url]',
+            'URI of the MongoDB [by default we use the one from the configuration file]')
+        .option('-u, --user [string]', 'the user of the command [if not given we use the default user]')
+        .option('-p, --project-name [string]', 'project name [mandatory]')
+        .option('-o, --owner [string]', 'the owner of the project [by default, the user is the owner]')
         .option('-s, --source [branch/commit]', 'the branch or commit that should be exported')
-        .option('-o, --out [path]', 'the path of the output file')
-        .parse(process.argv);
-//check necessary arguments
+        .option('-f, --out-file [path][mandatory]', 'the path of the output file')
+        .option('-n, --no-assets', 'if given, no assets will be bundled into the package')
+        .parse(argv);
 
-    if (!program.projectIdentifier) {
-        console.warn('project identifier is a mandatory parameter!');
-        program.help();
+    if (getMissingRequiredParam(program)) {
+        logger.error(getMissingRequiredParam(program) + ' is a mandatory parameter!');
+        syntaxFailure = true;
     }
 
-    if (!program.source) {
-        console.warn('source is a mandatory parameter!');
-        program.help();
+    if (syntaxFailure) {
+        program.outputHelp();
+        mainDeferred.reject(new SyntaxError('invalid argument'));
+        return mainDeferred.promise;
     }
-    if (!REGEXP.BRANCH.test(program.source) && !REGEXP.HASH.test(program.source)) {
-        console.warn('source format is invalid!');
-        program.help();
+    return runInternal(program);
+};
+
+function runInternal(params) {
+    var finishUp = function (error) {
+        var ended = function () {
+            if (error) {
+                mainDeferred.reject(error);
+                return;
+            }
+            mainDeferred.resolve();
+        };
+
+        if (gmeAuth) {
+            gmeAuth.unload();
+        }
+        if (cliStorage) {
+            cliStorage.closeDatabase()
+                .then(ended)
+                .catch(function (err) {
+                    logger.error(err);
+                    ended();
+                });
+        } else {
+            ended();
+        }
+    };
+
+    if (params.mongoDatabaseUri) {
+        // this line throws a TypeError for invalid databaseConnectionString
+        MongoURI.parse(params.mongoDatabaseUri);
+
+        gmeConfig.mongo.uri = params.mongoDatabaseUri;
     }
 
-    //calling the export function
-    exportProject(program.mongoDatabaseUri, program.projectIdentifier, program.source,
-        function (err, jsonProject) {
-            'use strict';
-            if (err) {
-                console.error('error during project export: ', err);
-                process.exit(1);
+    webgme.getGmeAuth(gmeConfig)
+        .then(function (gmeAuth__) {
+            gmeAuth = gmeAuth__;
+            cliStorage = webgme.getStorage(logger.fork('storage'), gmeConfig, gmeAuth);
+            return cliStorage.openDatabase();
+        })
+        .then(function () {
+            var projectParams = {
+                projectId: ''
+            };
+
+            if (params.owner) {
+                projectParams.projectId = params.owner + STORAGE_CONSTANTS.PROJECT_ID_SEP + params.projectName;
+            } else if (params.user) {
+                projectParams.projectId = params.user + STORAGE_CONSTANTS.PROJECT_ID_SEP + params.projectName;
             } else {
-                if (program.out) {
-                    try {
-                        FS.writeFileSync(program.out, JSON.stringify(jsonProject, null, 2));
-                        console.log('project \'' + program.projectIdentifier +
-                            '\' hase been successfully written to \'' + program.out + '\'');
-                        process.exit(0);
-                    } catch (err) {
-                        console.error('failed to create output file: ' + err);
-                        process.exit(1);
-                    }
-                } else {
-                    console.log('project \'' + program.projectIdentifier + '\':');
-                    console.log(JSON.stringify(jsonProject, null, 2));
-                    process.exit(0);
-                }
+                projectParams.projectId = gmeConfig.authentication.guestAccount +
+                    STORAGE_CONSTANTS.PROJECT_ID_SEP + params.projectName;
             }
 
-        }
-    );
+            if (params.user) {
+                projectParams.username = params.user;
+            }
+
+            return cliStorage.openProject(projectParams);
+        })
+        .then(function (project) {
+            var projectParams = {};
+
+            if (REGEXP.HASH.test(params.source)) {
+                projectParams.commitHash = params.source;
+            } else if (REGEXP.BRANCH.test(params.source)) {
+                projectParams.branchName = params.source;
+            }
+
+            if (params.user) {
+                project.setUser(params.user);
+            }
+
+            return storageUtils.getProjectJson(project, projectParams);
+        })
+        .then(function (jsonExport) {
+            return blobUtil.buildProjectPackage(logger, blobClient, jsonExport, params.noAssets !== true);
+        })
+        .then(function (blobHash) {
+            return blobClient.getObject(blobHash);
+        })
+        .then(function (buffer) {
+            FS.writeFileSync(params.outFile, buffer);
+            finishUp(null);
+        })
+        .catch(finishUp);
+
+    return mainDeferred.promise;
+}
+
+module.exports = {
+    main: main
+};
+
+if (require.main === module) {
+    main(process.argv)
+        .then(function () {
+            console.log('Done');
+            process.exit(0);
+        })
+        .catch(function (err) {
+            console.error(err);
+            process.exit(1);
+        });
 }

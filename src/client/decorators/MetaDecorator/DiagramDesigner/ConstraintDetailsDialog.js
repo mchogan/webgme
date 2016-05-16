@@ -8,9 +8,11 @@
 define([
     'js/util',
     'text!./templates/ConstraintDetailsDialog.html',
-    'codemirror',
+    'common/regexp',
+    'codemirror/lib/codemirror',
+    'codemirror/mode/javascript/javascript',
     'css!./styles/ConstraintDetailsDialog.css'
-], function (util, constraintDetailsDialogTemplate, codeMirror) {
+], function (util, constraintDetailsDialogTemplate, REGEXP, codeMirror) {
 
     'use strict';
     var ConstraintDetailsDialog;
@@ -47,10 +49,10 @@ define([
 
         closeSave = function () {
             var constDesc = {
-                'name': self._inputName.val(),
-                'script': self._codeMirror.getValue(),
-                'priority': self._inputPriority.val(),
-                'info': self._inputMessage.val()
+                name: self._inputName.val(),
+                script: self._codeMirror.getValue(),
+                priority: self._inputPriority.val(),
+                info: self._inputMessage.val()
             };
 
             self._dialog.modal('hide');
@@ -69,7 +71,7 @@ define([
         };
 
         isValidConstraintName = function (name) {
-            return !(name === '' || constraintNames.indexOf(name) !== -1);
+            return !(name === '' || constraintNames.indexOf(name) !== -1 || REGEXP.DOCUMENT_KEY.test(name) === false);
         };
 
         this._dialog = $(constraintDetailsDialogTemplate);
@@ -80,7 +82,6 @@ define([
         this._btnSave = this._dialog.find('.btn-save').first();
         this._btnDelete = this._dialog.find('.btn-delete').first();
 
-        this._pName = this._el.find('#pName').first();
         this._pScript = this._el.find('#pScript').first();
         this._scriptEditor = this._pScript.find('div.controls').first();
 
@@ -94,10 +95,10 @@ define([
             var val = self._inputName.val();
 
             if (!isValidConstraintName(val)) {
-                self._pName.addClass('error');
+                self._inputName.addClass('text-danger');
                 self._btnSave.disable(true);
             } else {
-                self._pName.removeClass('error');
+                self._inputName.removeClass('text-danger');
                 self._btnSave.disable(false);
             }
         });
@@ -117,12 +118,14 @@ define([
 
         //click on SAVE button
         this._btnSave.on('click', function (event) {
-            var val = self._codeMirror.getValue();
+            var name = self._inputName.val();
 
             event.stopPropagation();
             event.preventDefault();
 
-            if (isValidConstraintName(val)) {
+            // TODO: Check the code using esprima...
+
+            if (isValidConstraintName(name)) {
                 closeSave();
             }
         });

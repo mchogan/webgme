@@ -5,7 +5,7 @@
  * @author rkereskenyi / https://github.com/rkereskenyi
  */
 
-define(['js/logger', 'css!./styles/UserProfileWidget.css'], function (Logger) {
+define(['js/logger'], function (Logger) {
     'use strict';
 
     var UserProfileWidget,
@@ -29,13 +29,7 @@ define(['js/logger', 'css!./styles/UserProfileWidget.css'], function (Logger) {
 
     UserProfileWidget.prototype._initializeUI = function () {
         var tmp = USER_PROFILE_WIDGET_TEMPLATE_NOTLOGGEDIN;
-
-        if (this._client &&
-            this._client.getUserId &&
-            this._client.getUserId() !== 'n/a') {
-            tmp = USER_PROFILE_WIDGET_TEMPLATE_LOGGEDIN.replace('__USERNAME__', this._client.getUserId());
-        }
-
+            tmp = USER_PROFILE_WIDGET_TEMPLATE_LOGGEDIN.replace('__USERNAME__', WebGMEGlobal.userInfo._id);
         tmp = '<p class="navbar-text">' + tmp + '</p>';
 
         this._el.html(tmp);

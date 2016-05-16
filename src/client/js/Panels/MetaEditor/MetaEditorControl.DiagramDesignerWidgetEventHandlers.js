@@ -38,11 +38,112 @@ define(['js/logger',
             WebGMEGlobal.gmeConfig.client.log);
     };
 
-    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype.attachDiagramDesignerWidgetEventHandlers = function () {
+    MetaEditorControlDiagramDesignerWidgetEventHandlers
+        .prototype.attachDiagramDesignerWidgetEventHandlers = function () {
         var self = this;
 
         /*OVERRIDE DESIGNER CANVAS METHODS*/
+        this.diagramDesigner.onDesignerItemsMove = function (repositionDesc) {
+            self._onDesignerItemsMove(repositionDesc);
+        };
+
         this.diagramDesigner.onCreateNewConnection = function (params) {
+            var sourceId = self._ComponentID2GMEID[params.src],
+                targetId = self._ComponentID2GMEID[params.dst],
+                mixinCheckResult,
+                node,
+                baseNode,
+                oldBaseNode;
+
+            if (self._connType === MetaRelations.META_RELATIONS.INHERITANCE) {
+                //check if base will be changed so we should notify user about it
+                node = self._client.getNode(sourceId);
+                if (node) {
+                    if (sourceId === targetId) {
+                        dialog.alert('Invalid base modification',
+                            'The base of an object cannot be itself!',
+                            function () {
+                            }
+                        );
+                        return;
+                    }
+
+                    if (targetId !== node.getBaseId()) {
+                        //TODO probably come up with some detailed list,
+                        // what will the target loose and what will it gain
+
+                        baseNode = self._client.getNode(targetId);
+                        oldBaseNode = self._client.getNode(node.getBaseId());
+
+                        if (baseNode && oldBaseNode) {
+                            if (baseNode.getChildrenIds().length > 0 || oldBaseNode.getChildrenIds().length > 0) {
+                                dialog.alert('Invalid base modification',
+                                    'Currently, modification from or to a base which has children is not allowed!',
+                                    function () {
+
+                                    }
+                                );
+                                return;
+                            } else {
+                                do {
+                                    if (baseNode.getId() === sourceId) {
+                                        dialog.alert('Invalid base modification',
+                                            'Change of base node would create circular inheritance!',
+                                            function () {
+
+                                            }
+                                        );
+                                        return;
+                                    }
+                                    baseNode = self._client.getNode(baseNode.getBaseId());
+                                } while (baseNode);
+                            }
+
+                            dialog.confirm('Confirm base change',
+                                'Changing a base can cause invalid data in the target node and its descendants!',
+                                function () {
+                                    self._onCreateNewConnection(params);
+                                }
+                            );
+                        } else if (!oldBaseNode) {
+                            dialog.alert('Invalid base modification',
+                                'Cannot change the base of the FCO!',
+                                function () {
+                                }
+                            );
+                        }
+                    } else {
+                        dialog.alert('Invalid base modification',
+                            'Base already set to the new base!',
+                            function () {
+                            }
+                        );
+                    }
+                } else {
+                    self.logger.error('cannot edit base of an unknown node [' + sourceId + ']');
+                }
+                return;
+            } else if (self._connType === MetaRelations.META_RELATIONS.MIXIN) {
+                node = self._client.getNode(sourceId);
+                if (node) {
+                    mixinCheckResult = node.canSetAsMixin(targetId);
+
+                    if (mixinCheckResult.isOk === false) {
+                        self.logger.warn('cannot set [' + targetId + '] as mixin for [' + sourceId + ']',
+                            mixinCheckResult);
+                        dialog.alert('Invalid mixin target',
+                            mixinCheckResult.reason,
+                            function () {
+
+                            });
+                        return;
+                    }
+                } else {
+                    self.logger.error('cannot edit mixin of an unknown node [' + sourceId + ']');
+                }
+            }
+
+            //not inheritance type connection creation
             self._onCreateNewConnection(params);
         };
 
@@ -117,7 +218,34 @@ define(['js/logger',
             self._onSelectionTextColorChanged(selectedElements, color);
         };
 
+        this.diagramDesigner.onSelectionAlignMenu = function (selectedIds, mousePos) {
+            self._onSelectionAlignMenu(selectedIds, mousePos);
+        };
+
+        this.diagramDesigner.onAlignSelection = function (selectedIds, type) {
+            self._onAlignSelection(selectedIds, type);
+        };
+
         this.logger.debug('attachDesignerCanvasEventHandlers finished');
+    };
+
+    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onDesignerItemsMove = function (repositionDesc) {
+        var id;
+
+        this._client.startTransaction();
+        for (id in repositionDesc) {
+            if (repositionDesc.hasOwnProperty(id)) {
+                this._client.setMemberRegistry(this.metaAspectContainerNodeID,
+                    this._ComponentID2GMEID[id],
+                    this._selectedMetaAspectSet,
+                    REGISTRY_KEYS.POSITION,
+                    {
+                        x: repositionDesc[id].x,
+                        y: repositionDesc[id].y
+                    });
+            }
+        }
+        this._client.completeTransaction();
     };
 
     /**********************************************************/
@@ -144,8 +272,7 @@ define(['js/logger',
                     //return true if there is at least one item among the dragged ones that is not on the sheet yet
                     if (gmeIDList.length > 0 && gmeIDList.indexOf(CONSTANTS.PROJECT_ROOT_ID) === -1) {
                         for (i = 0; i < gmeIDList.length; i += 1) {
-                            if (this._metaAspectMembersPerSheet[this._selectedMetaAspectSet].indexOf(gmeIDList[i]) ===
-                                -1) {
+                            if (this._metaAspectMembersPerSheet[this._selectedMetaAspectSet].indexOf(gmeIDList[i]) === -1) {
                                 accept = true;
                                 break;
                             }
@@ -160,7 +287,6 @@ define(['js/logger',
     /**********************************************************/
     /*  END OF --- HANDLE OBJECT DRAG & DROP ACCEPTANCE       */
     /**********************************************************/
-
 
     /**********************************************************/
     /*  HANDLE OBJECT DRAG & DROP TO SHEET                    */
@@ -343,7 +469,6 @@ define(['js/logger',
     /*  END OF --- HANDLE OBJECT DRAG & DROP TO SHEET         */
     /**********************************************************/
 
-
     /*************************************************************/
     /*  HANDLE OBJECT / CONNECTION DELETION IN THE ASPECT ASPECT */
     /*************************************************************/
@@ -373,6 +498,8 @@ define(['js/logger',
                 self._deletePointerRelationship(connDesc.GMESrcId, connDesc.GMEDstId, connDesc.name, false);
             } else if (connDesc.type === MetaRelations.META_RELATIONS.INHERITANCE) {
                 self._deleteInheritanceRelationship(connDesc.GMESrcId, connDesc.GMEDstId);
+            } else if (connDesc.type === MetaRelations.META_RELATIONS.MIXIN) {
+                self._deleteMixinRelationship(connDesc.GMESrcId, connDesc.GMEDstId);
             } else if (connDesc.type === MetaRelations.META_RELATIONS.SET) {
                 self._deletePointerRelationship(connDesc.GMESrcId, connDesc.GMEDstId, connDesc.name, true);
             }
@@ -391,8 +518,13 @@ define(['js/logger',
 
                     //if the items is not present anywhere else, remove it from the META's global sheet too
                     if (self._metaAspectSheetsPerMember[gmeID].length === 1) {
-                        _client.removeMember(aspectNodeID, gmeID, MetaEditorConstants.META_ASPECT_SET_NAME);
-                        _client.setMeta(gmeID, {});
+                        nodeObj = _client.getNode(gmeID);
+                        if (nodeObj && (nodeObj.isLibraryElement() || nodeObj.isLibraryRoot())) {
+                            //library elements will not be lost at all
+                        } else {
+                            _client.removeMember(aspectNodeID, gmeID, MetaEditorConstants.META_ASPECT_SET_NAME);
+                            _client.setMeta(gmeID, {});
+                        }
                     }
                 } else if (self._connectionListByID.hasOwnProperty(itemsToDelete[len])) {
                     //entity is a connection, just simply delete it
@@ -413,7 +545,12 @@ define(['js/logger',
                 //entity is a box
                 //check to see if this gmeID is present on any other sheet at all
                 if (this._metaAspectSheetsPerMember[gmeID].length === 1) {
-                    metaInfoToBeLost.push(gmeID);
+                    nodeObj = _client.getNode(gmeID);
+                    if (nodeObj && (nodeObj.isLibraryElement() || nodeObj.isLibraryRoot())) {
+                        //library elements will not be lost at all
+                    } else {
+                        metaInfoToBeLost.push(gmeID);
+                    }
                 }
             }
         }
@@ -421,7 +558,7 @@ define(['js/logger',
         if (metaInfoToBeLost.length > 0) {
             //need user confirmation because there is some meta info to be lost
             confirmMsg = 'The following items you are about to delete are not present on any other sheet and will ' +
-            'be permanently removed from the META aspect:<br><br>';
+                'be permanently removed from the META aspect:<br><br>';
             itemNames = [];
             len = metaInfoToBeLost.length;
             while (len--) {
@@ -436,7 +573,7 @@ define(['js/logger',
             itemNames.sort();
             for (len = 0; len < itemNames.length; len += 1) {
                 confirmMsg += '- <b>' + itemNames[len] +
-                              '</b>  (all associated meta rules will be deleted for this element)<br>';
+                    '</b>  (all associated meta rules will be deleted for this element)<br>';
             }
             confirmMsg += '<br>Are you sure you want to delete?';
             dialog.confirm('Confirm delete', confirmMsg, function () {
@@ -450,7 +587,6 @@ define(['js/logger',
     /************************************************************************/
     /*  END OF --- HANDLE OBJECT / CONNECTION DELETION IN THE ASPECT ASPECT */
     /************************************************************************/
-
 
     MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._getDragParams = function (selectedElements, event) {
         var oParams = this._oGetDragParams.call(this.diagramDesigner, selectedElements, event),
@@ -468,7 +604,6 @@ define(['js/logger',
 
         return params;
     };
-
 
     MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._getDragItems = function (selectedElements) {
         var draggedItems = [],
@@ -505,17 +640,13 @@ define(['js/logger',
             }
         }
 
-        this.diagramDesigner.toolbarItems.ddbtnConnectionArrowStart.enabled(onlyConnectionTypeSelected);
-        this.diagramDesigner.toolbarItems.ddbtnConnectionPattern.enabled(onlyConnectionTypeSelected);
-        this.diagramDesigner.toolbarItems.ddbtnConnectionArrowEnd.enabled(onlyConnectionTypeSelected);
-        this.diagramDesigner.toolbarItems.ddbtnConnectionLineType.enabled(onlyConnectionTypeSelected);
-        this.diagramDesigner.toolbarItems.ddbtnConnectionLineWidth.enabled(onlyConnectionTypeSelected);
+        // lineStyleControls are disabled in meta-editor.
 
-        //nobody is selected on the canvas
-        //set the active selection to the opened guy
-        if (gmeIDs.length === 0 && this.metaAspectContainerNodeID) {
-            gmeIDs.push(this.metaAspectContainerNodeID);
-        }
+        //this.diagramDesigner.toolbarItems.ddbtnConnectionArrowStart.enabled(onlyConnectionTypeSelected);
+        //this.diagramDesigner.toolbarItems.ddbtnConnectionPattern.enabled(onlyConnectionTypeSelected);
+        //this.diagramDesigner.toolbarItems.ddbtnConnectionArrowEnd.enabled(onlyConnectionTypeSelected);
+        //this.diagramDesigner.toolbarItems.ddbtnConnectionLineType.enabled(onlyConnectionTypeSelected);
+        //this.diagramDesigner.toolbarItems.ddbtnConnectionLineWidth.enabled(onlyConnectionTypeSelected);
 
         WebGMEGlobal.State.registerActiveSelection(gmeIDs);
     };
@@ -628,11 +759,12 @@ define(['js/logger',
     };
 
     MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectedTabChanged = function (tabID) {
-        if (this._sheets[tabID] && this._selectedMetaAspectSet !== this._sheets[tabID]) {
+        if (this._sheets && tabID && this._selectedMetaAspectSet !== this._sheets[tabID]) {
             this._selectedMetaAspectSet = this._sheets[tabID];
-
+            this._selectedSheetID = tabID.toString();
             this.logger.debug('selectedAspectChanged: ' + this._selectedMetaAspectSet);
 
+            WebGMEGlobal.State.registerActiveTab(tabID);
             this._initializeSelectedSheet();
         }
     };
@@ -701,7 +833,6 @@ define(['js/logger',
             _client.completeTransaction();
         };
 
-
         //first figure out if the deleted-to-be items are present in any other meta sheet
         //if not, ask the user to confirm delete
         len = itemsOfAspect.length;
@@ -712,7 +843,12 @@ define(['js/logger',
                 //entity is a box
                 //check to see if this gmeID is present on any other sheet at all
                 if (this._metaAspectSheetsPerMember[gmeID].length === 1) {
-                    metaAspectMemberToBeLost.push(gmeID);
+                    nodeObj = _client.getNode(gmeID);
+                    if (nodeObj && (nodeObj.isLibraryElement() || nodeObj.isLibraryRoot())) {
+                        //library elements will not be lost
+                    } else {
+                        metaAspectMemberToBeLost.push(gmeID);
+                    }
                 }
             }
         }
@@ -720,7 +856,7 @@ define(['js/logger',
         if (metaAspectMemberToBeLost.length > 0) {
             //need user confirmation because there is some meta info to be lost
             confirmMsg = 'You are about to delete a sheet that contains the following items that are not present ' +
-            'on any other sheet and will be permanently removed from the META aspect:<br><br>';
+                'on any other sheet and will be permanently removed from the META aspect:<br><br>';
             itemNames = [];
             len = metaAspectMemberToBeLost.length;
             while (len--) {
@@ -735,7 +871,7 @@ define(['js/logger',
             itemNames.sort();
             for (len = 0; len < itemNames.length; len += 1) {
                 confirmMsg += '- <b>' + itemNames[len] +
-                              '</b> (all associated meta rules will be deleted for this element)<br>';
+                    '</b> (all associated meta rules will be deleted for this element)<br>';
             }
             confirmMsg += '<br>Are you sure you want to delete the sheet anyway?';
             dialog.confirm('Confirm delete', confirmMsg, function () {
@@ -750,18 +886,21 @@ define(['js/logger',
         }
     };
 
-
     MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onTabsSorted = function (newTabIDOrder) {
         var aspectNodeID = this.metaAspectContainerNodeID,
             aspectNode = this._client.getNode(aspectNodeID),
             metaAspectSheetsRegistry = aspectNode.getEditableRegistry(REGISTRY_KEYS.META_SHEETS) || [],
             i,
             j,
+            urlTab = WebGMEGlobal.State.getActiveTab(),
             setID;
 
         for (i = 0; i < newTabIDOrder.length; i += 1) {
             //i is the new order number
             //newTabIDOrder[i] is the sheet identifier
+            if (urlTab === newTabIDOrder[i]) {
+                WebGMEGlobal.State.registerActiveTab(i);
+            }
             setID = this._sheets[newTabIDOrder[i]];
             for (j = 0; j < metaAspectSheetsRegistry.length; j += 1) {
                 if (metaAspectSheetsRegistry[j].SetID === setID) {
@@ -779,29 +918,26 @@ define(['js/logger',
             }
         });
 
-        this._client.startTransaction();
         this._client.setRegistry(aspectNodeID, REGISTRY_KEYS.META_SHEETS, metaAspectSheetsRegistry);
-        this._client.completeTransaction();
     };
 
-
-    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionFillColorChanged = function (selectedElements,
-                                                                                                           color) {
+    MetaEditorControlDiagramDesignerWidgetEventHandlers
+        .prototype._onSelectionFillColorChanged = function (selectedElements, color) {
         this._onSelectionSetColor(selectedElements, color, REGISTRY_KEYS.COLOR);
     };
 
-    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionBorderColorChanged = function (selectedElements,
-                                                                                                             color) {
+    MetaEditorControlDiagramDesignerWidgetEventHandlers
+        .prototype._onSelectionBorderColorChanged = function (selectedElements, color) {
         this._onSelectionSetColor(selectedElements, color, REGISTRY_KEYS.BORDER_COLOR);
     };
 
-    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionTextColorChanged = function (selectedElements,
-                                                                                                           color) {
+    MetaEditorControlDiagramDesignerWidgetEventHandlers
+        .prototype._onSelectionTextColorChanged = function (selectedElements, color) {
         this._onSelectionSetColor(selectedElements, color, REGISTRY_KEYS.TEXT_COLOR);
     };
 
-    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionSetColor = function (selectedIds, color,
-                                                                                                   regKey) {
+    MetaEditorControlDiagramDesignerWidgetEventHandlers
+        .prototype._onSelectionSetColor = function (selectedIds, color, regKey) {
         var i = selectedIds.length,
             gmeID;
 
@@ -825,6 +961,29 @@ define(['js/logger',
         this._client.completeTransaction();
     };
 
+    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionAlignMenu = function (selectedIds,
+                                                                                                    mousePos) {
+        var menuPos = this.diagramDesigner.posToPageXY(mousePos.mX, mousePos.mY),
+            self = this;
+
+        this._alignMenu.show(selectedIds, menuPos, function (key) {
+            self._onAlignSelection(selectedIds, key);
+        });
+    };
+
+    MetaEditorControlDiagramDesignerWidgetEventHandlers.prototype._onAlignSelection = function (selectedIds, type) {
+        var params = {
+            client: this._client,
+            modelId: this.metaAspectContainerNodeID,
+            idMap: this._ComponentID2GMEID,
+            setName: this._selectedMetaAspectSet,
+            coordinates: this._metaAspectMembersCoordinatesPerSheet[this._selectedMetaAspectSet]
+        };
+
+        if (params.coordinates) {
+            this._alignMenu.alignSetSelection(params, selectedIds, type);
+        }
+    };
 
     return MetaEditorControlDiagramDesignerWidgetEventHandlers;
 });

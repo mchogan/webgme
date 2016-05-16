@@ -1,60 +1,50 @@
+/*globals require*/
 /*jshint browser: true*/
-var allTestFiles = [];
-var TEST_REGEXP = /(spec|test)\.js$/i;
 
-var pathToModule = function (path) {
-    'use strict';
-    return path.replace(/^\/base\//, '').replace(/\.js$/, '');
-};
+'use strict';
+
+var allTestFiles = [],
+    TEST_REGEXP = /(spec|test)\.js$/i,
+
+    pathToModule = function (path) {
+        return path.replace(/^\/base\//, '').replace(/\.js$/, '');
+    };
 
 Object.keys(window.__karma__.files).forEach(function (file) {
-    'use strict';
     if (TEST_REGEXP.test(file)) {
         // Normalize paths to RequireJS module names.
         allTestFiles.push(pathToModule(file));
     }
 });
 
-
 require.config({
     // Karma serves files under /base, which is the basePath from your config file
     baseUrl: '/base',
 
-    map: {
-        '*': {
-            'css': './src/client/lib/require/require-css/css',
-            'text': './src/client/lib/require/require-text/text'
-        }
-    },
-
     paths: {
         // plugin base classes
-        'plugin': './src/plugin',
+        plugin: './src/plugin',
+        text: './src/client/lib/require/require-text/text',
 
         // plugins
         // TODO: populate plugin list dynamically based on config.json
+        'plugin/MinimalWorkingExample': './src/plugin/coreplugins',
+        'plugin/PluginForked': './test/plugin/scenarios/plugins',
 
+        executor: './src/common/executor',
+        blob: './src/common/blob',
+        common: './src/common',
 
-        // MAGIC ... from src/client/js/main.js
-        'executor': './src/common/executor',
-        'blob': './src/common/blob',
-        'common': './src/common',
-        //'core': './src/common/core',
-        //'storage': './src/common/storage',
+        js: './src/client/js',
 
-        'js': './src/client/js',
-        //'util': './src/common/util',
-        //'eventDispatcher': './src/common/EventDispatcher',
-        //'logManager': './src/common/LogManager',
-        //'coreclient': './src/common/core/users',
+        superagent: './src/client/lib/superagent/superagent',
+        jszip: './src/client/bower_components/jszip/dist/jszip',
+        debug: './src/client/bower_components/visionmedia-debug/dist/debug',
+        underscore: './src/client/bower_components/underscore/underscore',
+        q: './src/client/bower_components/q/q',
 
-        'superagent': './src/client/lib/superagent/superagent-1.1.0',
-        'jszip': './src/client/lib/jszip/jszip',
-        'debug': './src/client/lib/debug/debug',
-        'underscore': './src/client/lib/underscore/underscore',
-
-        'karmatest': './test-karma',
-        'aRtestCases': './test-karma/client/js/AutoRouter/testCases'
+        karmatest: './test-karma',
+        aRtestCases: './test-karma/client/js/AutoRouter/testCases'
 
         // external libraries used by plugins
         //'ejs': './support/ejs/ejs.min',
@@ -71,5 +61,41 @@ require.config({
     deps: allTestFiles,
 
     // we have to kickoff jasmine, as it is asynchronous
-    callback: window.__karma__.start
+    callback: testServerConnection
 });
+
+function done(err, res) {
+  if (err) {
+    console.error(err);
+  }
+  window.__karma__.start();
+}
+
+function testServerConnection () {
+  requirejs(['superagent'], function (superagent) {
+
+      var maxTries = 50,
+          i = 0,
+          timeout = 100;
+
+      function tryToGetGmeConfig() {
+        console.log('Trying to get gmeConfig.json ... ', i, i * timeout / 1000);
+        superagent.get('/base/gmeConfig.json')
+            .end(function (err, res) {
+                if (res.status === 200) {
+                  console.log('Got gmeConfig.json');
+                  done();
+                } else {
+                  i += 1;
+                  if (i < maxTries) {
+                    setTimeout(tryToGetGmeConfig, timeout);
+                  } else {
+                    done(err, res);
+                  }
+                }
+            });
+      }
+
+      tryToGetGmeConfig();
+  });
+}

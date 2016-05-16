@@ -35,6 +35,7 @@ define([
     './DiagramDesignerWidget.Toolbar',
     './DiagramDesignerWidget.Mouse',
     './DiagramDesignerWidget.Tabs',
+    'js/Utils/ComponentSettings',
     'css!./styles/DiagramDesignerWidget.css'
 ], function (Logger,
              CONSTANTS,
@@ -62,14 +63,14 @@ define([
              DiagramDesignerWidgetClipboard,
              DiagramDesignerWidgetToolbar,
              DiagramDesignerWidgetMouse,
-             DiagramDesignerWidgetTabs) {
+             DiagramDesignerWidgetTabs,
+             ComponentSettings) {
 
     'use strict';
 
     var DiagramDesignerWidget,
         CANVAS_EDGE = 100,
         WIDGET_CLASS = 'diagram-designer',  // must be same as scss/Widgets/DiagramDesignerWidget.scss
-        DEFAULT_CONNECTION_ROUTE_MANAGER = ConnectionRouteManager3,
         GUID_DIGITS = 6,
         BACKGROUND_TEXT_COLOR = '#DEDEDE',
         BACKGROUND_TEXT_SIZE = 30,
@@ -81,19 +82,26 @@ define([
         loggerName: 'gme:Widgets:DiagramDesigner:DiagramDesignerWidget',
         gridSize: 10,
         droppable: true,
-        zoomValues: [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5, 10],
-        zoomUIControls: true
+        zoomUIControls: true,
+        defaultConnectionRouteManagerType: WebGMEGlobal.gmeConfig.client.defaultConnectionRouter
     };
 
     DiagramDesignerWidget = function (container, par) {
         var self = this,
+            config = DiagramDesignerWidget.getDefaultConfig(),
             params = {};
 
+        this.CONSTANTS = DiagramDesignerWidgetConstants;
+
+        ComponentSettings.resolveWithWebGMEGlobal(config, DiagramDesignerWidget.getComponentId());
         //merge dfault values with the given parameters
         _.extend(params, defaultParams, par);
 
+        params.zoomValues = params.zoomValues || config.zoomValues;
+
+        this.gmeConfig = WebGMEGlobal.gmeConfig;
         //create logger instance with specified name
-        this.logger = Logger.create(params.loggerName, WebGMEGlobal.gmeConfig.client.log);
+        this.logger = Logger.create(params.loggerName, this.gmeConfig.client.log);
 
         //save DOM container
         this.$el = container;
@@ -201,13 +209,21 @@ define([
         };
 
         //initiate Drag Manager (if needed)
-        //this.dragManager = new DragManager({diagramDesigner: this});
-        //this.dragManager.initialize(this.skinParts.$itemsContainer);
+        this.dragManager = new DragManager({diagramDesigner: this});
+        this.dragManager.initialize(this.skinParts.$itemsContainer);
 
         /*********** CONNECTION DRAWING COMPONENT *************/
-            //initiate Connection Router (if needed)
-        this.connectionRouteManager = params.connectionRouteManager ||
-        new DEFAULT_CONNECTION_ROUTE_MANAGER({diagramDesigner: this});
+        this._defaultConnectionRouteManagerType = params.defaultConnectionRouteManagerType;
+        //initiate Connection Router (if needed)
+        if (params.connectionRouteManager) {
+            this.connectionRouteManager = params.connectionRouteManager;
+        } else if (params.defaultConnectionRouteManagerType === 'basic') {
+            this.connectionRouteManager = new ConnectionRouteManagerBasic({diagramDesigner: this});
+        } else if (params.defaultConnectionRouteManagerType === 'basic2') {
+            this.connectionRouteManager = new ConnectionRouteManager2({diagramDesigner: this});
+        } else if (params.defaultConnectionRouteManagerType === 'basic3') {
+            this.connectionRouteManager = new ConnectionRouteManager3({diagramDesigner: this});
+        }
 
         this.connectionRouteManager.initialize();
 
@@ -359,6 +375,7 @@ define([
     DiagramDesignerWidget.prototype.destroy = function () {
         this.__loader.destroy();
         this._removeToolbarItems();
+        this.connectionRouteManager.destroy();
         //TODO: what about item and connection destroys????
     };
 
@@ -431,12 +448,12 @@ define([
 
         if (type === DiagramDesignerWidgetConstants.LINE_TYPES.BEZIER) {
             path = paper.path('M 5,' + (Math.round(vSize / 2) + 0.5) + ' C' + (5 + bezierControlOffset) + ',' +
-            (Math.round(vSize / 2) + 0.5 - bezierControlOffset * 2) + ' ' + (hSize - bezierControlOffset) + ',' +
-            (Math.round(vSize / 2) + 0.5 + bezierControlOffset * 2) + ' ' + (hSize - 5) + ',' +
-            (Math.round(vSize / 2) + 0.5));
+                (Math.round(vSize / 2) + 0.5 - bezierControlOffset * 2) + ' ' + (hSize - bezierControlOffset) + ',' +
+                (Math.round(vSize / 2) + 0.5 + bezierControlOffset * 2) + ' ' + (hSize - 5) + ',' +
+                (Math.round(vSize / 2) + 0.5));
         } else {
             path = paper.path('M 5,' + (Math.round(vSize / 2) + 0.5) + ' L' + (hSize - 5) + ',' +
-            (Math.round(vSize / 2) + 0.5));
+                (Math.round(vSize / 2) + 0.5));
         }
 
         path.attr({
@@ -604,6 +621,8 @@ define([
 
         this._updating = false;
         this._tryRefreshScreen();
+
+        this.searchManager.applyLastSearch();
     };
 
     DiagramDesignerWidget.prototype._tryRefreshScreen = function () {
@@ -729,7 +748,7 @@ define([
         connectionIDsToUpdate = _.uniq(connectionIDsToUpdate).sort();
 
         this.logger.debug('Redraw connection request: ' + connectionIDsToUpdate.length + '/' +
-        this.connectionIds.length);
+            this.connectionIds.length);
 
         redrawnConnectionIDs = this._redrawConnections(connectionIDsToUpdate);
 
@@ -875,7 +894,7 @@ define([
         connectionIDsToUpdate = this._getAssociatedConnectionsForItems(allDraggedItemIDs).sort();
 
         this.logger.debug('Redraw connection request: ' + connectionIDsToUpdate.length + '/' +
-        this.connectionIds.length);
+            this.connectionIds.length);
 
         redrawnConnectionIDs = this._redrawConnections(connectionIDsToUpdate) || [];
 
@@ -902,20 +921,39 @@ define([
             case 'contextmenu':
                 this.onSelectionContextMenu(selectedIds, this.getAdjustedMousePos(event));
                 break;
+            case 'align':
+                this.onSelectionAlignMenu(selectedIds, this.getAdjustedMousePos(event));
+                break;
+            case 'open':
+                this.onDesignerItemDoubleClick(selectedIds[0]);
+                break;
         }
     };
 
     DiagramDesignerWidget.prototype.onSelectionDelete = function (selectedIds) {
         this.logger.warn('DiagramDesignerWidget.onSelectionDelete IS NOT OVERRIDDEN IN A CONTROLLER. ID: "' +
-        selectedIds + '"');
+            selectedIds + '"');
     };
 
     DiagramDesignerWidget.prototype.onSelectionContextMenu = function (selectedIds, mousePos) {
         this.logger.warn('DiagramDesignerWidget.onSelectionContextMenu IS NOT OVERRIDDEN IN A CONTROLLER. ID: "' +
-        selectedIds + '", mousePos: ' + JSON.stringify(mousePos));
+            selectedIds + '", mousePos: ' + JSON.stringify(mousePos));
     };
 
-    /************************** SELECTION DELETE CLICK HANDLER ****************************/
+    DiagramDesignerWidget.prototype.onSelectionAlignMenu = function (selectedIds, mousePos) {
+        this.logger.warn('DiagramDesignerWidget.onSelectionAlignMenu IS NOT OVERRIDDEN IN A CONTROLLER. ID: "' +
+            selectedIds + '", mousePos: ' + JSON.stringify(mousePos));
+    };
+
+    /************************** END - SELECTION DELETE CLICK HANDLER ****************************/
+
+    /************************** ALIGN SHORT CUTS HANDLERS ****************************/
+    DiagramDesignerWidget.prototype.onAlignSelection = function (selectedIds, type) {
+        this.logger.warn('DiagramDesignerWidget.onAlignSelection IS NOT OVERRIDDEN IN A CONTROLLER. ID: "' +
+            selectedIds + '", type: "' + type + '".');
+    };
+
+    /************************** END - ALIGN SHORT CUTS HANDLERS ****************************/
 
     /************************** SELECTION CHANGED HANDLER ****************************/
 
@@ -1206,6 +1244,14 @@ define([
         this.selectionManager.enableRotation(enabled);
     };
 
+    DiagramDesignerWidget.prototype.enableAlign = function (enabled) {
+        this.selectionManager.enableAlign(enabled);
+    };
+
+    DiagramDesignerWidget.prototype.enableOpenButton = function (enabled) {
+        this.selectionManager.enableOpenButton(enabled);
+    };
+
     /*************** SELECTION API ******************************************/
 
     DiagramDesignerWidget.prototype.selectAll = function () {
@@ -1247,7 +1293,7 @@ define([
 
     DiagramDesignerWidget.prototype.onClipboardCopy = function (selectedIds) {
         this.logger.warn('DiagramDesignerWidget.prototype.onClipboardCopy not overridden in controller!!!' +
-        'selectedIds: "' + selectedIds + '"');
+            'selectedIds: "' + selectedIds + '"');
     };
 
     DiagramDesignerWidget.prototype.onClipboardPaste = function () {
@@ -1259,7 +1305,7 @@ define([
     /************************* CONNECTION SEGMENT POINTS CHANGE ************************/
     DiagramDesignerWidget.prototype.onConnectionSegmentPointsChange = function (params) {
         this.logger.warn('DiagramDesignerWidget.prototype.onConnectionSegmentPointsChange not overridden in ' +
-        'controller. params: ' + JSON.stringify(params));
+            'controller. params: ' + JSON.stringify(params));
     };
     /************************* END OF --- CONNECTION SEGMENT POINTS CHANGE ************************/
 
@@ -1328,7 +1374,7 @@ define([
     /************************* DESIGNER ITEM DRAGGABLE & COPYABLE CHECK ON DRAG START ************************/
     DiagramDesignerWidget.prototype.onDragStartDesignerItemDraggable = function (itemID) {
         this.logger.warn('DiagramDesignerWidget.prototype.onDesignerItemDraggable not overridden in controller. ' +
-        'itemID: ' + itemID);
+            'itemID: ' + itemID);
 
         return true;
     };
@@ -1336,7 +1382,7 @@ define([
 
     DiagramDesignerWidget.prototype.onDragStartDesignerItemCopyable = function (itemID) {
         this.logger.warn('DiagramDesignerWidget.prototype.onDragStartDesignerItemCopyable not overridden in ' +
-        'controller. itemID: ' + itemID);
+            'controller. itemID: ' + itemID);
 
         return true;
     };
@@ -1344,7 +1390,7 @@ define([
 
     DiagramDesignerWidget.prototype.onDragStartDesignerConnectionCopyable = function (connectionID) {
         this.logger.warn('DiagramDesignerWidget.prototype.onDragStartDesignerConnectionCopyable not overridden in ' +
-        'controller. connectionID: ' + connectionID);
+            'controller. connectionID: ' + connectionID);
 
         return true;
     };
@@ -1357,31 +1403,31 @@ define([
 
     DiagramDesignerWidget.prototype.onUnhighlight = function (idList) {
         this.logger.warn('DiagramDesignerWidget.prototype.onUnhighlight not overridden in controller. idList: ' +
-        idList);
+            idList);
     };
     /************************* HIGHLIGHTED / UNHIGHLIGHTED EVENT *****************************/
 
 
     DiagramDesignerWidget.prototype.onSelectionRotated = function (deg, selectedIds) {
         this.logger.warn('DiagramDesignerWidget.prototype.onSelectionRotated IS NOT OVERRIDDEN IN CONTROLLER. deg: "' +
-        deg + '", selectedIds: ' + selectedIds);
+            deg + '", selectedIds: ' + selectedIds);
     };
 
     /*********************** CONNECTION TEXT CHANGED HANDLERS **************************/
 
     DiagramDesignerWidget.prototype.onConnectionNameChanged = function (connId, oldValue, newValue) {
         this.logger.warn('DiagramDesignerWidget.prototype.onConnectionNameChanged IS NOT OVERRIDDEN IN CONTROLLER.' +
-        ' connId: "' + connId + '", oldValue: "' + oldValue + '", newValue: "' + newValue + '"');
+            ' connId: "' + connId + '", oldValue: "' + oldValue + '", newValue: "' + newValue + '"');
     };
 
     DiagramDesignerWidget.prototype.onConnectionSrcTextChanged = function (connId, oldValue, newValue) {
         this.logger.warn('DiagramDesignerWidget.prototype.onConnectionSrcTextChanged IS NOT OVERRIDDEN IN CONTROLLER.' +
-        'connId: "' + connId + '", oldValue: "' + oldValue + '", newValue: "' + newValue + '"');
+            'connId: "' + connId + '", oldValue: "' + oldValue + '", newValue: "' + newValue + '"');
     };
 
     DiagramDesignerWidget.prototype.onConnectionDstTextChanged = function (connId, oldValue, newValue) {
         this.logger.warn('DiagramDesignerWidget.prototype.onConnectionDstTextChanged IS NOT OVERRIDDEN IN ' +
-        'CONTROLLER. ' + 'connId: "' + connId + '", oldValue: "' + oldValue + '", newValue: "' + newValue + '"');
+            'CONTROLLER. ' + 'connId: "' + connId + '", oldValue: "' + oldValue + '", newValue: "' + newValue + '"');
     };
 
     /*********************** END OF CONNECTION TEXT CHANGED HANDLERS **************************/
@@ -1418,7 +1464,7 @@ define([
 
     DiagramDesignerWidget.prototype.onSetConnectionProperty = function (params) {
         this.logger.warn('DiagramDesignerWidget.prototype.onSetConnectionProperty IS NOT OVERRIDDEN IN CONTROLLER.' +
-        'params: ' + JSON.stringify(params));
+            'params: ' + JSON.stringify(params));
     };
     /*********************** ENBD OF --- SET CONNECTION VISUAL PROPERTIES *****************************/
 
@@ -1456,17 +1502,17 @@ define([
 
     DiagramDesignerWidget.prototype.onSelectionFillColorChanged = function (selectedElements, color) {
         this.logger.warn('DiagramDesignerWidget.prototype.onSelectionFillColorChanged(selectedElements, color) ' +
-        'IS NOT OVERRIDDEN IN CONTROLLER. color: ' + color);
+            'IS NOT OVERRIDDEN IN CONTROLLER. color: ' + color);
     };
 
     DiagramDesignerWidget.prototype.onSelectionBorderColorChanged = function (selectedElements, color) {
         this.logger.warn('DiagramDesignerWidget.prototype.onSelectionBorderColorChanged(selectedElements, color) ' +
-        'IS NOT OVERRIDDEN IN CONTROLLER. color: ' + color);
+            'IS NOT OVERRIDDEN IN CONTROLLER. color: ' + color);
     };
 
     DiagramDesignerWidget.prototype.onSelectionTextColorChanged = function (selectedElements, color) {
         this.logger.warn('DiagramDesignerWidget.prototype.onSelectionTextColorChanged(selectedElements, color) ' +
-        'IS NOT OVERRIDDEN IN CONTROLLER. color: ' + color);
+            'IS NOT OVERRIDDEN IN CONTROLLER. color: ' + color);
     };
 
     /************** END OF - API REGARDING TO MANAGERS ***********************/
@@ -1487,6 +1533,15 @@ define([
     _.extend(DiagramDesignerWidget.prototype, DiagramDesignerWidgetMouse.prototype);
     _.extend(DiagramDesignerWidget.prototype, DiagramDesignerWidgetTabs.prototype);
 
+    DiagramDesignerWidget.getDefaultConfig = function () {
+        return {
+           zoomValues: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.2, 1.4, 1.6, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0]
+        };
+    };
+
+    DiagramDesignerWidget.getComponentId = function () {
+        return 'GenericUIDiagramDesignerWidget';
+    };
 
     return DiagramDesignerWidget;
 });

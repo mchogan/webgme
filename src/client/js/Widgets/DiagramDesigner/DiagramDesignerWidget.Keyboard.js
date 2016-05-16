@@ -60,6 +60,22 @@ define(['js/KeyboardManager/IKeyTarget'], function (IKeyTarget) {
                 this._moveSelection(this.gridSize, 0);
                 ret = false;
                 break;
+            case this.CONSTANTS.KEY_SHORT_CUT_MOVE_TO_TOP:
+                this.onAlignSelection(this.selectionManager.getSelectedElements(), this.CONSTANTS.MOVE_TO_TOP);
+                ret = false;
+                break;
+            case this.CONSTANTS.KEY_SHORT_CUT_MOVE_TO_BOTTOM:
+                this.onAlignSelection(this.selectionManager.getSelectedElements(), this.CONSTANTS.MOVE_TO_BOTTOM);
+                ret = false;
+                break;
+            case this.CONSTANTS.KEY_SHORT_CUT_MOVE_TO_LEFT:
+                this.onAlignSelection(this.selectionManager.getSelectedElements(), this.CONSTANTS.MOVE_TO_LEFT);
+                ret = false;
+                break;
+            case this.CONSTANTS.KEY_SHORT_CUT_MOVE_TO_RIGHT:
+                this.onAlignSelection(this.selectionManager.getSelectedElements(), this.CONSTANTS.MOVE_TO_RIGHT);
+                ret = false;
+                break;
             default:
                 break;
             /*case 'ctrl+c':
@@ -100,24 +116,26 @@ define(['js/KeyboardManager/IKeyTarget'], function (IKeyTarget) {
         return ret;
     };
 
-    DiagramDesignerWidgetKeyboard.prototype._moveSelection = function (/*dX, dY*/) {
-        /*if (!this._keyMoveDelta) {
-         this._keyMoveDelta = {'x': 0, 'y': 0};
-         this.dragManager._initDrag(0, 0);
-         this.dragManager._startDrag(undefined);
-         }
+    DiagramDesignerWidgetKeyboard.prototype._moveSelection = function (dX, dY) {
+        if (!this._keyMoveDelta) {
+            this._keyMoveDelta = {x: 0, y: 0};
+            this.dragManager._initDrag(0, 0);
+            this.dragManager._startDrag(undefined);
+        }
 
-         this._keyMoveDelta.x += dX;
-         this._keyMoveDelta.y += dY;
+        this._keyMoveDelta.x += dX;
+        this._keyMoveDelta.y += dY;
 
-         this.dragManager._updateDraggedItemPositions(this._keyMoveDelta.x, this._keyMoveDelta.y);*/
+        this.dragManager._updateDraggedItemPositions(this._keyMoveDelta.x, this._keyMoveDelta.y);
     };
 
     DiagramDesignerWidgetKeyboard.prototype._endMoveSelection = function () {
-        /*if (this._keyMoveDelta) {
-         this._keyMoveDelta = undefined;
-         this.dragManager._endDragAction();
-         }*/
+        if (this._keyMoveDelta) {
+            // reinitialize keyMove data
+            this._keyMoveDelta = undefined;
+
+            this.dragManager._endDragAction();
+        }
     };
 
     return DiagramDesignerWidgetKeyboard;

@@ -1,5 +1,6 @@
 /*jshint node:true*/
 /**
+ * @module Server:WorkerConstants
  * @author kecso / https://github.com/kecso
  */
 'use strict';
@@ -8,7 +9,6 @@ module.exports = {
     msgTypes: {
         request: 'request',
         result: 'result',
-        info: 'info',
         initialize: 'initialize',
         initialized: 'initialized',
         query: 'query'
@@ -25,21 +25,22 @@ module.exports = {
     },
     workerCommands: {
         initialize: 'initialize',
-        getResult: 'getResult',
-        dumpMoreNodes: 'dumpMoreNodes',
-        generateJsonURL: 'generateJsonURL',
+
+        // Requests
         executePlugin: 'executePlugin',
-        exportLibrary: 'exportLibrary',
-        createProjectFromFile: 'createProjectFromFile',
-        getAllProjectsInfo: 'getAllProjectsInfo',
-        setBranch: 'setBranch',
+        seedProject: 'seedProject',
+        autoMerge: 'autoMerge',
+        resolve: 'resolve',
+        checkConstraints: 'checkConstraints',
+
+        importProjectFromFile: 'importProjectFromFile',
+        exportProjectToFile: 'exportProjectToFile',
+        addLibrary: 'addLibrary',
+        updateLibrary: 'updateLibrary',
+        
+        // AddOn related
         connectedWorkerStart: 'connectedWorkerStart',
         connectedWorkerQuery: 'connectedWorkerQuery',
-        connectedWorkerStop: 'connectedworkerStop',
-        getProjectInfo: 'getProjectInfo',
-        setProjectInfo: 'setProjectInfo',
-        getAllInfoTags: 'getAllInfoTags',
-        getSeedInfo: 'getSeedInfo',
-        seedProject: 'seedProject'
+        connectedWorkerStop: 'connectedworkerStop'
     }
 };

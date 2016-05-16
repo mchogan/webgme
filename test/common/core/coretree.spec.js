@@ -10,37 +10,67 @@ describe('CoreTree', function () {
     'use strict';
 
     var gmeConfig = testFixture.getGmeConfig(),
+        Q = testFixture.Q,
         should = require('chai').should(),
+        expect = testFixture.expect,
         requirejs = require('requirejs'),
-
+        projectName = 'CoreTreeTest',
+        projectId = testFixture.projectName2Id(projectName),
+        project,
         CoreTree = requirejs('common/core/coretree'),
 
-    // TODO: replace with in memory storage
+        logger = testFixture.logger.fork('coretree.spec'),
+        storage,
 
-        storage = new testFixture.Storage({globConf: gmeConfig, logger: testFixture.logger.fork('CoreTree:storage')}),
+        coreTree,
 
-        coreTree;
+        gmeAuth;
 
     before(function (done) {
-        storage.openDatabase(function (err) {
-            if (err) {
-                done(err);
-                return;
-            }
-
-            storage.openProject('CoreTreeTest', function (err, project) {
-                if (err) {
-                    done(err);
-                    return;
-                }
-
+        testFixture.clearDBAndGetGMEAuth(gmeConfig, projectName)
+            .then(function (gmeAuth_) {
+                gmeAuth = gmeAuth_;
+                storage = testFixture.getMemoryStorage(logger, gmeConfig, gmeAuth);
+                return storage.openDatabase();
+            })
+            .then(function () {
+                return storage.createProject({projectName: projectName});
+            })
+            .then(function (dbProject) {
+                project = new testFixture.Project(dbProject, storage, logger, gmeConfig);
                 coreTree = new CoreTree(project, {
                     globConf: gmeConfig,
                     logger: testFixture.logger.fork('CoreTree:core')
                 });
-                done();
-            });
-        });
+            })
+            .then(done)
+            .catch(done);
+    });
+
+    after(function (done) {
+        storage.deleteProject({projectId: projectId})
+            .then(function () {
+                return Q.allDone([
+                    storage.closeDatabase(),
+                    gmeAuth.unload()
+                ]);
+            })
+            .nodeify(done);
+    });
+
+    it('should setData, getData, deleteData', function () {
+        var node = coreTree.createRoot(),
+            data = {
+                a: [],
+                b: true,
+                c: 'c',
+                d: 42
+            };
+
+        coreTree.setData(node, data);
+        expect(coreTree.getData(node)).to.deep.equal(data);
+        expect(coreTree.deleteData(node)).to.deep.equal(data);
+        expect(coreTree.getData(node)).to.deep.equal({});
     });
 
     describe('core.getParent', function () {
@@ -95,7 +125,6 @@ describe('CoreTree', function () {
 
             coreTree.getLevel(grandChild).should.be.equal(2);
         });
-
 
     });
 
@@ -284,6 +313,102 @@ describe('CoreTree', function () {
             (function () {
                 coreTree.getCommonPathPrefixData('', ' /invalid');
             }).should.throw();
+        });
+
+    });
+
+    describe('core.persist', function () {
+
+        it('should always generate regular object for the first time', function () {
+            var root = coreTree.createRoot(),
+                persisted;
+
+            coreTree.setProperty(root, 'prop', 'valueOne');
+
+            persisted = coreTree.persist(root);
+
+            expect(persisted.rootHash).not.to.equal(undefined);
+            expect(Object.keys(persisted.objects)).to.have.length(1);
+            expect(persisted.objects[persisted.rootHash]).not.to.have.keys(['oldData', 'newData', 'oldHash', 'nesHash']);
+            expect(root.initial).not.to.equal(null);
+            expect(root.initial).not.to.equal(undefined);
+        });
+
+        it('should keep the \'initial\' info up-to-date throughout multiple persists', function () {
+            var root = coreTree.createRoot(),
+                persisted,
+                child,
+                hashes = [];
+
+            coreTree.setProperty(root, 'prop', 'valueOne');
+
+            persisted = coreTree.persist(root);
+
+            expect(persisted.rootHash).not.to.equal(undefined);
+            hashes.unshift(persisted.rootHash);
+
+            expect(coreTree.getProperty(root, 'prop')).to.equal('valueOne');
+            child = coreTree.createChild(root);
+
+            expect(root.initial[''].hash).to.equal(hashes[0]);
+
+            coreTree.setProperty(child, 'prop', 'childValue');
+            coreTree.setProperty(root, 'prop', 'secondValue');
+
+            persisted = coreTree.persist(root);
+            expect(persisted.rootHash).not.to.equal(undefined);
+
+            hashes.unshift(persisted.rootHash);
+            expect(root.initial[''].hash).to.equal(hashes[0]);
+
+            expect(coreTree.getProperty(root, 'prop')).to.equal('secondValue');
+            expect(coreTree.getProperty(child, 'prop')).to.equal('childValue');
+
+            child = coreTree.getChild(root, coreTree.getRelid(child));
+            expect(coreTree.getProperty(child, 'prop')).to.equal('childValue');
+
+            coreTree.setProperty(child, 'prop', 'finalValue');
+
+            persisted = coreTree.persist(root);
+            expect(persisted.rootHash).not.to.equal(undefined);
+
+            hashes.unshift(persisted.rootHash);
+            expect(root.initial[''].hash).to.equal(hashes[0]);
+
+            expect(coreTree.getProperty(root, 'prop')).to.equal('secondValue');
+            expect(coreTree.getProperty(child, 'prop')).to.equal('finalValue');
+
+        });
+
+        it('should always persist a regular object if patchRootCommunication is not enabled', function () {
+            var otherGmeConfig = testFixture.getGmeConfig(),
+                core,
+                root,
+                persisted;
+
+            otherGmeConfig.storage.patchRootCommunicationEnabled = false;
+
+            core = new CoreTree(project, {
+                globConf: otherGmeConfig,
+                logger: testFixture.logger.fork('CoreTree:core-noPatch')
+            });
+
+            root = core.createRoot();
+
+            core.setProperty(root, 'prop', 'value');
+
+            persisted = core.persist(root);
+
+            expect(Object.keys(persisted.objects)).to.have.length(1);
+            expect(persisted.objects[persisted.rootHash]).not.to.have.keys(['oldData', 'newData', 'oldHash', 'nesHash']);
+
+            core.setProperty(root, 'prop', 'changed');
+
+            persisted = core.persist(root);
+
+            expect(Object.keys(persisted.objects)).to.have.length(1);
+            expect(persisted.objects[persisted.rootHash]).not.to.have.keys(['oldData', 'newData', 'oldHash', 'nesHash']);
+
         });
     });
 

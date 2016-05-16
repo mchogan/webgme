@@ -1,5 +1,7 @@
 /*globals define, WebGMEGlobal, _, alert*/
-/*jshint browser: true */
+/*jshint browser: true*/
+/*jscs:disable maximumLineLength*/
+
 /**
  * @author rkereskenyi / https://github.com/rkereskenyi
  */
@@ -10,8 +12,6 @@ define(['js/logger',
     'js/NodePropertyNames',
     'js/RegistryKeys',
     'js/Utils/GMEConcepts',
-    'js/Utils/ExportManager',
-    'js/Utils/ImportManager',
     'js/Widgets/DiagramDesigner/DiagramDesignerWidget.Constants',
     'js/DragDrop/DragHelper'
 ], function (Logger,
@@ -20,8 +20,6 @@ define(['js/logger',
              nodePropertyNames,
              REGISTRY_KEYS,
              GMEConcepts,
-             ExportManager,
-             ImportManager,
              DiagramDesignerWidgetConstants,
              DragHelper) {
 
@@ -40,10 +38,10 @@ define(['js/logger',
         var self = this;
 
         /*OVERRIDE DESIGNER CANVAS METHODS*/
-        /*this.designerCanvas.onDesignerItemsMove = function (repositionDesc) {
-         self._onDesignerItemsMove(repositionDesc);
-         };
-
+        this.designerCanvas.onDesignerItemsMove = function (repositionDesc) {
+            self._onDesignerItemsMove(repositionDesc);
+        };
+        /*
          this.designerCanvas.onDesignerItemsCopy = function (copyDesc) {
          self._onDesignerItemsCopy(copyDesc);
          };*/
@@ -145,6 +143,10 @@ define(['js/logger',
             self._onSelectionContextMenu(selectedIds, mousePos);
         };
 
+        this.designerCanvas.onSelectionAlignMenu = function (selectedIds, mousePos) {
+            self._onSelectionAlignMenu(selectedIds, mousePos);
+        };
+
         this.designerCanvas.onSelectionFillColorChanged = function (selectedElements, color) {
             self._onSelectionFillColorChanged(selectedElements, color);
         };
@@ -161,21 +163,33 @@ define(['js/logger',
             self._onSelectedTabChanged(tabID);
         };
 
+        this.designerCanvas.onAlignSelection = function (selectedIds, type) {
+            self._onAlignSelection(selectedIds, type);
+        };
+
         this.logger.debug('attachDiagramDesignerWidgetEventHandlers finished');
     };
 
     ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._onDesignerItemsMove = function (repositionDesc) {
-        var id;
+        var id,
+            modelId = this.currentNodeInfo.id,
+            newPos;
 
         this._client.startTransaction();
         for (id in repositionDesc) {
             if (repositionDesc.hasOwnProperty(id)) {
-                this._client.setRegistry(this._ComponentID2GmeID[id],
-                    REGISTRY_KEYS.POSITION,
-                    {
-                        x: repositionDesc[id].x,
-                        y: repositionDesc[id].y
-                    });
+                newPos = {
+                    x: repositionDesc[id].x,
+                    y: repositionDesc[id].y
+                };
+
+                if (this._selectedAspect === CONSTANTS.ASPECT_ALL) {
+                    this._client.setRegistry(this._ComponentID2GmeID[id], REGISTRY_KEYS.POSITION, newPos);
+                } else {
+                    this._client.addMember(modelId, this._ComponentID2GmeID[id], this._selectedAspect);
+                    this._client.setMemberRegistry(modelId, this._ComponentID2GmeID[id], this._selectedAspect,
+                        REGISTRY_KEYS.POSITION, newPos);
+                }
             }
         }
         this._client.completeTransaction();
@@ -285,9 +299,9 @@ define(['js/logger',
                 connTypeObj = this._client.getNode(validConnectionTypes[i]);
                 menuItems[validConnectionTypes[i]] = {
                     name: 'Create type \'' +
-                          (connTypeObj ?
-                              connTypeObj.getAttribute(nodePropertyNames.Attributes.name) : validConnectionTypes[i]) +
-                          '\'',
+                    (connTypeObj ?
+                        connTypeObj.getAttribute(nodePropertyNames.Attributes.name) : validConnectionTypes[i]) +
+                    '\'',
                     icon: false
                 };
             }
@@ -371,7 +385,7 @@ define(['js/logger',
                                                                                                        metaInfo) {
         //store that a subcomponent with a given ID has been added to object with objID
         this._GMEID2Subcomponent[metaInfo[CONSTANTS.GME_ID]] = this._GMEID2Subcomponent[metaInfo[CONSTANTS.GME_ID]] ||
-                                                               {};
+            {};
         this._GMEID2Subcomponent[metaInfo[CONSTANTS.GME_ID]][objID] = sCompID;
 
         this._Subcomponent2GMEID[objID] = this._Subcomponent2GMEID[objID] || {};
@@ -398,6 +412,7 @@ define(['js/logger',
             parentID = this.currentNodeInfo.id,
             i,
             j,
+            FCOamongItems = false,
             validPointerTypes = [],
             baseTypeID,
             baseTypeNode,
@@ -423,6 +438,14 @@ define(['js/logger',
                 }
             };
 
+        //check if FCO is among the items as it may change the outcome
+        for (i = 0; i < items.length; i += 1) {
+            if (GMEConcepts.isProjectFCO(items[i])) {
+                FCOamongItems = true;
+                break;
+            }
+        }
+
         //check to see what DROP actions are possible
         if (items.length > 0) {
             i = dragEffects.length;
@@ -431,15 +454,15 @@ define(['js/logger',
                     case DragHelper.DRAG_EFFECTS.DRAG_MOVE:
                         //check to see if dragParams.parentID and this.parentID are the same
                         //if so, it's not a real move, it is a reposition
-                        if (((dragParams && dragParams.parentID === parentID) ||
-                             GMEConcepts.canCreateChildrenInAspect(parentID, items, aspect)) &&
-                            GMEConcepts.canMoveNodeHere(parentID, items)) {
+                        if ((dragParams && dragParams.parentID === parentID) ||
+                            (GMEConcepts.canCreateChildrenInAspect(parentID, items, aspect) &&
+                            GMEConcepts.canMoveNodeHere(parentID, items) && !FCOamongItems)) {
                             dragAction = {dragEffect: dragEffects[i]};
                             possibleDropActions.push(dragAction);
                         }
                         break;
                     case DragHelper.DRAG_EFFECTS.DRAG_COPY:
-                        if (GMEConcepts.canCreateChildrenInAspect(parentID, items, aspect)) {
+                        if (GMEConcepts.canCreateChildrenInAspect(parentID, items, aspect) && !FCOamongItems) {
                             dragAction = {dragEffect: dragEffects[i]};
                             possibleDropActions.push(dragAction);
                         }
@@ -536,7 +559,7 @@ define(['js/logger',
                     case DragHelper.DRAG_EFFECTS.DRAG_CREATE_POINTER:
                         menuItems[i] = {
                             name: 'Create pointer "' + possibleDropActions[i].pointer + '" of type "' +
-                                    possibleDropActions[i].name + '"',
+                            possibleDropActions[i].name + '"',
                             icon: 'glyphicon glyphicon-share'
                         };
                         break;
@@ -616,9 +639,7 @@ define(['js/logger',
                         };
                     }
 
-                    this._client.startTransaction();
                     this._client.moveMoreNodes(params);
-                    this._client.completeTransaction();
                 }
                 break;
             case DragHelper.DRAG_EFFECTS.DRAG_CREATE_INSTANCE:
@@ -662,7 +683,7 @@ define(['js/logger',
                     origNode = this._client.getNode(items[0]);
                     if (origNode) {
                         ptrName = origNode.getAttribute(nodePropertyNames.Attributes.name) + '-' +
-                                      dropAction.pointer;
+                            dropAction.pointer;
                         this._client.setAttributes(gmeID, nodePropertyNames.Attributes.name, ptrName);
                     }
                 }
@@ -780,12 +801,6 @@ define(['js/logger',
         this.designerCanvas.toolbarItems.ddbtnConnectionLineWidth.enabled(onlyConnectionSelected);
 
         this.$btnConnectionRemoveSegmentPoints.enabled(onlyConnectionSelected);
-
-        //nobody is selected on the canvas
-        //set the active selection to the opened guy
-        if (gmeIDs.length === 0 && (this.currentNodeInfo.id || this.currentNodeInfo.id === CONSTANTS.PROJECT_ROOT_ID)) {
-            gmeIDs.push(this.currentNodeInfo.id);
-        }
 
         this._settingActiveSelection = true;
         WebGMEGlobal.State.registerActiveSelection(gmeIDs);
@@ -976,22 +991,52 @@ define(['js/logger',
                                                                                                    selectedIds) {
         var i = selectedIds.length,
             regDegree,
+            newDegree,
+            ownDegree,
+            node,
+            setNewValue = true,
+            transaction = false,
             gmeID;
 
-        this._client.startTransaction();
         while (i--) {
             gmeID = this._ComponentID2GmeID[selectedIds[i]];
-            regDegree = this._client.getNode(gmeID).getEditableRegistry(REGISTRY_KEYS.ROTATION);
+            node = this._client.getNode(gmeID);
+            if (node) {
+                regDegree = node.getEditableRegistry(REGISTRY_KEYS.ROTATION) || 0;
+                ownDegree = node.getOwnEditableRegistry(REGISTRY_KEYS.ROTATION);
 
-            if (degree === DiagramDesignerWidgetConstants.ROTATION_RESET) {
-                regDegree = 0;
-            } else {
-                regDegree = ((regDegree || 0) + degree) % 360;
+                if (degree === DiagramDesignerWidgetConstants.ROTATION_RESET) {
+                    newDegree = 0;
+                } else if (degree === DiagramDesignerWidgetConstants.ROTATION_TOLEFT) {
+                    newDegree = regDegree - (regDegree % 90);
+                } else if (degree === DiagramDesignerWidgetConstants.ROTATION_TORIGHT) {
+                    newDegree = regDegree % 90 > 0 ? regDegree + 90 - (regDegree % 90) : regDegree;
+                } else if (degree === DiagramDesignerWidgetConstants.ROTATION_CLEAR) {
+                    setNewValue = false;
+                } else {
+                    newDegree = (regDegree + degree) % 360;
+                }
+
+                if (setNewValue && newDegree !== ownDegree) {
+                    if (!transaction) {
+                        transaction = true;
+                        this._client.startTransaction();
+                    }
+                    this._client.setRegistry(gmeID, REGISTRY_KEYS.ROTATION, newDegree);
+                } else if (!setNewValue && ownDegree !== undefined) {
+                    if (!transaction) {
+                        transaction = true;
+                        this._client.startTransaction();
+                    }
+                    this._client.delRegistry(gmeID, REGISTRY_KEYS.ROTATION);
+                }
             }
 
-            this._client.setRegistry(gmeID, REGISTRY_KEYS.ROTATION, regDegree);
         }
-        this._client.completeTransaction();
+
+        if (transaction) {
+            this._client.completeTransaction();
+        }
     };
 
     ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSetConnectionProperty = function (params) {
@@ -1042,7 +1087,7 @@ define(['js/logger',
             obj,
             nodeObj,
             cpData = {
-                project: this._client.getActiveProjectName(),
+                project: this._client.getActiveProjectId(),
                 items: []
             };
 
@@ -1073,7 +1118,7 @@ define(['js/logger',
             objDesc,
             parentID = this.currentNodeInfo.id,
             params = {parentId: parentID},
-            projectName = this._client.getActiveProjectName(),
+            projectName = this._client.getActiveProjectId(),
             childrenIDs = [],
             aspect = this._selectedAspect;
 
@@ -1088,7 +1133,7 @@ define(['js/logger',
             if (data && data.project && data.items) {
                 if (projectName !== data.project) {
                     alert('Trying to copy from project \'' + data.project + '\' to project \'' + projectName +
-                          '\' which is not supported... Copy&Paste is supported in the same project only.');
+                        '\' which is not supported... Copy&Paste is supported in the same project only.');
                 } else {
                     if (_.isArray(data.items)) {
                         data = data.items;
@@ -1108,10 +1153,10 @@ define(['js/logger',
                             this._client.copyMoreNodes(params);
                             this._client.completeTransaction();
                             this.logger.warn('Pasted ' + childrenIDs.length + ' items successfully into node (' +
-                                             parentID + ')');
+                                parentID + ')');
                         } else {
                             this.logger.warn('Can not paste items because not all the items on the clipboard can be ' +
-                            'created as a child of the currently opened node (' + parentID + ')');
+                                'created as a child of the currently opened node (' + parentID + ')');
                         }
                     }
                 }
@@ -1151,10 +1196,10 @@ define(['js/logger',
     ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionContextMenu = function (selectedIds,
                                                                                                        mousePos) {
         var menuItems = {},
-            MENU_EXINTCONF = 'exintconf',
-            MENU_EXPLIB = 'exportlib',
-            MENU_UPDLIB = 'updatelib',
-            MENU_CON_NODE = 'connode',
+            MENU_CONSTRAINTS_NODE = 'connode',
+            MENU_CONSTRAINTS_MODEL = 'conmodel',
+            MENU_META_RULES_NODE = 'metaRulesNode',
+            MENU_META_RULES_MODEL = 'metaRulesModel',
             self = this;
 
         /*menuItems[MENU_EXINTCONF] = {
@@ -1162,32 +1207,54 @@ define(['js/logger',
          "icon": 'glyphicon glyphicon-cog'
          };*/
         if (selectedIds.length === 1) {
-            menuItems[MENU_EXPLIB] = {
-                name: 'Export library...',
-                icon: 'glyphicon glyphicon-book'
+            menuItems[MENU_META_RULES_NODE] = {
+                name: 'Check Meta rules for node...',
+                icon: 'glyphicon glyphicon-ok-sign'
             };
-            menuItems[MENU_UPDLIB] = {
-                name: 'Update library...',
-                icon: 'glyphicon glyphicon-refresh'
+            menuItems[MENU_META_RULES_MODEL] = {
+                name: 'Check Meta rules for node and its children...',
+                icon: 'glyphicon glyphicon-ok-sign'
             };
-            if (self._client.getRunningAddOnNames().indexOf('ConstraintAddOn') !== -1) {
-                menuItems[MENU_CON_NODE] = {
-                    name: 'Check Node Constraints...',
+            if (self._client.gmeConfig.core.enableCustomConstraints === true) {
+                menuItems[MENU_CONSTRAINTS_NODE] = {
+                    name: 'Check Custom Constraints for node...',
+                    icon: 'glyphicon glyphicon-fire'
+                };
+                menuItems[MENU_CONSTRAINTS_MODEL] = {
+                    name: 'Check Custom Constraints for node and its children...',
                     icon: 'glyphicon glyphicon-fire'
                 };
             }
-
+        } else if (selectedIds.length > 1) {
+            menuItems[MENU_META_RULES_NODE] = {
+                name: 'Check Meta rules for nodes...',
+                icon: 'glyphicon glyphicon-ok-sign'
+            };
+            menuItems[MENU_META_RULES_MODEL] = {
+                name: 'Check Meta rules for nodes and their children...',
+                icon: 'glyphicon glyphicon-ok-sign'
+            };
+            if (self._client.gmeConfig.core.enableCustomConstraints === true) {
+                menuItems[MENU_CONSTRAINTS_NODE] = {
+                    name: 'Check Custom Constraints for nodes...',
+                    icon: 'glyphicon glyphicon-fire'
+                };
+                menuItems[MENU_CONSTRAINTS_MODEL] = {
+                    name: 'Check Custom Constraints for nodes and their children...',
+                    icon: 'glyphicon glyphicon-fire'
+                };
+            }
         }
 
         this.designerCanvas.createMenu(menuItems, function (key) {
-                if (key === MENU_EXINTCONF) {
-                    self._exIntConf(selectedIds);
-                } else if (key === MENU_EXPLIB) {
-                    self._expLib(selectedIds);
-                } else if (key === MENU_UPDLIB) {
-                    self._updLib(selectedIds);
-                } else if (key === MENU_CON_NODE) {
-                    self._nodeConCheck(selectedIds);
+                if (key === MENU_CONSTRAINTS_NODE) {
+                    self._nodeConCheck(selectedIds, false);
+                } else if (key === MENU_CONSTRAINTS_MODEL) {
+                    self._nodeConCheck(selectedIds, true);
+                } else if (key === MENU_META_RULES_NODE) {
+                    self._metaRulesCheck(selectedIds, false);
+                } else if (key === MENU_META_RULES_MODEL) {
+                    self._metaRulesCheck(selectedIds, true);
                 }
             },
             this.designerCanvas.posToPageXY(mousePos.mX,
@@ -1195,7 +1262,18 @@ define(['js/logger',
         );
     };
 
-    ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._exIntConf = function (selectedIds) {
+    ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._onSelectionAlignMenu = function (selectedIds,
+                                                                                                     mousePos) {
+        var menuPos = this.designerCanvas.posToPageXY(mousePos.mX, mousePos.mY),
+            self = this;
+
+        this._alignMenu.show(selectedIds, menuPos, function (key) {
+            self._onAlignSelection(selectedIds, key);
+        });
+    };
+
+    ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._metaRulesCheck = function (selectedIds,
+                                                                                               includeChildren) {
         var i = selectedIds.length,
             gmeIDs = [];
 
@@ -1203,48 +1281,22 @@ define(['js/logger',
             gmeIDs.push(this._ComponentID2GmeID[selectedIds[i]]);
         }
 
-        ExportManager.exIntConf(gmeIDs);
+        if (gmeIDs.length > 0) {
+            this._client.checkMetaRules(gmeIDs, includeChildren);
+        }
     };
-    ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._expLib = function (selectedIds) {
+
+    ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._nodeConCheck = function (selectedIds,
+                                                                                             includeChildren) {
         var i = selectedIds.length,
-            gmeIDs = [],
-            id;
+            gmeIDs = [];
 
         while (i--) {
             gmeIDs.push(this._ComponentID2GmeID[selectedIds[i]]);
         }
 
-        id = gmeIDs[0] || null;
-
-        ExportManager.expLib(id);
-    };
-    ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._updLib = function (selectedIds) {
-        var i = selectedIds.length,
-            gmeIDs = [],
-            id;
-
-        while (i--) {
-            gmeIDs.push(this._ComponentID2GmeID[selectedIds[i]]);
-        }
-
-        id = gmeIDs[0] || null;
-
-        ImportManager.importLibrary(id);
-    };
-
-    ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._nodeConCheck = function (selectedIds) {
-        var i = selectedIds.length,
-            gmeIDs = [],
-            id;
-
-        while (i--) {
-            gmeIDs.push(this._ComponentID2GmeID[selectedIds[i]]);
-        }
-
-        id = gmeIDs[0] || null;
-
-        if (id) {
-            this._client.validateNodeAsync(id);
+        if (gmeIDs.length > 0) {
+            this._client.checkCustomConstraints(gmeIDs, includeChildren);
         }
     };
 
@@ -1287,8 +1339,81 @@ define(['js/logger',
 
             this.logger.debug('selectedAspectChanged: ' + this._selectedAspect);
 
-            this._initializeSelectedAspect();
+            this._initializeSelectedAspect(tabID);
         }
+    };
+
+    ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._onAlignSelection = function (selectedIds, type) {
+        var selectedModels = [],
+            allModels = [],
+            target,
+            changeXAxis,
+            modelId = this.currentNodeInfo.id,
+            self = this;
+
+        // Get the gmeIds and filter out connections.
+        selectedIds.forEach(function (id) {
+            var gmeId = self._ComponentID2GmeID[id],
+                objDesc;
+            if (self._GMEModels.indexOf(gmeId) > -1) {
+                objDesc = self._getObjectDescriptor(gmeId);
+                if (objDesc) {
+                    selectedModels.push(objDesc);
+                } else {
+                    self.logger.warn('_onAlignSelection, could not get objectDescriptor for a selectedIds', gmeId);
+                }
+            }
+        });
+
+        if (selectedModels.length === 0) {
+            // No models were selected...
+            return;
+        }
+
+        if (type.indexOf('MOVE_TO_') === 0) {
+            self._GMEModels.forEach(function (gmeId) {
+                var objDesc = self._getObjectDescriptor(gmeId);
+                if (objDesc) {
+                    allModels.push(objDesc);
+                } else {
+                    self.logger.warn('_onAlignSelection, could not get objectDescriptor for a _GMEModels', gmeId);
+                }
+            });
+
+            target = self._alignMenu.getExtremePosition(allModels, type);
+        } else {
+            target = selectedModels[0];
+        }
+
+        if (!target) {
+            return;
+        }
+
+        changeXAxis = self._alignMenu.isXAxisType(type);
+
+        this._client.startTransaction();
+        selectedModels.forEach(function (modelDesc) {
+            var newPos = modelDesc.position;
+            if (target.id === modelDesc.id) {
+                return;
+            }
+
+            if (changeXAxis === true) {
+                newPos.x = target.position.x;
+            } else {
+                newPos.y = target.position.y;
+            }
+
+            if (self._selectedAspect === CONSTANTS.ASPECT_ALL) {
+                self._client.setRegistry(modelDesc.id, REGISTRY_KEYS.POSITION, newPos);
+            } else {
+                self._client.addMember(modelId, modelDesc.id, self._selectedAspect);
+                self._client.setMemberRegistry(modelId, modelDesc.id, self._selectedAspect, REGISTRY_KEYS.POSITION,
+                    newPos);
+            }
+        });
+
+        this._client.completeTransaction();
     };
 
     return ModelEditorControlDiagramDesignerWidgetEventHandlers;

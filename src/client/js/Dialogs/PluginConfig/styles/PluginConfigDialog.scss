@@ -4,7 +4,39 @@
  * Author: Robert Kereskenyi
  */
 .plugin-config-dialog {
-  .control-group {
+
+  .modal-header {
+    img.plugin-icon {
+      width: 28px;
+      display: inline-block;
+      margin-right: 10px;
+    }
+    i.plugin-icon {
+      font-size: 28px;
+      display: inline-block;
+      margin-right: 10px;
+    }
+  }
+
+  .modal-body {
+    padding: 15px;
+    .global-and-plugin-divider {
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+  }
+
+  .modal-footer {
+    padding: 10px;
+    margin-top: 5px;
+  }
+
+  .form-group {
+    margin-bottom: 10px;
+
+    .row {
+      margin: 0 0;
+    }
     .controls {
       .widget {
         span {
@@ -20,7 +52,7 @@
 
         div.color-picker {
           height: 30px;
-          width: 220px;
+          width: 100%;
           margin-top: 0;
           cursor: pointer;
           border-radius: 4px;
@@ -29,14 +61,24 @@
         div.asset-widget {
           height: 30px;
           line-height: 30px;
-          width: 220px;
+          width: 100%;
           margin-top: 0;
+          .btn-dialog-open {
+            padding: 3px;
+          }
+        }
+
+        input[type="text"] {
+          width: 100%;
+          padding: 0.5ex;
         }
       }
     }
 
     div.desc {
-      margin-left: 180px;
+      //margin-left: 180px;
+      font-size: 0.9em;
+      color: #444;
     }
   }
 }

@@ -6,9 +6,10 @@
 
 define([
     'js/util',
+    'common/regexp',
     'text!./templates/AttributeDetailsDialog.html',
     'css!./styles/AttributeDetailsDialog.css'
-], function (util, attributeDetailsDialogTemplate) {
+], function (util, REGEXP, attributeDetailsDialogTemplate) {
 
     'use strict';
 
@@ -51,10 +52,10 @@ define([
                 len,
                 eValues,
                 attrDesc = {
-                    'name': self._inputName.val(),
-                    'type': self._inputType.val(),
-                    'defaultValue': self._inputDefaultValue.val(),
-                    'isEnum': self._cbEnum.is(':checked')
+                    name: self._inputName.val(),
+                    type: self._inputType.val(),
+                    defaultValue: self._inputDefaultValue.val(),
+                    isEnum: self._cbEnum.is(':checked')
                 },
                 cValue;
 
@@ -78,6 +79,14 @@ define([
                         }
                     }
                 }
+
+                //adding range
+                if (getTypeConvertedValue(self._pRangeMax.val(), attrDesc.type)) {
+                    attrDesc.max = getTypeConvertedValue(self._pRangeMax.val(), attrDesc.type);
+                }
+                if (getTypeConvertedValue(self._pRangeMin.val(), attrDesc.type)) {
+                    attrDesc.min = getTypeConvertedValue(self._pRangeMin.val(), attrDesc.type);
+                }
             } else if (attrDesc.type === 'boolean') {
                 //BOOL - get the default value from the radio button's selection
                 attrDesc.defaultValue = self._el.find('#rbBooleanTrue').first().is(':checked');
@@ -85,6 +94,10 @@ define([
             } else if (attrDesc.type === ASSET_TYPE) {
                 attrDesc.defaultValue = '';
                 delete attrDesc.isEnum;
+            } else if (attrDesc.type === 'string') {
+                if (self._pRegExpValue.val()) {
+                    attrDesc.regexp = self._pRegExpValue.val();
+                }
             }
 
             self._dialog.modal('hide');
@@ -137,27 +150,40 @@ define([
 
             switch (newType) {
                 case 'integer':
+                    self._pRegExp.hide();
+                    self._pRange.show();
                     break;
                 case 'float':
+                    self._pRange.show();
+                    self._pRegExp.hide();
                     break;
                 case 'boolean':
                     self._pDefaultValue.hide();
                     self._pEnum.hide();
                     self._pEnumValues.hide();
                     self._pDefaultValueBoolean.show();
+                    self._pRegExp.hide();
+                    self._pRange.hide();
                     break;
                 case ASSET_TYPE:
                     self._pDefaultValue.hide();
                     self._pEnum.hide();
                     self._pEnumValues.hide();
+                    self._pRegExp.hide();
+                    self._pRange.hide();
                     break;
                 default:
+                    self._pRegExp.show();
+                    self._pRange.hide();
                     break;
             }
         };
 
         isValidAttributeName = function (name) {
-            return !(name === '' || attributeNames.indexOf(name) !== -1);
+            return !(name === '' ||
+            name === 'name' ||
+            attributeNames.indexOf(name) !== -1 ||
+            REGEXP.DOCUMENT_KEY.test(name) === false);
         };
 
         this._dialog = $(attributeDetailsDialogTemplate);
@@ -169,8 +195,6 @@ define([
 
         this._pEnumValues = this._el.find('#pEnumValues').first();
         this._pEnumValues.hide();
-
-        this._pName = this._el.find('#pName').first();
 
         this._btnSave = this._dialog.find('.btn-save').first();
         this._btnDelete = this._dialog.find('.btn-delete').first();
@@ -185,17 +209,27 @@ define([
 
         this._inputEnumValues = this._el.find('#inputEnumValues').first();
 
+        //extended options
+        this._pRegExp = this._el.find('#pRegExp');
+        this._pRegExpValue = this._el.find('#inputRegExp');
+
+        this._pRange = this._el.find('#pRange');
+        this._pRangeMin = this._el.find('#inputMinValue');
+        this._pRangeMax = this._el.find('#inputMaxValue');
+
         //hook up event handlers
         //key-up in name textbox
         this._inputName.on('keyup', function () {
             var val = self._inputName.val();
 
             if (!isValidAttributeName(val)) {
-                self._pName.addClass('error');
+                self._inputName.addClass('text-danger');
                 self._btnSave.disable(true);
+                self._btnDelete.disable(true);
             } else {
-                self._pName.removeClass('error');
+                self._inputName.removeClass('text-danger');
                 self._btnSave.disable(false);
+                self._btnDelete.disable(false);
             }
         });
 
@@ -218,9 +252,20 @@ define([
 
             if (checked) {
                 self._pEnumValues.show();
+                self._pRange.hide();
+                self._pRangeMax.val('');
+                self._pRangeMin.val('');
+                self._pRegExp.hide();
+                self._pRegExpValue.val('');
             } else {
                 self._pEnumValues.hide();
                 self._inputEnumValues.val('');
+                if (self._inputType.val() === 'float' ||
+                    self._inputType.val() === 'integer') {
+                    self._pRange.show();
+                } else if (self._inputType.val() === 'string') {
+                    self._pRegExp.show();
+                }
             }
         });
 
@@ -253,7 +298,6 @@ define([
             this._btnDelete.remove();
         }
 
-
         //fill controls based on the currently edited attribute
         this._inputName.val(attributeDesc.name);
         this._inputType.val(attributeDesc.type);
@@ -262,12 +306,16 @@ define([
             this._pDefaultValue.hide();
             this._pEnum.hide();
             this._pDefaultValueBoolean.show();
+            this._pRange.hide();
+            this._pRegExp.hide();
             if (attributeDesc.defaultValue !== true) {
                 this._el.find('#rbBooleanFalse').first().attr('checked', 'checked');
             }
         } else if (attributeDesc.type === ASSET_TYPE) {
             this._pDefaultValue.hide();
             this._pEnum.hide();
+            this._pRange.hide();
+            this._pRegExp.hide();
         } else {
             this._inputDefaultValue.val(attributeDesc.defaultValue);
             if (attributeDesc.isEnum) {
@@ -275,9 +323,25 @@ define([
                 this._inputEnumValues.val(attributeDesc.enumValues.join('\n'));
                 this._pEnumValues.show();
             }
+
+            if (attributeDesc.type === 'string') {
+                this._pRange.hide();
+                this._pRegExp.show();
+                if (attributeDesc.regexp) {
+                    this._pRegExpValue.val(attributeDesc.regexp);
+                }
+            } else {
+                this._pRange.show();
+                this._pRegExp.hide();
+                if (attributeDesc.min) {
+                    this._pRangeMin.val(attributeDesc.min);
+                }
+                if (attributeDesc.max) {
+                    this._pRangeMax.val(attributeDesc.max);
+                }
+            }
         }
     };
-
 
     return AttributeDetailsDialog;
 });

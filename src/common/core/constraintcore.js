@@ -18,130 +18,125 @@
  * delConstraint(node,name)
  */
 
-define(['common/util/assert'], function (ASSERT) {
+define(['common/util/assert', 'common/core/constants'], function (ASSERT, CONSTANTS) {
     'use strict';
-    var CONSTRAINTS_RELID = '_constraints';
-    var C_DEF_PRIORITY = 1;
 
-    function constraintCore(_innerCore, options) {
+    function ConstraintCore(innerCore, options) {
         ASSERT(typeof options === 'object');
         ASSERT(typeof options.globConf === 'object');
         ASSERT(typeof options.logger !== 'undefined');
-        var _core = {},
-            logger = options.logger.fork('constraintcore');
-        for (var i in _innerCore) {
-            _core[i] = _innerCore[i];
+
+        var logger = options.logger,
+            self = this,
+            key;
+
+        for (key in innerCore) {
+            this[key] = innerCore[key];
         }
-        logger.debug('initialized');
-        var createNewConstraintRelId = function (constraintsNode) {
+
+        logger.debug('initialized ConstraintCore');
+
+        //<editor-fold=Helper Functions>
+        function createNewConstraintRelId(constraintsNode) {
             var max = Math.pow(2, 31);
-            var existingRelIds = _innerCore.getChildrenRelids(constraintsNode);
+            var existingRelIds = innerCore.getChildrenRelids(constraintsNode);
             var relId;
             do {
                 relId = Math.floor(Math.random() * max);
             } while (existingRelIds.indexOf(relId) !== -1);
             return '' + relId;
-        };
+        }
 
-        var getConstraintRelId = function (constraintsNode, name) {
-            var relIds = _innerCore.getChildrenRelids(constraintsNode);
+        function getConstraintRelId(constraintsNode, name) {
+            var relIds = innerCore.getChildrenRelids(constraintsNode);
             var relId;
             for (var i = 0; i < relIds.length; i++) {
-                if (name === _innerCore.getAttribute(_innerCore.getChild(constraintsNode, relIds[i]), 'name')) {
+                if (name === innerCore.getAttribute(innerCore.getChild(constraintsNode, relIds[i]), 'name')) {
                     relId = relIds[i];
                     break;
                 }
             }
             return relId;
-        };
-        var getRegConstName = function (name) {
-            return '_ch#_' + name;
-        };
+        }
 
-        _core.getConstraint = function (node, name) {
-            ASSERT(_innerCore.isValidNode(node));
-            var constraintsNode = _innerCore.getChild(node, CONSTRAINTS_RELID);
+        function getRegConstName(name) {
+            return CONSTANTS.CONSTRAINT_REGISTRY_PREFIX + name;
+        }
+
+        function getContraintNames(node, onlyOwn) {
+            ASSERT(self.isValidNode(node));
+            var constraintsNode = self.getChild(node, CONSTANTS.CONSTRAINTS_RELID),
+                relIds = onlyOwn ? self.getOwnChildrenRelids(constraintsNode) : self.getChildrenRelids(constraintsNode),
+                names = [];
+
+            for (var i = 0; i < relIds.length; i += 1) {
+                names.push(self.getAttribute(self.getChild(constraintsNode, relIds[i]), 'name'));
+            }
+            return names;
+        }
+
+        //</editor-fold>
+
+        //<editor-fold=Added Methods>
+        this.getConstraint = function (node, name) {
+            ASSERT(innerCore.isValidNode(node));
+            var constraintsNode = innerCore.getChild(node, CONSTANTS.CONSTRAINTS_RELID);
             var constRelId = getConstraintRelId(constraintsNode, name);
             if (constRelId) {
-                var constraintNode = _innerCore.getChild(constraintsNode, constRelId);
+                var constraintNode = innerCore.getChild(constraintsNode, constRelId);
                 return {
-                    script: _innerCore.getAttribute(constraintNode, 'script'),
-                    priority: _innerCore.getAttribute(constraintNode, 'priority'),
-                    info: _innerCore.getAttribute(constraintNode, 'info')
+                    script: innerCore.getAttribute(constraintNode, 'script'),
+                    priority: innerCore.getAttribute(constraintNode, 'priority'),
+                    info: innerCore.getAttribute(constraintNode, 'info')
                 };
             } else {
                 return null;
             }
         };
 
-        _core.setConstraint = function (node, name, constraintObj) {
-            ASSERT(_innerCore.isValidNode(node));
+        this.setConstraint = function (node, name, constraintObj) {
+            ASSERT(innerCore.isValidNode(node));
             ASSERT(typeof constraintObj === 'object' && typeof name === 'string');
-            var constraintsNode = _innerCore.getChild(node, CONSTRAINTS_RELID);
+            var constraintsNode = innerCore.getChild(node, CONSTANTS.CONSTRAINTS_RELID);
             var constRelId = getConstraintRelId(constraintsNode, name);
             if (!constRelId) {
                 //we should create a new one
                 constRelId = createNewConstraintRelId(constraintsNode);
             }
 
-            var constraintNode = _innerCore.getChild(constraintsNode, constRelId);
-            constraintObj.priority = constraintObj.priority || C_DEF_PRIORITY;
+            var constraintNode = innerCore.getChild(constraintsNode, constRelId);
+            constraintObj.priority = constraintObj.priority || CONSTANTS.C_DEF_PRIORITY;
             constraintObj.script = constraintObj.script || 'console.log("empty constraint");';
             constraintObj.info = constraintObj.info || '';
-            _innerCore.setAttribute(constraintNode, 'name', name);
-            _innerCore.setAttribute(constraintNode, 'script', constraintObj.script);
-            _innerCore.setAttribute(constraintNode, 'priority', constraintObj.priority);
-            _innerCore.setAttribute(constraintNode, 'info', constraintObj.info);
-            _innerCore.setRegistry(node, getRegConstName(name),
-                (_innerCore.getRegistry(node, getRegConstName(name)) || 0) + 1);
+            innerCore.setAttribute(constraintNode, 'name', name);
+            innerCore.setAttribute(constraintNode, 'script', constraintObj.script);
+            innerCore.setAttribute(constraintNode, 'priority', constraintObj.priority);
+            innerCore.setAttribute(constraintNode, 'info', constraintObj.info);
+            innerCore.setRegistry(node, getRegConstName(name),
+                (innerCore.getRegistry(node, getRegConstName(name)) || 0) + 1);
         };
 
-        _core.delConstraint = function (node, name) {
-            ASSERT(_innerCore.isValidNode(node));
-            var constraintsNode = _innerCore.getChild(node, CONSTRAINTS_RELID);
+        this.delConstraint = function (node, name) {
+            ASSERT(innerCore.isValidNode(node));
+            var constraintsNode = innerCore.getChild(node, CONSTANTS.CONSTRAINTS_RELID);
             var constRelId = getConstraintRelId(constraintsNode, name);
             if (constRelId) {
-                var constraintNode = _innerCore.getChild(constraintsNode, constRelId);
-                _innerCore.deleteNode(constraintNode, true);
+                var constraintNode = innerCore.getChild(constraintsNode, constRelId);
+                innerCore.deleteNode(constraintNode, true);
             }
-            _innerCore.delRegistry(node, getRegConstName(name));
+            innerCore.delRegistry(node, getRegConstName(name));
         };
 
-        _core.getConstraintNames = function (node) {
-            ASSERT(_innerCore.isValidNode(node));
-            var constraintsNode = _innerCore.getChild(node, CONSTRAINTS_RELID);
-            var relIds = _innerCore.getChildrenRelids(constraintsNode);
-            var names = [];
-            for (var i = 0; i < relIds.length; i++) {
-                names.push(_innerCore.getAttribute(_innerCore.getChild(constraintsNode, relIds[i]), 'name'));
-            }
-            return names;
+        this.getConstraintNames = function (node) {
+            return getContraintNames(node, false);
         };
 
         //TODO this means we always have to have this layer above type/inheritance layer
-        _core.getOwnConstraintNames = function (node) {
-            ASSERT(_innerCore.isValidNode(node));
-            var names = _core.getConstraintNames(node),
-                base = _core.getBase(node),
-                baseNames = [],
-                i, index;
-
-            if (base) {
-                baseNames = _core.getConstraintNames(base);
-            }
-
-            for (i = 0; i < baseNames.length; i++) {
-                index = names.indexOf(baseNames[i]);
-                if (index !== -1) {
-                    names.splice(index, 1);
-                }
-            }
-
-            return names;
+        this.getOwnConstraintNames = function (node) {
+            return getContraintNames(node, true);
         };
-
-        return _core;
+        //</editor-fold>
     }
 
-    return constraintCore;
+    return ConstraintCore;
 });

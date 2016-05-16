@@ -8,9 +8,10 @@
 define([
     'js/logger',
     'js/Widgets/GraphViz/GraphVizWidget.Zoom',
+    'js/Utils/ComponentSettings',
     'd3',
     'css!./styles/GraphVizWidget.css'
-], function (Logger, GraphVizWidgetZoom) {
+], function (Logger, GraphVizWidgetZoom, ComponentSettings) {
     'use strict';
 
     var GraphVizWidget,
@@ -27,14 +28,17 @@ define([
         TREE_LEVEL_DISTANCE = 180;
 
     GraphVizWidget = function (container /*, params*/) {
+        var config = GraphVizWidget.getDefaultConfig();
         this._logger = Logger.create('gme:Widgets:GraphViz:GraphVizWidget', WebGMEGlobal.gmeConfig.client.log);
 
+        ComponentSettings.resolveWithWebGMEGlobal(config, GraphVizWidget.getComponentId());
+        //merge dfault values with the given parameters
         this._el = container;
 
         this._initialize();
 
         //init zoom related UI and handlers
-        this._initZoom();
+        this._initZoom(config);
 
         this._logger.debug('GraphVizWidget ctor finished');
     };
@@ -115,7 +119,7 @@ define([
             d.status = d.status || getOpenStatus(d);
         });
 
-        // Update the nodes…
+        // Update the nodes ...
         var node = this._svg.selectAll('g.node')
             .data(nodes, function (d) {
                 return d.id || (d.id = ++i);
@@ -213,7 +217,7 @@ define([
         nodeExit.select('text')
             .style('fill-opacity', 1e-6);
 
-        // Update the links…
+        // Update the links ...
         var link = this._svg.selectAll('path.link')
             .data(links, function (d) {
                 return d.target.id;
@@ -280,22 +284,26 @@ define([
 
             var sum = 0;
             var len = collideAtDepth.length;
-            if (len > 0) {
-                //start resize mode
-                this.__resizing = true;
+            //start resize mode
+            this.__resizing = true;
 
+            if (len > 0) {
                 while (len--) {
                     sum += collideAtDepth[len][1];
                 }
-
-                this._resizeD3Tree(nodesYByDepth.length * TREE_LEVEL_DISTANCE, sum * NODE_SIZE);
-
-                //redraw the tree
-                this._update();
-
-                //finish resize mode
-                this.__resizing = false;
+            } else {
+                //only the width changes
+                sum = this._el.height() / NODE_SIZE;
             }
+
+
+            this._resizeD3Tree(nodesYByDepth.length * TREE_LEVEL_DISTANCE, sum * NODE_SIZE);
+
+            //redraw the tree
+            this._update();
+
+            //finish resize mode
+            this.__resizing = false;
         }
     };
 
@@ -392,6 +400,16 @@ define([
     };
 
     _.extend(GraphVizWidget.prototype, GraphVizWidgetZoom.prototype);
+
+    GraphVizWidget.getDefaultConfig = function () {
+        return {
+            zoomValues: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.2, 1.4, 1.6, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0]
+        };
+    };
+
+    GraphVizWidget.getComponentId = function () {
+        return 'GenericUIGraphVizWidget';
+    };
 
     return GraphVizWidget;
 });

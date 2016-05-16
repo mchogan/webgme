@@ -8,196 +8,75 @@
 define([
     'common/util/assert',
     'common/util/key',
-    'common/core/future',
-    'common/core/tasync'
-], function (ASSERT, GENKEY, FUTURE, TASYNC) {
+    'common/core/tasync',
+    'common/util/random',
+    'common/regexp',
+    'common/core/constants'
+], function (ASSERT, GENKEY, TASYNC, RANDOM, REGEXP, CONSTANTS) {
 
     'use strict';
 
-    var HASH_REGEXP = new RegExp('#[0-9a-f]{40}');
-    var isValidHash = function (key) {
-        return typeof key === 'string' && key.length === 41 && HASH_REGEXP.test(key);
-    };
-
-    var MAX_RELID = Math.pow(2, 31);
-    var createRelid = function (data) {
-        ASSERT(data && typeof data === 'object');
-
-        var relid;
-        do {
-            relid = Math.floor(Math.random() * MAX_RELID);
-            // relid = relid.toString();
-        } while (data[relid] !== undefined);
-
-        return '' + relid;
-    };
-
-    // make relids deterministic
-    if (false) {
-        var nextRelid = 0;
-        createRelid = function (data) {
-            ASSERT(data && typeof data === 'object');
-
-            var relid;
-            do {
-                relid = (nextRelid += -1);
-            } while (data[relid] !== undefined);
-
-            return '' + relid;
-        };
-    }
-
     var rootCounter = 0;
 
-    return function (storage, options) {
+    function CoreTree(storage, options) {
         ASSERT(typeof options === 'object');
         ASSERT(typeof options.globConf === 'object');
         ASSERT(typeof options.logger !== 'undefined');
 
-        var gmeConfig = options.globConf;
-        //var logger = options.logger.fork('coretree');
-
-        var MAX_AGE = 3; // MAGIC NUMBER
-        var MAX_TICKS = 2000; // MAGIC NUMBER
-        var MAX_MUTATE = 30000; // MAGIC NUMBER
-
-        var ID_NAME = storage.ID_NAME;
-        var EMPTY_DATA = {};
-
-        var roots = [];
-        var ticks = 0;
+        var gmeConfig = options.globConf,
+            logger = options.logger.fork('core'),
+            ID_NAME = storage.ID_NAME,
+            roots = [],
+            ticks = 0,
+            mutateCount = 0,
+            checkValidTreeRunning = true,
+            stackedObjects = {},
+            self = this;
 
         storage.loadObject = TASYNC.wrap(storage.loadObject);
-        storage.insertObject = FUTURE.adapt(storage.insertObject);
-        storage.fsyncDatabase = FUTURE.adapt(storage.fsyncDatabase);
 
-        // ------- static methods
-
-        var getParent = function (node) {
-            ASSERT(typeof node.parent === 'object');
-
-            return node.parent;
-        };
-
-        var getRelid = function (node) {
-            ASSERT(node.relid === null || typeof node.relid === 'string');
-
-            return node.relid;
-        };
-
-        var getLevel = function (node) {
-            var level = 0;
-            while (node.parent !== null) {
-                ++level;
-                node = node.parent;
-            }
-            return level;
-        };
-
-        var getRoot = function (node) {
-            while (node.parent !== null) {
-                node = node.parent;
-            }
-            return node;
-        };
-
-        var getPath = function (node, base) {
-            if (node === null) {
-                return null;
-            }
-
-            var path = '';
-            while (node.relid !== null && node !== base) {
-                path = '/' + node.relid + path;
-                node = node.parent;
-            }
-            return path;
-        };
-
-        var isValidPath = function (path) {
-            return typeof path === 'string' && (path === '' || path.charAt(0) === '/');
-        };
-
-        var splitPath = function (path) {
-            ASSERT(isValidPath(path));
-
-            path = path.split('/');
-            path.splice(0, 1);
-
-            return path;
-        };
-
-        var buildPath = function (path) {
-            ASSERT(path instanceof Array);
-
-            return path.length === 0 ? '' : '/' + path.join('/');
-        };
-
-        var joinPaths = function (first, second) {
-            ASSERT(isValidPath(first) && isValidPath(second));
-
-            return first + second;
-        };
-
-        var getCommonPathPrefixData = function (first, second) {
-            ASSERT(typeof first === 'string' && typeof second === 'string');
-
-            first = splitPath(first);
-            second = splitPath(second);
-
-            var common = [];
-            for (var i = 0; first[i] === second[i] && i < first.length; ++i) {
-                common.push(first[i]);
-            }
-
-            return {
-                common: buildPath(common),
-                first: buildPath(first.slice(i)),
-                firstLength: first.length - i,
-                second: buildPath(second.slice(i)),
-                secondLength: second.length - i
-            };
-        };
+        this.loadPaths = TASYNC.wrap(storage.loadPaths);
+        this.logger = logger;
 
         // ------- memory management
 
-        var __detachChildren = function (node) {
-            ASSERT(node.children instanceof Array && node.age >= MAX_AGE - 1);
+        function __detachChildren(node) {
+            ASSERT(node.children instanceof Array && node.age >= CONSTANTS.MAX_AGE - 1);
 
             var children = node.children;
             node.children = null;
-            node.age = MAX_AGE;
+            node.age = CONSTANTS.MAX_AGE;
 
             for (var i = 0; i < children.length; ++i) {
                 __detachChildren(children[i]);
             }
-        };
+        }
 
-        var __ageNodes = function (nodes) {
+        function __ageNodes(nodes) {
             ASSERT(nodes instanceof Array);
 
             var i = nodes.length;
             while (--i >= 0) {
                 var node = nodes[i];
 
-                ASSERT(node.age < MAX_AGE);
-                if (++node.age >= MAX_AGE) {
+                ASSERT(node.age < CONSTANTS.MAX_AGE);
+                if (++node.age >= CONSTANTS.MAX_AGE) {
                     nodes.splice(i, 1);
                     __detachChildren(node);
                 } else {
                     __ageNodes(node.children);
                 }
             }
-        };
+        }
 
-        var __ageRoots = function () {
-            if (++ticks >= MAX_TICKS) {
+        function __ageRoots() {
+            if (++ticks >= CONSTANTS.MAX_TICKS) {
                 ticks = 0;
                 __ageNodes(roots);
             }
-        };
+        }
 
-        var __getChildNode = function (children, relid) {
+        function __getChildNode(children, relid) {
             ASSERT(children instanceof Array && typeof relid === 'string');
 
             for (var i = 0; i < children.length; ++i) {
@@ -211,30 +90,337 @@ define([
             }
 
             return null;
-        };
+        }
 
-        var __getChildData = function (data, relid) {
+        function __getChildData(data, relid) {
             ASSERT(typeof relid === 'string');
 
             if (typeof data === 'object' && data !== null) {
                 data = data[relid];
-                return typeof data === 'undefined' ? EMPTY_DATA : data;
+                return data === undefined ? __getEmptyData() : data;
             } else {
                 return null;
             }
+        }
+
+        function __isMutableData(data) {
+            return typeof data === 'object' && data !== null && data[CONSTANTS.MUTABLE_PROPERTY] === true;
+        }
+
+        function __isEmptyData(data) {
+            if (typeof data === 'string') {
+                return false;
+            } else if (typeof data === 'object' && Object.keys(data).length === 0) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        function __getEmptyData() {
+            return {};
+        }
+
+        function __areEquivalent(data1, data2) {
+            return data1 === data2 || (typeof data1 === 'string' && data1 === __getChildData(data2, ID_NAME)) ||
+                (__isEmptyData(data1) && __isEmptyData(data2));
+        }
+
+        function __reloadChildrenData(node) {
+            for (var i = 0; i < node.children.length; ++i) {
+                var child = node.children[i];
+
+                var data = __getChildData(node.data, child.relid);
+                if (!REGEXP.DB_HASH.test(data) || data !== __getChildData(child.data, ID_NAME)) {
+                    child.data = data;
+                    __reloadChildrenData(child);
+                }
+            }
+        }
+
+        function __noUnderscore(relid) {
+            ASSERT(typeof relid === 'string');
+            return relid.charAt(0) !== '_';
+        }
+
+        function __saveData(data, root, path) {
+            ASSERT(__isMutableData(data));
+
+            var done = __getEmptyData(),
+                keys = Object.keys(data),
+                key,
+                i, child, sub, hash;
+
+            delete data[CONSTANTS.MUTABLE_PROPERTY];
+
+            for (i = 0; i < keys.length; i++) {
+                key = keys[i];
+                child = data[key];
+                if (__isMutableData(child)) {
+                    sub = __saveData(child, root, path + '/' + key);
+                    if (sub === __getEmptyData()) {
+                        delete data[key];
+                    } else {
+                        done = sub;
+                        if (typeof child[ID_NAME] === 'string') {
+                            data[key] = child[ID_NAME];
+                        }
+                    }
+                } else {
+                    done = undefined;
+                }
+            }
+
+            if (done !== __getEmptyData()) {
+                hash = data[ID_NAME];
+                ASSERT(hash === '' || hash === undefined);
+
+                if (hash === '') {
+                    hash = '#' + GENKEY(data, gmeConfig);
+                    data[ID_NAME] = hash;
+
+                    done = data;
+
+                    storage.insertObject(data, stackedObjects);
+                    stackedObjects[hash] = {
+                        newHash: hash,
+                        newData: data,
+                        oldHash: root.initial[path] && root.initial[path].hash,
+                        oldData: root.initial[path] && root.initial[path].data
+                    };
+
+                    root.initial[path] = {
+                        hash: hash,
+                        data: data
+                    };
+                    //stackedObjects[hash] = data;
+                }
+            }
+
+            return done;
+        }
+
+        function __loadRoot2(data) {
+            var root = {
+                parent: null,
+                relid: null,
+                age: 0,
+                children: [],
+                data: data,
+                initial: {
+                    '': {
+                        hash: data[storage.ID_NAME],
+                        data: data
+                    }
+                },
+                rootid: ++rootCounter
+            };
+
+            roots.push(root);
+
+            __ageRoots();
+            return root;
+        }
+
+        function __loadChild2(node, newdata) {
+            var root = self.getRoot(node),
+                path = self.getPath(node);
+
+            node = self.normalize(node);
+
+            // TODO: this is a hack, we should avoid loading it multiple times
+            if (REGEXP.DB_HASH.test(node.data)) {
+                ASSERT(node.data === newdata[ID_NAME]);
+                root.initial[path] = {
+                    hash: node.data,
+                    data: newdata
+                };
+                node.data = newdata;
+                __reloadChildrenData(node);
+            } else {
+                // TODO: if this bites you, use the Cache
+                /*if(node.data !== newdata){
+                 console.log('kecso',node);
+                 }
+                 ASSERT(node.data === newdata);*/
+            }
+
+            return node;
+        }
+
+        function __loadDescendantByPath2(node, path, index) {
+            if (node === null || index === path.length) {
+                return node;
+            }
+
+            var child = self.loadChild(node, path[index]);
+            return TASYNC.call(__loadDescendantByPath2, child, path, index + 1);
+        }
+
+        function __printNode(node) {
+            var str = '{';
+            str += 'age:' + node.age;
+
+            if (typeof node.relid === 'string') {
+                str += ', relid: "' + node.relid + '"';
+            }
+
+            str += ', children:';
+            if (node.children === null) {
+                str += 'null';
+            } else {
+                str += '[';
+                for (var i = 0; i < node.children.length; ++i) {
+                    if (i !== 0) {
+                        str += ', ';
+                    }
+                    str += __printNode(node.children[i]);
+                }
+                str += ']';
+            }
+
+            str += '}';
+            return str;
+        }
+
+        function __test(text, cond) {
+            if (!cond) {
+                throw new Error(text);
+            }
+        }
+
+        function __checkValidTree(node) {
+            if (self.isValidNode(node)) {
+                if (node.children instanceof Array) {
+                    for (var i = 0; i < node.children.length; ++i) {
+                        __checkValidTree(node.children[i]);
+                    }
+                }
+            }
+        }
+
+        function isValidNodeThrow(node) {
+            __test('object', typeof node === 'object' && node !== null);
+            __test('object 2', node.hasOwnProperty('parent') && node.hasOwnProperty('relid'));
+            __test('parent', typeof node.parent === 'object');
+            __test('relid', typeof node.relid === 'string' || node.relid === null);
+            __test('parent 2', (node.parent === null) === (node.relid === null));
+            __test('age', node.age >= 0 && node.age <= CONSTANTS.MAX_AGE);
+            __test('children', node.children === null || node.children instanceof Array);
+            __test('children 2', (node.age === CONSTANTS.MAX_AGE) === (node.children === null));
+            __test('data', typeof node.data === 'object' || typeof node.data === 'string' ||
+                typeof node.data === 'number');
+
+            if (node.parent !== null) {
+                __test('age 2', node.age >= node.parent.age);
+                __test('mutable', !__isMutableData(node.data) || __isMutableData(node.parent.data));
+            }
+
+            if (!checkValidTreeRunning) {
+                checkValidTreeRunning = true;
+                __checkValidTree(self.getRoot(node));
+                checkValidTreeRunning = false;
+            }
+        }
+
+        // ------- static methods
+        this.getParent = function (node) {
+            ASSERT(typeof node.parent === 'object');
+
+            return node.parent;
         };
 
-        var normalize = function (node) {
-            ASSERT(isValidNode(node));
+        this.getRelid = function (node) {
+            ASSERT(node.relid === null || typeof node.relid === 'string');
+
+            return node.relid;
+        };
+
+        this.getLevel = function (node) {
+            var level = 0;
+            while (node.parent !== null) {
+                ++level;
+                node = node.parent;
+            }
+            return level;
+        };
+
+        this.getRoot = function (node) {
+            while (node.parent !== null) {
+                node = node.parent;
+            }
+            return node;
+        };
+
+        this.getPath = function (node, base) {
+            if (node === null) {
+                return null;
+            }
+
+            var path = '';
+            while (node.relid !== null && node !== base) {
+                path = '/' + node.relid + path;
+                node = node.parent;
+            }
+            return path;
+        };
+
+        this.isValidPath = function (path) {
+            return typeof path === 'string' && (path === '' || path.charAt(0) === '/');
+        };
+
+        this.splitPath = function (path) {
+            ASSERT(self.isValidPath(path));
+
+            path = path.split('/');
+            path.splice(0, 1);
+
+            return path;
+        };
+
+        this.buildPath = function (path) {
+            ASSERT(path instanceof Array);
+
+            return path.length === 0 ? '' : '/' + path.join('/');
+        };
+
+        this.joinPaths = function (first, second) {
+            ASSERT(self.isValidPath(first) && self.isValidPath(second));
+
+            return first + second;
+        };
+
+        this.getCommonPathPrefixData = function (first, second) {
+            ASSERT(typeof first === 'string' && typeof second === 'string');
+
+            first = self.splitPath(first);
+            second = self.splitPath(second);
+
+            var common = [];
+            for (var i = 0; first[i] === second[i] && i < first.length; ++i) {
+                common.push(first[i]);
+            }
+
+            return {
+                common: self.buildPath(common),
+                first: self.buildPath(first.slice(i)),
+                firstLength: first.length - i,
+                second: self.buildPath(second.slice(i)),
+                secondLength: second.length - i
+            };
+        };
+
+        this.normalize = function (node) {
+            ASSERT(self.isValidNode(node));
             // console.log('normalize start', printNode(getRoot(node)));
 
             var parent;
 
             if (node.children === null) {
-                ASSERT(node.age === MAX_AGE);
+                ASSERT(node.age === CONSTANTS.MAX_AGE);
 
                 if (node.parent !== null) {
-                    parent = normalize(node.parent);
+                    parent = self.normalize(node.parent);
 
                     var temp = __getChildNode(parent.children, node.relid);
                     if (temp !== null) {
@@ -252,7 +438,7 @@ define([
                     parent.children.push(node);
 
                     temp = __getChildData(parent.data, node.relid);
-                    if (!isValidHash(temp) || temp !== __getChildData(node.data, ID_NAME)) {
+                    if (!REGEXP.DB_HASH.test(temp) || temp !== __getChildData(node.data, ID_NAME)) {
                         node.data = temp;
                     }
                 } else {
@@ -275,11 +461,11 @@ define([
 
         // ------- hierarchy
 
-        var getAncestor = function (first, second) {
-            ASSERT(getRoot(first) === getRoot(second));
+        this.getAncestor = function (first, second) {
+            ASSERT(self.getRoot(first) === self.getRoot(second));
 
-            first = normalize(first);
-            second = normalize(second);
+            first = self.normalize(first);
+            second = self.normalize(second);
 
             var a = [];
             do {
@@ -304,11 +490,11 @@ define([
             return a[i];
         };
 
-        var isAncestor = function (node, ancestor) {
-            ASSERT(getRoot(node) === getRoot(ancestor));
+        this.isAncestor = function (node, ancestor) {
+            ASSERT(self.getRoot(node) === self.getRoot(ancestor));
 
-            node = normalize(node);
-            ancestor = normalize(ancestor);
+            node = self.normalize(node);
+            ancestor = self.normalize(ancestor);
 
             do {
                 if (node === ancestor) {
@@ -321,7 +507,7 @@ define([
             return false;
         };
 
-        var createRoot = function () {
+        this.createRoot = function () {
             var root = {
                 parent: null,
                 relid: null,
@@ -329,6 +515,9 @@ define([
                 children: [],
                 data: {
                     _mutable: true
+                },
+                initial: {
+                    '': null
                 },
                 rootid: ++rootCounter
             };
@@ -339,10 +528,10 @@ define([
             return root;
         };
 
-        var getChild = function (node, relid) {
+        this.getChild = function (node, relid) {
             ASSERT(typeof relid === 'string' && relid !== ID_NAME);
 
-            node = normalize(node);
+            node = self.normalize(node);
 
             var child = __getChildNode(node.children, relid);
             if (child !== null) {
@@ -362,147 +551,78 @@ define([
             return child;
         };
 
-        var createChild = function (node) {
-            node = normalize(node);
+        this.createChild = function (node) {
+            node = self.normalize(node);
 
             if (typeof node.data !== 'object' || node.data === null) {
                 throw new Error('invalid node data');
             }
 
-            var relid = createRelid(node.data);
-            var child = {
-                parent: node,
-                relid: relid,
-                age: 0,
-                children: [],
-                data: EMPTY_DATA
-            };
-
-            // TODO: make sure that it is not on the list
-            node.children.push(child);
-
-            __ageRoots();
-            return child;
-        };
-
-        var getDescendant = function (node, head, base) {
-            ASSERT(typeof base === 'undefined' || isAncestor(head, base));
-
-            node = normalize(node);
-            head = normalize(head);
-            base = typeof base === 'undefined' ? null : normalize(base.parent);
-
-            var path = [];
-            while (head.parent !== base) {
-                path.push(head.relid);
-                head = head.parent;
-            }
-
-            var i = path.length;
-            while (--i >= 0) {
-                node = getChild(node, path[i]);
-            }
-
-            return node;
-        };
-
-        var getDescendantByPath = function (node, path) {
-            ASSERT(path === '' || path.charAt(0) === '/');
-
-            path = path.split('/');
-
-            for (var i = 1; i < path.length; ++i) {
-                node = getChild(node, path[i]);
-            }
-
-            return node;
+            return self.getChild(node, RANDOM.generateRelid(node.data));
         };
 
         // ------- data manipulation
 
-        var __isMutableData = function (data) {
-            return typeof data === 'object' && data !== null && data._mutable === true;
-        };
-
-        var isMutable = function (node) {
-            node = normalize(node);
+        this.isMutable = function (node) {
+            node = self.normalize(node);
             return __isMutableData(node.data);
         };
 
-        var isObject = function (node) {
-            node = normalize(node);
-            return typeof node.data === 'object' && node.data !== null;
-        };
-
-        var isEmpty = function (node) {
-            node = normalize(node);
+        this.isEmpty = function (node) {
+            node = self.normalize(node);
             if (typeof node.data !== 'object' || node.data === null) {
                 return false;
-            } else if (node.data === EMPTY_DATA) {
+            } else if (node.data === __getEmptyData()) {
                 return true;
             }
 
             return __isEmptyData(node.data);
         };
 
-        var __isEmptyData = function (data) {
-            // TODO: better way to check if object has keys?
-            for (var keys in data) {
-                return false;
-            }
-            return true;
-        };
+        this.mutate = function (node) {
+            ASSERT(self.isValidNode(node));
 
-        var __areEquivalent = function (data1, data2) {
-            return data1 === data2 || (typeof data1 === 'string' && data1 === __getChildData(data2, ID_NAME)) ||
-                (__isEmptyData(data1) && __isEmptyData(data2));
-        };
-
-        var mutateCount = 0;
-        var mutate = function (node) {
-            ASSERT(isValidNode(node));
-
-            node = normalize(node);
+            node = self.normalize(node);
             var data = node.data;
 
             if (typeof data !== 'object' || data === null) {
                 return false;
-            } else if (data._mutable === true) {
+            } else if (data[CONSTANTS.MUTABLE_PROPERTY] === true) {
                 return true;
             }
 
             // TODO: infinite cycle if MAX_MUTATE is smaller than depth!
-            if (gmeConfig.storage.autoPersist && ++mutateCount > MAX_MUTATE) {
+            // gmeConfig.storage.autoPersist is removed and always false
+            if (false && ++mutateCount > CONSTANTS.MAX_MUTATE) {
                 mutateCount = 0;
 
                 for (var i = 0; i < roots.length; ++i) {
                     if (__isMutableData(roots[i].data)) {
-                        __saveData(roots[i].data);
+                        __saveData(roots[i].data, roots[i], '');
                     }
                 }
             }
 
-            if (node.parent !== null && !mutate(node.parent)) {
+            if (node.parent !== null && !self.mutate(node.parent)) {
                 // this should never happen
                 return false;
             }
 
-            var copy = {
-                _mutable: true
-            };
+            var copy = __getEmptyData();
 
             for (var key in data) {
                 copy[key] = data[key];
             }
-
-            ASSERT(copy._mutable === true);
+            copy[CONSTANTS.MUTABLE_PROPERTY] = true;
 
             if (typeof data[ID_NAME] === 'string') {
                 copy[ID_NAME] = '';
             }
 
             if (node.parent !== null) {
-                ASSERT(__areEquivalent(__getChildData(node.parent.data, node.relid), node.data));
+                //inherited child doesn't have an entry in the parent as long as it has not been modified
+                ASSERT(node.parent.data[node.relid] === undefined ||
+                    __areEquivalent(__getChildData(node.parent.data, node.relid), node.data));
                 node.parent.data[node.relid] = copy;
             }
 
@@ -510,31 +630,19 @@ define([
             return true;
         };
 
-        var getData = function (node) {
-            node = normalize(node);
+        this.getData = function (node) {
+            node = self.normalize(node);
 
             ASSERT(!__isMutableData(node.data));
             return node.data;
         };
 
-        var __reloadChildrenData = function (node) {
-            for (var i = 0; i < node.children.length; ++i) {
-                var child = node.children[i];
-
-                var data = __getChildData(node.data, child.relid);
-                if (!isValidHash(data) || data !== __getChildData(child.data, ID_NAME)) {
-                    child.data = data;
-                    __reloadChildrenData(child);
-                }
-            }
-        };
-
-        var setData = function (node, data) {
+        this.setData = function (node, data) {
             ASSERT(data !== null && typeof data !== 'undefined');
 
-            node = normalize(node);
+            node = self.normalize(node);
             if (node.parent !== null) {
-                if (!mutate(node.parent)) {
+                if (!self.mutate(node.parent)) {
                     throw new Error('incorrect node data');
                 }
 
@@ -545,11 +653,11 @@ define([
             __reloadChildrenData(node);
         };
 
-        var deleteData = function (node) {
-            node = normalize(node);
+        this.deleteData = function (node) {
+            node = self.normalize(node);
 
             if (node.parent !== null) {
-                if (!mutate(node.parent)) {
+                if (!self.mutate(node.parent)) {
                     throw new Error('incorrect node data');
                 }
 
@@ -558,14 +666,14 @@ define([
 
             var data = node.data;
 
-            node.data = EMPTY_DATA;
+            node.data = __getEmptyData();
             __reloadChildrenData(node);
 
             return data;
         };
 
-        var copyData = function (node) {
-            node = normalize(node);
+        this.copyData = function (node) {
+            node = self.normalize(node);
 
             if (typeof node.data !== 'object' || node.data === null) {
                 return node.data;
@@ -575,11 +683,11 @@ define([
             return JSON.parse(JSON.stringify(node.data));
         };
 
-        var getProperty = function (node, name) {
+        this.getProperty = function (node, name) {
             ASSERT(typeof name === 'string' && name !== ID_NAME);
 
             var data;
-            node = normalize(node);
+            node = self.normalize(node);
 
             if (typeof node.data === 'object' && node.data !== null) {
                 data = node.data[name];
@@ -590,13 +698,13 @@ define([
             return data;
         };
 
-        var setProperty = function (node, name, data) {
+        this.setProperty = function (node, name, data) {
             ASSERT(typeof name === 'string' && name !== ID_NAME);
             ASSERT(!__isMutableData(data) /*&& data !== null*/ && data !== undefined);
             //TODO is the 'null' really can be a value of a property???
 
-            node = normalize(node);
-            if (!mutate(node)) {
+            node = self.normalize(node);
+            if (!self.mutate(node)) {
                 throw new Error('incorrect node data');
             }
 
@@ -609,11 +717,11 @@ define([
             }
         };
 
-        var deleteProperty = function (node, name) {
+        this.deleteProperty = function (node, name) {
             ASSERT(typeof name === 'string' && name !== ID_NAME);
 
-            node = normalize(node);
-            if (!mutate(node)) {
+            node = self.normalize(node);
+            if (!self.mutate(node)) {
                 throw new Error('incorrect node data');
             }
 
@@ -621,45 +729,25 @@ define([
 
             var child = __getChildNode(node.children, name);
             if (child !== null) {
-                child.data = EMPTY_DATA;
+                child.data = __getEmptyData();
                 __reloadChildrenData(child);
             }
         };
 
-        var noUnderscore = function (relid) {
-            ASSERT(typeof relid === 'string');
-            return relid.charAt(0) !== '_';
-        };
-
-        var getKeys = function (node, predicate) {
-            ASSERT(typeof predicate === 'undefined' || typeof predicate === 'function');
-
-            node = normalize(node);
-            predicate = predicate || noUnderscore;
+        this.getKeys = function (node, predicate) {
+            var result;
+            node = self.normalize(node);
 
             if (typeof node.data !== 'object' || node.data === null) {
                 return null;
             }
 
-            var keys = Object.keys(node.data);
-
-            var i = keys.length;
-            while (--i >= 0 && !predicate(keys[i])) {
-                keys.pop();
-            }
-
-            while (--i >= 0) {
-                if (!predicate(keys[i])) {
-                    keys[i] = keys.pop();
-                }
-            }
-
-            return keys;
+            result = this.getRawKeys(node.data, predicate);
+            return result;
         };
 
-        var getRawKeys = function (object, predicate) {
-            ASSERT(typeof predicate === 'undefined' || typeof predicate === 'function');
-            predicate = predicate || noUnderscore;
+        this.getRawKeys = function (object, predicate) {
+            predicate = predicate || __noUnderscore;
 
             var keys = Object.keys(object);
 
@@ -679,32 +767,32 @@ define([
 
         // ------- persistence
 
-        var getHash = function (node) {
+        this.getHash = function (node) {
             if (node === null) {
                 return null;
             }
 
             var hash;
-            node = normalize(node);
+            node = self.normalize(node);
             if (typeof node.data === 'object' && node.data !== null) {
                 hash = node.data[ID_NAME];
             }
 
-            ASSERT(typeof hash === 'string' || typeof hash === 'undefined');
+            ASSERT(typeof hash === 'string' || hash === undefined);
             return hash;
         };
 
-        var isHashed = function (node) {
-            node = normalize(node);
+        this.isHashed = function (node) {
+            node = self.normalize(node);
             return typeof node.data === 'object' && node.data !== null && typeof node.data[ID_NAME] === 'string';
         };
 
-        var setHashed = function (node, hashed, noMutate) {
+        this.setHashed = function (node, hashed, noMutate) {
             ASSERT(typeof hashed === 'boolean');
 
-            node = normalize(node);
+            node = self.normalize(node);
             if (!noMutate) {
-                if (!mutate(node)) {
+                if (!self.mutate(node)) {
                     throw new Error('incorrect node data');
                 }
             }
@@ -715,269 +803,132 @@ define([
                 delete node.data[ID_NAME];
             }
 
-            ASSERT(typeof node.children[ID_NAME] === 'undefined');
+            ASSERT(node.children[ID_NAME] === undefined);
         };
 
-        var __saveData = function (data) {
-            ASSERT(__isMutableData(data));
+        this.persist = function (node) {
+            var updated = false,
+                result;
 
-            var done = EMPTY_DATA;
-            delete data._mutable;
+            node = self.normalize(node);
 
-            for (var relid in data) {
-                var child = data[relid];
-                if (__isMutableData(child)) {
-                    var sub = __saveData(child);
-                    if (sub === EMPTY_DATA) {
-                        delete data[relid];
-                    } else {
-                        done = FUTURE.join(done, sub);
-                        if (typeof child[ID_NAME] === 'string') {
-                            data[relid] = child[ID_NAME];
-                        }
-                    }
-                } else {
-                    done = undefined;
-                }
-            }
-
-            if (done !== EMPTY_DATA) {
-                var hash = data[ID_NAME];
-                ASSERT(hash === '' || typeof hash === 'undefined');
-
-                if (hash === '') {
-                    hash = '#' + GENKEY(data, gmeConfig);
-                    data[ID_NAME] = hash;
-
-                    done = FUTURE.join(done, storage.insertObject(data));
-                }
-            }
-
-            return done;
-        };
-
-        var persist = function (node) {
-            node = normalize(node);
+            //currently there is no reason to call the persist on a non-root object
+            node = self.getRoot(node);
 
             if (!__isMutableData(node.data)) {
-                return false;
+                return {rootHash: node.data[ID_NAME], objects: {}};
             }
 
-            var done = __saveData(node.data);
-            return FUTURE.join(done, storage.fsyncDatabase());
+            updated = __saveData(node.data, node, '');
+            if (updated !== __getEmptyData()) {
+                result = {};
+                result.objects = stackedObjects;
+                stackedObjects = {};
+                result.rootHash = node.data[ID_NAME];
+            } else {
+                result = {rootHash: node.data[ID_NAME], objects: {}};
+            }
+            //if (result.objects[result.rootHash]) {
+            //    if (gmeConfig.storage.patchRootCommunicationEnabled && node.initial) {
+            //        //TODO this method will change when we will pack similar data for every node
+            //        result.objects[result.rootHash] = {
+            //            newData: result.objects[result.rootHash],
+            //            newHash: result.rootHash,
+            //            oldData: node.initial.data,
+            //            oldHash: node.initial.hash
+            //        };
+            //    }
+            //
+            //    node.initial = {
+            //        data: result.objects[result.rootHash].newData || result.objects[result.rootHash],
+            //        hash: result.rootHash
+            //    };
+            //
+            //}
+
+            return result;
         };
 
-        var loadRoot = function (hash) {
-            ASSERT(isValidHash(hash));
+        this.loadRoot = function (hash) {
+            ASSERT(REGEXP.DB_HASH.test(hash));
 
             return TASYNC.call(__loadRoot2, storage.loadObject(hash));
         };
 
-        var __loadRoot2 = function (data) {
-            var root = {
-                parent: null,
-                relid: null,
-                age: 0,
-                children: [],
-                data: data,
-                rootid: ++rootCounter
-            };
-            roots.push(root);
+        this.loadChild = function (node, relid) {
+            ASSERT(self.isValidNode(node));
 
-            __ageRoots();
-            return root;
-        };
+            node = self.getChild(node, relid);
 
-        var loadChild = function (node, relid) {
-            ASSERT(isValidNode(node));
-
-            node = getChild(node, relid);
-
-            if (isValidHash(node.data)) {
+            if (typeof node.data === 'object') {
+                return node.data !== null ? node : null;
+            } else if (REGEXP.DB_HASH.test(node.data)) {
                 // TODO: this is a hack, we should avoid loading it multiple
                 // times
                 return TASYNC.call(__loadChild2, node, storage.loadObject(node.data));
             } else {
-                return typeof node.data === 'object' && node.data !== null ? node : null;
+                return null;
             }
         };
 
-        var getChildHash = function (node, relid) {
-            ASSERT(isValidNode(node));
+        this.getChildHash = function (node, relid) {
+            ASSERT(self.isValidNode(node));
 
-            node = getChild(node, relid);
+            node = self.getChild(node, relid);
 
-            if (isValidHash(node.data)) {
+            if (typeof node.data === 'object') {
+                return node.data !== null ? self.getHash(node) : null;
+            } else if (REGEXP.DB_HASH.test(node.data)) {
                 // TODO: this is a hack, we should avoid loading it multiple
                 // times
                 return node.data;
             } else {
-                return typeof node.data === 'object' && node.data !== null ? getHash(node) : null;
+                return null;
             }
         };
 
-
-        var __loadChild2 = function (node, newdata) {
-            node = normalize(node);
-
-            // TODO: this is a hack, we should avoid loading it multiple times
-            if (isValidHash(node.data)) {
-                ASSERT(node.data === newdata[ID_NAME]);
-
-                node.data = newdata;
-                __reloadChildrenData(node);
-            } else {
-                // TODO: if this bites you, use the Cache
-                /*if(node.data !== newdata){
-                 console.log('kecso',node);
-                 }
-                 ASSERT(node.data === newdata);*/
-            }
-
-            return node;
-        };
-
-        var loadByPath = function (node, path) {
-            ASSERT(isValidNode(node));
+        this.loadByPath = function (node, path) {
+            ASSERT(self.isValidNode(node));
             ASSERT(path === '' || path.charAt(0) === '/');
 
             path = path.split('/');
             return __loadDescendantByPath2(node, path, 1);
         };
 
-        var __loadDescendantByPath2 = function (node, path, index) {
-            if (node === null || index === path.length) {
-                return node;
-            }
-
-            var child = loadChild(node, path[index]);
-            return TASYNC.call(__loadDescendantByPath2, child, path, index + 1);
-        };
-
         // ------- valid -------
-
-        var printNode = function (node) {
-            var str = '{';
-            str += 'age:' + node.age;
-
-            if (typeof node.relid === 'string') {
-                str += ', relid: "' + node.relid + '"';
-            }
-
-            str += ', children:';
-            if (node.children === null) {
-                str += 'null';
-            } else {
-                str += '[';
-                for (var i = 0; i < node.children.length; ++i) {
-                    if (i !== 0) {
-                        str += ', ';
-                    }
-                    str += printNode(node.children[i]);
-                }
-                str += ']';
-            }
-
-            str += '}';
-            return str;
-        };
-
-        var __test = function (text, cond) {
-            if (!cond) {
-                throw new Error(text);
-            }
-        };
-
-        var checkValidTree = function (node) {
-            if (isValidNode(node)) {
-                if (node.children instanceof Array) {
-                    for (var i = 0; i < node.children.length; ++i) {
-                        checkValidTree(node.children[i]);
-                    }
-                }
-            }
-        };
-
-        // disable checking for now
-        var checkValidTreeRunning = true;
-
-        var isValidNode = function (node) {
+        this.isValidNode = function (node) {
             try {
-                __test('object', typeof node === 'object' && node !== null);
-                __test('object 2', node.hasOwnProperty('parent') && node.hasOwnProperty('relid'));
-                __test('parent', typeof node.parent === 'object');
-                __test('relid', typeof node.relid === 'string' || node.relid === null);
-                __test('parent 2', (node.parent === null) === (node.relid === null));
-                __test('age', node.age >= 0 && node.age <= MAX_AGE);
-                __test('children', node.children === null || node.children instanceof Array);
-                __test('children 2', (node.age === MAX_AGE) === (node.children === null));
-                __test('data', typeof node.data === 'object' || typeof node.data === 'string' ||
-                typeof node.data === 'number');
-
-                if (node.parent !== null) {
-                    __test('age 2', node.age >= node.parent.age);
-                    __test('mutable', !__isMutableData(node.data) || __isMutableData(node.parent.data));
-                }
-
-                if (!checkValidTreeRunning) {
-                    checkValidTreeRunning = true;
-                    checkValidTree(getRoot(node));
-                    checkValidTreeRunning = false;
-                }
-
+                isValidNodeThrow(node);
                 return true;
             } catch (error) {
-                console.log('Wrong node', error.stack);
+                logger.error(error.message, {stack: error.stack, node: node});
                 return false;
             }
         };
 
-        return {
-            getParent: getParent,
-            getRelid: getRelid,
-            getLevel: getLevel,
-            getRoot: getRoot,
-            getPath: getPath,
-            isValidPath: isValidPath,
-            splitPath: splitPath,
-            buildPath: buildPath,
-            joinPaths: joinPaths,
-            getCommonPathPrefixData: getCommonPathPrefixData,
+        //Object.keys(self).forEach(function (fName) {
+        //    var orgFn;
+        //    if (fName !== 'logger' && typeof self[fName] === 'function') {
+        //        orgFn = self[fName];
+        //        self[fName] = function () {
+        //            console.count(fName);
+        //            return orgFn.apply(self, arguments);
+        //        };
+        //    }
+        //});
 
-            normalize: normalize,
-            getAncestor: getAncestor,
-            isAncestor: isAncestor,
-            createRoot: createRoot,
-            createChild: createChild,
-            getChild: getChild,
-            getDescendant: getDescendant,
-            getDescendantByPath: getDescendantByPath,
+        this.removeChildFromCache = function (node, relid) {
+            var i;
+            for (i = 0; i < node.children.length; i += 1) {
+                if (node.children[i].relid === relid) {
+                    node.children.splice(i, 1);
+                    return node;
+                }
+            }
 
-            isMutable: isMutable,
-            isObject: isObject,
-            isEmpty: isEmpty,
-            mutate: mutate,
-            getData: getData,
-            setData: setData,
-            deleteData: deleteData,
-            copyData: copyData,
-            getProperty: getProperty,
-            setProperty: setProperty,
-            deleteProperty: deleteProperty,
-            getKeys: getKeys,
-            getRawKeys: getRawKeys,
+            return node;
+        }
+    }
 
-            isHashed: isHashed,
-            setHashed: setHashed,
-            getHash: getHash,
-            persist: TASYNC.wrap(FUTURE.unadapt(persist)),
-            loadRoot: loadRoot,
-            loadChild: loadChild,
-            loadByPath: loadByPath,
-
-            isValidNode: isValidNode,
-
-            getChildHash: getChildHash
-        };
-    };
+    return CoreTree;
 });

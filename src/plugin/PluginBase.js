@@ -3,59 +3,133 @@
 
 /**
  * This is the base class that plugins should inherit from.
- * (Using the plugin-generator - the generated plugin will do that.)
+ * (Using the PluginGenerator - the generated plugin will do that.)
  *
  * @author lattmann / https://github.com/lattmann
+ * @author pmeijer / https://github.com/pmeijer
  */
 
 define([
     'plugin/PluginConfig',
     'plugin/PluginResult',
     'plugin/PluginMessage',
-    'plugin/PluginNodeDescription'
-], function (PluginConfig, PluginResult, PluginMessage, PluginNodeDescription) {
+    'plugin/PluginNodeDescription',
+    'common/storage/constants',
+], function (PluginConfig, PluginResult, PluginMessage, PluginNodeDescription, STORAGE_CONSTANTS) {
     'use strict';
 
     /**
      * Initializes a new instance of a plugin object, which should be a derived class.
      *
      * @constructor
+     * @alias PluginBase
      */
     var PluginBase = function () {
         // set by initialize
+
+        /**
+         * @type {PluginMetadata}
+         */
+        this.pluginMetadata = null;
+
+        /**
+         * @type {GmeConfig}
+         */
+        this.gmeConfig = null;
+
+        /**
+         * @type {GmeLogger}
+         */
         this.logger = null;
+
+        /**
+         * @type {BlobClient}
+         */
         this.blobClient = null;
+
         this._currentConfig = null;
 
         // set by configure
+
+        /**
+         * @type {Core}
+         */
         this.core = null;
+
+        /**
+         * @type {ProjectInterface}
+         */
         this.project = null;
+
         this.projectName = null;
+        this.projectId = null;
         this.branchName = null;
+
         this.branchHash = null;
         this.commitHash = null;
         this.currentHash = null;
+
+        /**
+         * @type {module:Core~Node}
+         */
         this.rootNode = null;
+
+        /**
+         * @type {module:Core~Node}
+         */
         this.activeNode = null;
+
+        /**
+         * @type {module:Core~Node[]}
+         */
         this.activeSelection = [];
+
+        /**
+         * The namespace the META nodes are coming from (set by invoker).
+         * The default is the full meta, i.e. the empty string namespace.
+         * For example, if a project has a library A with a library B. The possible namespaces are:
+         * '', 'A' and 'A.B'.
+         * @type {string}
+         */
+        this.namespace = '';
+
+        /**
+         * The resolved META nodes based on the active namespace. Index by the fully qualified meta node names
+         * with the namespace stripped off at the start.
+         *
+         * For example, if a project has a library A with a library B. If the project and the libraries all have
+         * two meta nodes named a and b. Depending on the namespace the META will have the following keys:
+         *
+         * 1) namespace = '' -> ['a', 'b', 'A.a', 'A.b', 'A.B.a', 'A.B.b']
+         * 2) namespace = 'A' -> ['a', 'b', 'B.a', 'B.b']
+         * 3) namespace = 'A.B' -> ['a', 'b']
+         *
+         * (N.B. 'a' and 'b' in example 3) are pointing to the meta nodes defined in A.B.)
+         *
+         * @type {Object<string, module:Core~Node>}
+         */
         this.META = null;
 
+        /**
+         * @type {PluginResult}
+         */
         this.result = null;
+
         this.isConfigured = false;
-        this.gmeConfig = null;
+
+        this.notificationHandlers = [];
     };
 
-    //--------------------------------------------------------------------------------------------------------------
-    //---------- Methods must be overridden by the derived classes
+    //<editor-fold desc="Methods must be overridden by the derived classes">
 
     /**
      * Main function for the plugin to execute. This will perform the execution.
      * Notes:
-     * - do NOT use console.log use this.logger.[error,warning,info,debug] instead
-     * - do NOT put any user interaction logic UI, etc. inside this function
-     * - callback always have to be called even if error happened
+     * <br>- Do NOT use console.log use this.logger.[error,warning,info,debug] instead.
+     * <br>- Do NOT put any user interaction logic UI, etc. inside this function.
+     * <br>- callback always have to be called even if error happened.
      *
-     * @param {function(string, plugin.PluginResult)} callback - the result callback
+     * @param {function(string|Error, PluginResult)} callback - the result callback
      */
     PluginBase.prototype.main = function (/*callback*/) {
         throw new Error('implement this function in the derived class');
@@ -67,19 +141,22 @@ define([
      * @returns {string}
      */
     PluginBase.prototype.getName = function () {
-        throw new Error('implement this function in the derived class - getting type automatically is a bad idea,' +
-        'when the js scripts are minified names are useless.');
+        if (this.pluginMetadata) {
+            return this.pluginMetadata.name;
+        } else {
+            throw new Error('If pluginMetadata is not defined - implement this function in the derived class');
+        }
     };
 
-    //--------------------------------------------------------------------------------------------------------------
-    //---------- Methods could be overridden by the derived classes
+    //</editor-fold>
+    //<editor-fold desc="Methods could be overridden by the derived classes">
 
     /**
      * Current version of this plugin using semantic versioning.
      * @returns {string}
      */
     PluginBase.prototype.getVersion = function () {
-        return '0.1.0';
+        return this.pluginMetadata ? this.pluginMetadata.version : '0.1.0';
     };
 
     /**
@@ -88,7 +165,7 @@ define([
      * @returns {string}
      */
     PluginBase.prototype.getDescription = function () {
-        return '';
+        return this.pluginMetadata ? this.pluginMetadata.description : '';
     };
 
     /**
@@ -130,11 +207,10 @@ define([
      * @returns {object[]}
      */
     PluginBase.prototype.getConfigStructure = function () {
-        return [];
+        return this.pluginMetadata ? this.pluginMetadata.configStructure : [];
     };
-
-    //--------------------------------------------------------------------------------------------------------------
-    //---------- Methods that can be used by the derived classes
+    //</editor-fold>
+    //<editor-fold desc="Methods that can be used by the derived classes">
 
     /**
      * Updates the current success flag with a new value.
@@ -178,31 +254,33 @@ define([
     /**
      * Checks if the given node is of the given meta-type.
      * Usage: <tt>self.isMetaTypeOf(aNode, self.META['FCO']);</tt>
-     * @param node - Node to be checked for type.
-     * @param metaNode - Node object defining the meta type.
+     * @param {module:Core~Node} node - Node to be checked for type.
+     * @param {module:Core~Node} metaNode - Node object defining the meta type.
      * @returns {boolean} - True if the given object was of the META type.
      */
     PluginBase.prototype.isMetaTypeOf = function (node, metaNode) {
-        var self = this;
-        while (node) {
-            if (self.core.getGuid(node) === self.core.getGuid(metaNode)) {
-                return true;
-            }
-            node = self.core.getBase(node);
-        }
-        return false;
+        // This includes mixins.
+        return this.core.isTypeOf(node, metaNode);
     };
 
     /**
      * Finds and returns the node object defining the meta type for the given node.
-     * @param node - Node to be checked for type.
-     * @returns {Object} - Node object defining the meta type of node.
+     * @param {module:Core~Node} node - Node to be checked for type.
+     * @returns {module:Core~Node} - Node object defining the meta type of node.
      */
     PluginBase.prototype.getMetaType = function (node) {
         var self = this,
+            namespace,
             name;
+
         while (node) {
             name = self.core.getAttribute(node, 'name');
+            namespace = self.core.getNamespace(node).substr(self.namespace.length);
+
+            if (namespace) {
+                name = namespace + '.' + name;
+            }
+
             if (self.META.hasOwnProperty(name) && self.core.getGuid(node) === self.core.getGuid(self.META[name])) {
                 break;
             }
@@ -213,18 +291,26 @@ define([
 
     /**
      * Returns true if node is a direct instance of a meta-type node (or a meta-type node itself).
-     * @param node - Node to be checked.
+     * @param {module:Core~Node} node - Node to be checked.
      * @returns {boolean}
      */
     PluginBase.prototype.baseIsMeta = function (node) {
         var self = this,
             baseName,
+            namespace,
             baseNode = self.core.getBase(node);
         if (!baseNode) {
             // FCO does not have a base node, by definition function returns true.
             return true;
         }
+
         baseName = self.core.getAttribute(baseNode, 'name');
+        namespace = self.core.getNamespace(baseNode).substr(self.namespace.length);
+
+        if (namespace) {
+            baseName = namespace + '.' + baseName;
+        }
+
         return self.META.hasOwnProperty(baseName) &&
             self.core.getGuid(self.META[baseName]) === self.core.getGuid(baseNode);
     };
@@ -232,7 +318,7 @@ define([
     /**
      * Gets the current configuration of the plugin that was set by the user and plugin manager.
      *
-     * @returns {object}
+     * @returns {PluginConfig}
      */
     PluginBase.prototype.getCurrentConfig = function () {
         return this._currentConfig;
@@ -241,13 +327,23 @@ define([
     /**
      * Creates a new message for the user and adds it to the result.
      *
-     * @param {object} node - webgme object which is related to the message
+     * @param {module:Core~Node|object} node - webgme object which is related to the message
      * @param {string} message - feedback to the user
      * @param {string} severity - severity level of the message: 'debug', 'info' (default), 'warning', 'error'.
      */
     PluginBase.prototype.createMessage = function (node, message, severity) {
-        var severityLevel = severity || 'info';
-        //this occurence of the function will always handle a single node
+        var severityLevel = severity || 'info',
+            nodeDescriptor = {
+                name: '',
+                id: ''
+            };
+
+        //FIXME: Use a proper check for determining if it is a Core node or not.
+        if (node && node.hasOwnProperty('parent') && node.hasOwnProperty('relid')) {
+            nodeDescriptor.name = this.core.getAttribute(node, 'name');
+            nodeDescriptor.id = this.core.getPath(node);
+        }
+        //this occurrence of the function will always handle a single node
 
         var descriptor = new PluginNodeDescription({
             name: node ? this.core.getAttribute(node, 'name') : '',
@@ -264,148 +360,179 @@ define([
     };
 
     /**
-     * Saves all current changes if there is any to a new commit.
-     * If the changes were started from a branch, then tries to fast forward the branch to the new commit.
-     * Note: Does NOT handle any merges at this point.
-     *
-     * @param {string|null} message - commit message
-     * @param callback
+     * Sends a notification back to the invoker of the plugin, can be used to notify about progress.
+     * @param {string|object} message - Message string or object containing message.
+     * @param {string} message.message - If object it must contain a message.
+     * @param {number} [message.progress] - Approximate progress (in %) of the plugin at time of sending.
+     * @param {string} [message.severity='info'] - Severity level ('success', 'info', 'warn', 'error')
+     * @param {string} [callback] - optional callback invoked when message has been emitted from server.
      */
-    PluginBase.prototype.save = function (message, callback) {
-        var self = this;
+    PluginBase.prototype.sendNotification = function (message, callback) {
+        var self = this,
+            cnt = self.notificationHandlers.length,
+            data = {
+                type: STORAGE_CONSTANTS.PLUGIN_NOTIFICATION,
+                notification: typeof message === 'string' ? {message: message} : message,
+                projectId: self.projectId,
+                branchName: self.branchName,
+                pluginName: self.getName(),
+                pluginVersion: self.getVersion()
+            };
 
-        this.logger.debug('Saving project');
-
-        this.core.persist(this.rootNode, function (err) {
-            if (err) {
-                self.logger.error(err);
-            }
-        });
-        var newRootHash = self.core.getHash(self.rootNode);
-
-        var commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
-        if (message) {
-            commitMessage += ' - ' + message;
-        }
-        self.currentHash = self.project.makeCommit([self.currentHash], newRootHash, commitMessage, function (err) {
-            if (err) {
-                self.logger.error(err);
-            }
-        });
-
-        if (self.branchName) {
-            // try to fast forward branch if there was a branch name defined
-
-            // FIXME: what if master branch is already in a different state?
-
-            // try to fast forward branch to the current commit
-            self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
+        callback = callback || function (err) {
                 if (err) {
-                    // fast forward failed
-                    // TODO: try auto-merge
-
                     self.logger.error(err);
-                    self.logger.info('"' + self.branchName + '" was NOT updated');
-                    self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                } else {
-                    // successful fast forward of branch to the new commit
-                    self.logger.info('"' + self.branchName + '" was updated to the new commit.');
-                    // roll starting point on success
-                    self.branchHash = self.currentHash;
                 }
-                callback(err);
+            };
+
+        function emitToHandlers() {
+            if (cnt === 0) {
+                callback(null);
+                return;
+            }
+            cnt -= 1;
+            self.notificationHandlers[cnt](data, function (err) {
+                if (err) {
+                    callback(err);
+                } else {
+                    emitToHandlers();
+                }
             });
-
-            // FIXME: is this call async??
-            // FIXME: we are not tracking all commits that we make
-
-        } else {
-            // making commits, we have not started from a branch
-            self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-            callback(null);
         }
 
-        // Commit changes.
-        /*            this.core.persist(this.rootNode, function (err) {
-         // TODO: any error here?
-         if (err) {
-         self.logger.error(err);
-         }
-
-         var newRootHash = self.core.getHash(self.rootNode);
-
-         var commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
-         if (message) {
-         commitMessage += ' - ' + message;
-         }
-
-         self.currentHash = self.project.makeCommit([self.currentHash], newRootHash, commitMessage, function (err) {
-         // TODO: any error handling here?
-         if (err) {
-         self.logger.error(err);
-         }
-
-         if (self.branchName) {
-         // try to fast forward branch if there was a branch name defined
-
-         // FIXME: what if master branch is already in a different state?
-
-         self.project.getBranchNames(function (err, branchNames) {
-         if (branchNames.hasOwnProperty(self.branchName)) {
-         var branchHash = branchNames[self.branchName];
-         if (branchHash === self.branchHash) {
-         // the branch does not have any new commits
-         // try to fast forward branch to the current commit
-         self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
-         if (err) {
-         // fast forward failed
-         self.logger.error(err);
-         self.logger.info('"' + self.branchName + '" was NOT updated');
-         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-         } else {
-         // successful fast forward of branch to the new commit
-         self.logger.info('"' + self.branchName + '" was updated to the new commit.');
-         // roll starting point on success
-         self.branchHash = self.currentHash;
-         }
-         callback(err);
-         });
-         } else {
-         // branch has changes a merge is required
-         // TODO: try auto-merge, if fails ...
-         self.logger.warn('Cannot fast forward "' + self.branchName + '" branch.
-         Merge is required but not supported yet.');
-         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-         callback(null);
-         }
-         } else {
-         // branch was deleted or not found, do nothing
-         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-         callback(null);
-         }
-         });
-         // FIXME: is this call async??
-         // FIXME: we are not tracking all commits that we make
-
-         } else {
-         // making commits, we have not started from a branch
-         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-         callback(null);
-         }
-         });
-
-         });*/
+        emitToHandlers();
     };
 
-    //--------------------------------------------------------------------------------------------------------------
-    //---------- Methods that are used by the Plugin Manager. Derived classes should not use these methods
+    /**
+     * Saves all current changes if there is any to a new commit.
+     * If the commit result is either 'FORKED' or 'CANCELED', it creates a new branch.
+     *
+     * N.B. This is a utility function for saving/persisting data. The plugin has access to the project and core
+     * instances and may persist and make the commit as define its own behavior for e.g. 'FORKED' commits.
+     * To report the commits in the PluginResult make sure to invoke this.addCommitToResult with the given status.
+     *
+     * @param {string|null} message - commit message
+     * @param {function(Error|string, module:Storage~commitResult)} callback
+     */
+    PluginBase.prototype.save = function (message, callback) {
+        var self = this,
+            persisted,
+            commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
+
+        commitMessage = message ? commitMessage + ' - ' + message : commitMessage;
+
+        self.logger.debug('Saving project');
+        persisted = self.core.persist(self.rootNode);
+        if (Object.keys(persisted.objects).length === 0) {
+            self.logger.warn('save invoked with no changes, will still proceed');
+        }
+
+        return self.project.makeCommit(self.branchName,
+            [self.currentHash],
+            persisted.rootHash,
+            persisted.objects,
+            commitMessage)
+            .then(function (commitResult) {
+                if (commitResult.status === STORAGE_CONSTANTS.SYNCED) {
+                    self.currentHash = commitResult.hash;
+                    self.logger.info('"' + self.branchName + '" was updated to the new commit.');
+                    self.addCommitToResult(STORAGE_CONSTANTS.SYNCED);
+                    return commitResult;
+                } else if (commitResult.status === STORAGE_CONSTANTS.FORKED) {
+                    self.currentHash = commitResult.hash;
+                    return self._createFork();
+                } else if (commitResult.status === STORAGE_CONSTANTS.CANCELED) {
+                    // Plugin running in the browser and the client has made changes since plugin was invoked.
+                    // Since the commitData was never sent to the server, a commit w/o branch is made before forking.
+                    return self.project.makeCommit(null,
+                        [self.currentHash],
+                        persisted.rootHash,
+                        persisted.objects,
+                        commitMessage)
+                        .then(function (commitResult) {
+                            self.currentHash = commitResult.hash; // This is needed in case hash is randomly generated.
+                            return self._createFork();
+                        });
+                } else if (!self.branchName) {
+                    self.currentHash = commitResult.hash;
+                    self.addCommitToResult(null);
+                } else {
+                    throw new Error('setBranchHash returned unexpected status' + commitResult.status);
+                }
+            })
+            .nodeify(callback);
+    };
+
+    PluginBase.prototype._createFork = function (callback) {
+        // User can set self.forkName, but must make sure it is unique.
+        var self = this,
+            oldBranchName = self.branchName,
+            forkName = self.forkName || self.branchName + '_' + (new Date()).getTime();
+        self.logger.warn('Plugin got forked from "' + self.branchName + '". ' +
+            'Trying to create a new branch "' + forkName + '".');
+
+        return self.project.createBranch(forkName, self.currentHash)
+            .then(function (forkResult) {
+                if (forkResult.status === STORAGE_CONSTANTS.SYNCED) {
+                    self.branchName = forkName;
+                    self.logger.info('"' + self.branchName + '" was updated to the new commit.' +
+                        '(Successive saves will try to save to this new branch.)');
+                    self.addCommitToResult(STORAGE_CONSTANTS.FORKED);
+
+                    return {status: STORAGE_CONSTANTS.FORKED, forkName: forkName, hash: forkResult.hash};
+                } else if (forkResult.status === STORAGE_CONSTANTS.FORKED) {
+                    self.branchName = null;
+                    self.addCommitToResult(STORAGE_CONSTANTS.FORKED);
+
+                    throw new Error('Plugin got forked from "' + oldBranchName + '". ' +
+                        'And got forked from "' + forkName + '" too.');
+                } else {
+                    throw new Error('createBranch returned unexpected status' + forkResult.status);
+                }
+            })
+            .nodeify(callback);
+    };
+
+    /**
+     * Adds the commit to the results. N.B. if you're using your own save method - make sure to update
+     * this.currentHash and this.branchName accordingly before adding the commit.
+     *
+     * @param {string} status - Status of the commit 'SYNCED', 'FORKED', 'CANCELED', null.
+     */
+    PluginBase.prototype.addCommitToResult = function (status) {
+        var newCommit = {
+            commitHash: this.currentHash,
+            branchName: this.branchName,
+            status: status
+        };
+        this.result.addCommit(newCommit);
+        this.logger.debug('newCommit added', newCommit);
+    };
+
+    /**
+     * Checks if the activeNode has registered the plugin.
+     *
+     * @param {string} pluginId - Id of plugin
+     * @returns {Error} - returns undefined if valid and an Error if not.
+     */
+    PluginBase.prototype.isInvalidActiveNode = function (pluginId) {
+        var validPlugins = this.core.getRegistry(this.activeNode,  'validPlugins') || '';
+        this.logger.debug('validPlugins for activeNode', validPlugins);
+
+        if (validPlugins.split(' ').indexOf(pluginId) === -1) {
+            return new Error('Plugin not registered as validPlugin for active node, validPlugins "' +
+                validPlugins + '"');
+        }
+    };
+    //</editor-fold>
+    //<editor-fold desc="Methods that are used by the Plugin Manager. Derived classes should not use these methods">
 
     /**
      * Initializes the plugin with objects that can be reused within the same plugin instance.
      *
-     * @param {logManager} logger - logging capability to console (or file) based on PluginManager configuration
-     * @param {blob.BlobClient} blobClient - virtual file system where files can be generated then saved as a zip file.
-     * @param {object} gmeConfig - global configuration for webGME.
+     * @param {GmeLogger} logger - logging capability to console (or file) based on PluginManager configuration
+     * @param {BlobClient} blobClient - virtual file system where files can be generated then saved as a zip file.
+     * @param {GmeConfig} gmeConfig - global configuration for webGME.
      */
     PluginBase.prototype.initialize = function (logger, blobClient, gmeConfig) {
         if (logger) {
@@ -437,18 +564,27 @@ define([
     PluginBase.prototype.configure = function (config) {
         this.core = config.core;
         this.project = config.project;
+        this.branch = config.branch;  // This is only for client side.
         this.projectName = config.projectName;
+        this.projectId = config.projectId;
         this.branchName = config.branchName;
         this.branchHash = config.branchName ? config.commitHash : null;
+
         this.commitHash = config.commitHash;
         this.currentHash = config.commitHash;
+
         this.rootNode = config.rootNode;
         this.activeNode = config.activeNode;
         this.activeSelection = config.activeSelection;
-        this.META = config.META;
+
+        this.namespace = config.namespace || '';
+
+        this.META = this.META = config.META;
 
         this.result = new PluginResult();
+        this.result.setProjectId(this.projectId);
 
+        this.addCommitToResult(STORAGE_CONSTANTS.SYNCED);
 
         this.isConfigured = true;
     };
@@ -456,7 +592,7 @@ define([
     /**
      * Gets the default configuration based on the configuration structure for this plugin.
      *
-     * @returns {plugin.PluginConfig}
+     * @returns {PluginConfig}
      */
     PluginBase.prototype.getDefaultConfig = function () {
         var configStructure = this.getConfigStructure();
@@ -473,11 +609,21 @@ define([
     /**
      * Sets the current configuration of the plugin.
      *
-     * @param {object} newConfig - this is the actual configuration and NOT the configuration structure.
+     * @param {PluginConfig} newConfig - this is the actual configuration and NOT the configuration structure.
      */
     PluginBase.prototype.setCurrentConfig = function (newConfig) {
         this._currentConfig = newConfig;
     };
+
+    /**
+     * Gets the metadata for the plugin.
+     *
+     * @returns {PluginMetaData}
+     */
+    PluginBase.prototype.getMetadata = function () {
+        return this.pluginMetadata;
+    };
+    //</editor-fold>
 
     return PluginBase;
 });

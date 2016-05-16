@@ -10,159 +10,199 @@ describe('import CLI tests', function () {
 
     var gmeConfig = testFixture.getGmeConfig(),
         expect = testFixture.expect,
-        WebGME = testFixture.WebGME,
-        Storage = WebGME.serverUserStorage,
         importCLI = require('../../src/bin/import'),
-        openContext = testFixture.requirejs('common/util/opencontext'),
+        filename = require('path').normalize('src/bin/import.js'),
+        importPath = './test/bin/import/project.webgmex',
         projectName,
+        projectId,
+        existingProjectName = 'importCliExisting',
+        existingProjectId = testFixture.projectName2Id(existingProjectName),
+        Q = testFixture.Q,
+        logger = testFixture.logger.fork('import.spec'),
         storage,
-        project,
-        jsonProject;
+        gmeAuth,
+        oldLogFunction = console.log,
+        oldWarnFunction = console.warn,
+        oldStdOutFunction = process.stdout.write;
 
-    function closeContext(callback) {
-        try {
-            project.closeProject(function () {
-                storage.closeDatabase(function (err) {
-                    callback(err);
-                });
-            });
-        } catch (err) {
-            storage.closeDatabase(function () {
-                callback(err);
-            });
-        }
+    function checkBranch(pId, branchArray) {
+        var deferred = Q.defer(),
+            params = {projectId: pId};
+        storage.openProject(params)
+            .then(function (project) {
+                return project.getBranches();
+            })
+            .then(function (branches) {
+                expect(branches).to.have.all.keys(branchArray);
+                deferred.resolve();
+            })
+            .catch(deferred.reject);
+
+        return deferred.promise;
     }
 
-    before(function () {
-        jsonProject = testFixture.loadJsonFile('./test/bin/import/project.json');
-        storage = storage = new WebGME.serverUserStorage({
-            globConf: gmeConfig,
-            logger: testFixture.logger.fork('import_CLI_tests:storage')
-        });
+    before(function (done) {
+        testFixture.clearDBAndGetGMEAuth(gmeConfig, existingProjectName)
+            .then(function (gmeAuth_) {
+                gmeAuth = gmeAuth_;
+                storage = testFixture.getMongoStorage(logger, gmeConfig, gmeAuth);
+                return storage.openDatabase();
+            })
+            .then(function () {
+                return testFixture.importProject(storage, {
+                    projectName: existingProjectName,
+                    logger: logger.fork('import'),
+                    gmeConfig: gmeConfig,
+                    branchName: 'master',
+                    userName: gmeConfig.authentication.guestAccount,
+                    projectSeed: './test/bin/import/project.webgmex'
+
+                });
+            })
+            .nodeify(done);
+
+    });
+
+    after(function (done) {
+        Q.allDone([
+            gmeAuth.unload(),
+            storage.closeDatabase()
+        ])
+            .nodeify(done);
+    });
+
+    beforeEach(function () {
+        console.log = function () {
+        };
+        process.stdout.write = function () {
+        };
+        console.warn = function () {
+
+        };
     });
 
     afterEach(function (done) {
-        if (project && projectName) {
-            project.closeProject(function (err1) {
-                storage.deleteProject(projectName, function (err2) {
-                    storage.closeDatabase(function (err3) {
-                        done(err1 || err2 || err3 || null);
-                    });
-                });
-            });
+        console.log = oldLogFunction;
+        console.warn = oldWarnFunction;
+        process.stdout.write = oldStdOutFunction;
+        if (projectId) {
+            storage.deleteProject({projectId: projectId})
+                .nodeify(done);
         } else {
             done();
         }
     });
 
-    it('should import non-existing project with unspecified branch into master', function (done) {
-        var nodePath = '/960660211/1365653822',
-            contextParam = {
-            projectName: 'importTestNumber1',
-            branchName: 'master',
-            nodePaths: [nodePath]
-        };
-        importCLI.import(Storage, gmeConfig, contextParam.projectName, jsonProject, null, true,
-            function (err, data) {
-                expect(err).to.equal(null);
+    it('should have a main', function () {
+        projectName = null;
+        projectId = null;
 
-                expect(typeof data).to.equal('object');
-                expect(typeof data.commitHash).to.equal('string');
-                openContext(storage, gmeConfig, testFixture.logger, contextParam, function (err, context) {
-                    expect(err).to.equal(null);
-                    expect(context.commitHash).to.equal(data.commitHash);
-                    expect(context.nodes).to.have.keys(nodePath);
-                    expect(context.core.getAttribute(context.nodes[nodePath], 'name')).to.equal('state');
-                    projectName = contextParam.projectName;
-                    project = context.project;
-                    done();
-                });
-            }
-        );
+        importCLI.should.have.property('main');
     });
 
-    it('should import non-existing project with specified branch', function (done) {
-        var nodePath = '/960660211/1365653822',
-            contextParam = {
-            projectName: 'importTestNumber2',
-            branchName: 'b1',
-            nodePaths: [nodePath]
-        };
-        importCLI.import(Storage, gmeConfig, contextParam.projectName, jsonProject, contextParam.branchName, true,
-            function (err, data) {
-                expect(err).to.equal(null);
+    it('should fail if mandatory parameters missing', function (done) {
+        projectName = null;
+        projectId = null;
 
-                expect(typeof data).to.equal('object');
-                expect(typeof data.commitHash).to.equal('string');
-                openContext(storage, gmeConfig, testFixture.logger, contextParam, function (err, context) {
-                    expect(err).to.equal(null);
-                    expect(context.commitHash).to.equal(data.commitHash);
-                    expect(context.nodes).to.have.keys(nodePath);
-                    expect(context.core.getAttribute(context.nodes[nodePath], 'name')).to.equal('state');
-                    projectName = contextParam.projectName;
-                    project = context.project;
-                    done();
-                });
-            }
-        );
+        importCLI.main(['node', filename])
+            .then(function () {
+                done(new Error('missing error handling'));
+            })
+            .catch(function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('invalid argument');
+                done();
+            })
+            .done();
     });
 
-    it('should import existing project with unspecified branch into master', function (done) {
-        var nodePath = '/579542227/2088994530',
-            contextParam = {
-                projectName: 'importTestNumber3',
-                branchName: 'master',
-                nodePaths: [nodePath]
-            },
-            tmpJsonProject = testFixture.loadJsonFile('./test/bin/import/basicProject.json');
+    it('should fail to import if wrong owner is given', function (done) {
+        projectName = null;
+        projectId = null;
 
-        importCLI.import(Storage, gmeConfig, contextParam.projectName, tmpJsonProject, null, true,
-            function (err, data) {
-                expect(err).to.equal(null);
-
-                expect(typeof data).to.equal('object');
-                expect(typeof data.commitHash).to.equal('string');
-
-                openContext(storage, gmeConfig, testFixture.logger, contextParam, function (err, context) {
-                    expect(err).to.equal(null);
-
-                    expect(context.commitHash).to.equal(data.commitHash);
-                    expect(context.nodes).to.have.keys(nodePath);
-                    expect(context.core.getAttribute(context.nodes[nodePath], 'name')).to.equal('2');
-
-                    project = context.project;
-                    projectName = contextParam.projectName;
-
-                    closeContext(function (err) {
-                        expect(err).to.equal(null);
-
-                        importCLI.import(Storage, gmeConfig, contextParam.projectName, jsonProject, null, true,
-                            function (err, data) {
-                                expect(err).to.equal(null);
-
-                                expect(typeof data).to.equal('object');
-                                expect(typeof data.commitHash).to.equal('string');
-
-                                nodePath = '/960660211/1365653822';
-                                contextParam.nodePaths = [nodePath];
-
-                                openContext(storage, gmeConfig, testFixture.logger, contextParam,
-                                    function (err, context) {
-                                        expect(err).to.equal(null);
-                                        expect(context.commitHash).to.equal(data.commitHash);
-                                        expect(context.nodes).to.have.keys(nodePath);
-                                        expect(context.core.getAttribute(context.nodes[nodePath], 'name'))
-                                            .to.equal('state');
-
-                                        project = context.project;
-                                        done();
-                                    }
-                                );
-                            }
-                        );
-                    });
-                });
-            }
-        );
+        importCLI.main(['node', filename,
+            importPath,
+            '-p', existingProjectName,
+            '-o', 'badOwner',
+            '-u', 'badOwner'
+        ])
+            .then(function () {
+                done(new Error('missing error handling'));
+            })
+            .catch(function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.include('badOwner');
+                done();
+            })
+            .done();
     });
+
+    it('should import into master if no branch is given', function (done) {
+        projectName = 'importCliTest';
+        projectId = testFixture.projectName2Id(projectName);
+
+        importCLI.main(['node', filename,
+            importPath,
+            '-m', gmeConfig.mongo.uri,
+            '-p', projectName,
+            '-u', gmeConfig.authentication.guestAccount,
+        ])
+            .then(function () {
+                return checkBranch(projectId, ['master']);
+            })
+            .then(function () {
+                done();
+            })
+            .catch(done);
+    });
+
+    it('should import into existing project should work', function (done) {
+        projectName = null;
+        projectId = null;
+
+        importCLI.main(['node', filename,
+            importPath,
+            '-m', gmeConfig.mongo.uri,
+            '-p', existingProjectName,
+            '-o', gmeConfig.authentication.guestAccount,
+            '-b', 'second'
+        ])
+            .then(function () {
+                return checkBranch(existingProjectId, ['master', 'second']);
+            })
+            .then(function () {
+                done();
+            })
+            .catch(done);
+    });
+
+    it('should import then overwrite', function (done) {
+        projectName = 'importCliOverwrite';
+        projectId = testFixture.projectName2Id(projectName);
+
+        importCLI.main(['node', filename,
+            importPath,
+            '-m', gmeConfig.mongo.uri,
+            '-p', projectName,
+            '-o', gmeConfig.authentication.guestAccount,
+            '-b', 'master'
+        ])
+            .then(function () {
+                return importCLI.main(['node', filename,
+                    importPath,
+                    '-m', gmeConfig.mongo.uri,
+                    '-p', projectName,
+                    '-b', 'other',
+                    '-w'
+                ]);
+            })
+            .then(function () {
+                return checkBranch(projectId, ['other']);
+            })
+            .then(function () {
+                done();
+            })
+            .catch(done);
+    });
+
 });

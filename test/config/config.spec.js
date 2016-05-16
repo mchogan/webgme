@@ -11,6 +11,7 @@ describe('configuration', function () {
         path = require('path'),
         getClientConfig = require('../../config/getclientconfig'),
         configPath = path.join(__dirname, '..', '..', 'config'),
+        validateConfig,
         unloadConfigs = function () {
             // clear the cached files
             var key,
@@ -78,6 +79,32 @@ describe('configuration', function () {
         }).should.throw(Error);
     });
 
+    it('should throw if configuration has extra key', function () {
+        var config;
+        process.env.NODE_ENV = 'test';
+        config = require('../../config');
+        unloadConfigs();
+        validateConfig = require('../../config/validator');
+
+        (function () {
+            config.extraKey = 'something';
+            validateConfig(config);
+        }).should.throw(Error);
+    });
+
+    it('should throw if plugin.basePaths is not an array', function () {
+        var config;
+        process.env.NODE_ENV = 'test';
+        config = require('../../config');
+        unloadConfigs();
+        validateConfig = require('../../config/validator');
+
+        (function () {
+            config.plugin.basePaths = 'something';
+            validateConfig(config);
+        }).should.throw(Error);
+    });
+
     it('clientconfig should not expose mongo', function () {
         var config,
             clientConfig;
@@ -106,15 +133,5 @@ describe('configuration', function () {
         clientConfig = getClientConfig(config);
 
         should.equal(clientConfig.server.hasOwnProperty('sessionCookieSecret'), false);
-    });
-
-    it('clientconfig should not expose server.https.certificateFile', function () {
-        var config,
-            clientConfig;
-        process.env.NODE_ENV = '';
-        config = require('../../config');
-        clientConfig = getClientConfig(config);
-
-        should.equal(clientConfig.server.https.hasOwnProperty('certificateFile'), false);
     });
 });

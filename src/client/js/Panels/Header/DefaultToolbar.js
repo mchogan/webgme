@@ -9,43 +9,68 @@
 define([
     'js/util',
     'js/Constants',
-    'js/Utils/METAAspectHelper',
-    'js/Utils/ExportManager',
     'js/Dialogs/Projects/ProjectsDialog',
     'js/Dialogs/Commit/CommitDialog',
     'js/Dialogs/ProjectRepository/ProjectRepositoryDialog',
     './PluginToolbar',
-    './ConstraintToolbar'
+    './ConstraintToolbar',
+    './MetaRulesToolbar',
 ], function (util,
              CONSTANTS,
-             METAAspectHelper,
-             ExportManager,
              ProjectsDialog,
              CommitDialog,
              ProjectRepositoryDialog,
              PluginToolbar,
-             ConstraintToolBar) {
+             ConstraintToolBar,
+             MetaRulesToolbar) {
 
     'use strict';
 
     var DefaultToolbar;
 
-    DefaultToolbar = function (client) {
+    DefaultToolbar = function (client, params) {
         this._client = client;
         this._pluginToolBar = null;
+        this._metaRulesToolBar = null;
         this._constraintToolBar = null;
 
         this._initialize();
     };
 
     DefaultToolbar.prototype._initialize = function () {
+        var self = this;
         this._pluginToolBar = new PluginToolbar(this._client);
-
+        this._metaRulesToolBar = new MetaRulesToolbar(this._client);
         //TODO the toolbar also has to be optional, but how???
-        if (this._client.addOnsAllowed === true) {
+        if (this._client.gmeConfig.core.enableCustomConstraints === true) {
             this._constraintToolBar = new ConstraintToolBar(this._client);
         }
+
+        function activeNodeChanged() {
+            var activeNodeId = WebGMEGlobal.State.getActiveObject(),
+                allPlugins = WebGMEGlobal.allPlugins,
+                filtered = [];
+
+            if (typeof activeNodeId !== 'undefined') {
+                filtered = self._client.filterPlugins(allPlugins, activeNodeId);
+                if (filtered.length === 0) {
+                    self._pluginToolBar.disableButtons(true);
+                } else {
+                    self._pluginToolBar.disableButtons(false);
+                }
+            } else {
+                self._pluginToolBar.disableButtons(true);
+            }
+        }
+
+        self._pluginToolBar.disableButtons(true);
+
+        WebGMEGlobal.State.on('change:' + CONSTANTS.STATE_ACTIVE_OBJECT, activeNodeChanged);
+        this._client.addEventListener(this._client.CONSTANTS.PROJECT_OPENED, activeNodeChanged);
+        this._client.addEventListener(this._client.CONSTANTS.BRANCH_CHANGED, activeNodeChanged);
+        this._client.addEventListener(this._client.CONSTANTS.BRANCH_STATUS_CHANGED, activeNodeChanged);
     };
+
 
     DefaultToolbar.prototype._createDummyControls = function () {
         var toolbar = WebGMEGlobal.Toolbar;

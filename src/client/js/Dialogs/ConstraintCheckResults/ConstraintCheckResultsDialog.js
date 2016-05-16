@@ -7,38 +7,45 @@
  */
 
 define(['js/util',
+    'common/regexp',
+    'js/logger',
     'text!./templates/ConstraintCheckResultsDialog.html',
     'css!./styles/ConstraintCheckResultsDialog.css'
-], function (clientUtil, pluginResultsDialogTemplate) {
+], function (clientUtil, REGEXP, Logger, pluginResultsDialogTemplate) {
 
     'use strict';
 
-    var ContraintCheckResultsDialog = function () {
+    var ConstraintCheckResultsDialog = function (title) {
+            this._dialogTitle = title;
+            this.logger = Logger.create('gme:Dialogs:ConstraintCheckResults:ConstraintCheckResultsDialog',
+                WebGMEGlobal.gmeConfig.client.log);
+            this.logger.debug('ctor');
         },
         PLUGIN_RESULT_ENTRY_BASE = $('<div/>', {class: 'constraint-check-result'}),
         PLUGIN_RESULT_HEADER_BASE = $('<div class="alert"></div>'),
         RESULT_SUCCESS_CLASS = 'alert-success',
         RESULT_ERROR_CLASS = 'alert-danger',
-        ICON_SUCCESS = $('<i class="glyphicon glyphicon-ok glyphicon glyphicon-ok"/>'),
-        ICON_ERROR = $('<i class="glyphicon glyphicon-warning-sign glyphicon glyphicon-warning-sign"/>'),
+        ICON_SUCCESS = $('<i class="glyphicon glyphicon-ok"/>'),
+        ICON_ERROR = $('<i class="glyphicon glyphicon-warning-sign"/>'),
         RESULT_NAME_BASE = $('<span/>', {class: 'title'}),
         RESULT_TIME_BASE = $('<span/>', {class: 'time'}),
     //jscs:disable maximumLineLength
-        RESULT_DETAILS_BTN_BASE = $('<span class="btn btn-micro btn-details pull-right"><i class="glyphicon glyphicon-plus glyphicon glyphicon-plus"/></span>'),
+        RESULT_DETAILS_BTN_BASE = $('<span class="btn btn-micro btn-details pull-right result-details"><i class="glyphicon glyphicon-plus"/></span>'),
     //jscs:enable maximumLineLength
         RESULT_DETAILS_BASE = $('<div/>', {class: 'messages collapse'}),
         NODE_ENTRY_BASE = $('<div/>', {class: 'constraint-check-result'}),
     //jscs:disable maximumLineLength
-        NODE_BTN_BASE = $('<span class="btn btn-micro btn-node pull-left"><i class="glyphicon glyphicon-eye-open glyphicon glyphicon-eye-open"/></span>'),
+        NODE_BTN_BASE = $('<span class="btn btn-micro btn-node pull-left"><i class="glyphicon glyphicon-link"/></span>'),
     //jscs:enable maximumLineLength
-        MESSAGE_ENTRY_BASE = $('<div class="msg"><div class="msg-title"></div><div class="msg-body"></div></div>'),
-    // FIXME: MAGIC do not we have a GUID regexp somewhere???
-        GUID_REGEXP = new RegExp('[a-z0-9]{8}(-[a-z0-9]{4}){3}-[a-z0-9]{12}', 'i');
+        MESSAGE_ENTRY_BASE = $('<div class="msg"><div class="msg-title"></div><div class="msg-body"></div></div>');
 
-    ContraintCheckResultsDialog.prototype.show = function (client, pluginResults) {
+    ConstraintCheckResultsDialog.prototype.show = function (client, pluginResults) {
         var self = this;
 
         this._dialog = $(pluginResultsDialogTemplate);
+        if (this._dialogTitle) {
+            this._dialog.find('h3').first().text(this._dialogTitle);
+        }
         this._client = client;
         this._initDialog(pluginResults);
 
@@ -51,10 +58,10 @@ define(['js/util',
         this._dialog.modal('show');
     };
 
-
-    ContraintCheckResultsDialog.prototype._initDialog = function (pluginResults) {
+    ConstraintCheckResultsDialog.prototype._initDialog = function (pluginResults) {
         var dialog = this._dialog,
             client = this._client,
+            self = this,
             resultEntry,
             body = dialog.find('.modal-body'),
             UNREAD_CSS = 'unread',
@@ -75,7 +82,6 @@ define(['js/util',
 
         for (i = 0; i < pluginResults.length; i += 1) {
             result = pluginResults[i];
-
 
             resultEntry = PLUGIN_RESULT_ENTRY_BASE.clone();
 
@@ -104,13 +110,14 @@ define(['js/util',
             resultHeader.append(spanResultTime);
 
             resultDetailsBtn = RESULT_DETAILS_BTN_BASE.clone();
+            resultDetailsBtn.addClass('main-details');
             resultHeader.append(resultDetailsBtn);
 
             //collecting the nodes which has violation
             nodeGuids = Object.keys(result);
             j = nodeGuids.length;
             while (--j >= 0) {
-                if (!(GUID_REGEXP.test(nodeGuids[j]) && result[nodeGuids[j]].hasViolation === true )) {
+                if (!(REGEXP.GUID.test(nodeGuids[j]) && result[nodeGuids[j]].hasViolation === true )) {
                     nodeGuids.splice(j, 1);
                 }
             }
@@ -150,11 +157,14 @@ define(['js/util',
                 }
                 nodeEntry.append(constraintContainer);
 
-
                 nodeContainer.append(nodeEntry);
 
             }
             resultHeader.append(nodeContainer);
+
+            if (j === 0) {
+                resultDetailsBtn.addClass('no-details-available');
+            }
 
             resultEntry.append(resultHeader);
 
@@ -170,35 +180,41 @@ define(['js/util',
             $(this).siblings('.messages').toggleClass('in');
 
             if ($(this).children('.glyphicon-plus').length > 0) {
-                $(this).html('<i class="glyphicon glyphicon-minus glyphicon glyphicon-minus"/>');
+                $(this).html('<i class="glyphicon glyphicon-minus"/>');
             } else {
-                $(this).html('<i class="glyphicon glyphicon-plus glyphicon glyphicon-plus"/>');
+                $(this).html('<i class="glyphicon glyphicon-plus"/>');
             }
             event.stopPropagation();
             event.preventDefault();
         });
 
         dialog.on('click', '.btn-node', function (/* event */) {
-            var node = client.getNode($(this).parent().attr('GMEpath')),
-                parentId;
+            var nodeId = $(this).parent().attr('GMEpath'),
+                patterns = {},
+                territoryId = client.addUI(this, function (events) {
+                    var nodeLoaded = false;
+                    events.forEach(function (event) {
+                        if (event.etype === 'load' && event.eid === nodeId) {
+                            nodeLoaded = true;
+                        }
+                    });
 
-            if (node) {
-                parentId = node.getParentId();
-                //TODO maybe this could be done in a more nicer way
-                if (typeof parentId === 'string') {
-                    WebGMEGlobal.State.registerActiveObject(parentId);
-                    WebGMEGlobal.State.registerActiveSelection([node.getId()]);
-                } else {
-                    WebGMEGlobal.State.registerActiveObject(node.getId());
-                }
-                dialog.modal('hide');
-            }
+                    if (nodeLoaded) {
+                        WebGMEGlobal.State.registerActiveObject(nodeId);
+                        WebGMEGlobal.State.registerActiveSelection([]);
+                        dialog.modal('hide');
+                    } else {
+                        self.logger.error('Could not load the linked node at path', nodeId);
+                    }
 
+                    client.removeUI(territoryId);
+                });
 
+            patterns[nodeId] = {children: 0};
+            client.updateTerritory(territoryId, patterns);
         });
 
     };
 
-
-    return ContraintCheckResultsDialog;
+    return ConstraintCheckResultsDialog;
 });

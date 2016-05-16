@@ -3,69 +3,115 @@
 // Generated on Thu Mar 12 2015 16:54:00 GMT-0500 (Central Daylight Time)
 
 // use test configuration
-process.env.NODE_ENV = 'test';
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
 // load gme configuration
-var gmeConfig = require('./config'),
-    webgme = require('./webgme'),
-    importCli = require('./src/bin/import'),
-    testFixture = require('./test/_globals');
-
-webgme.addToRequireJsPaths(gmeConfig);
+var testFixture = require('./test/_globals.js'),
+    gmeConfig = testFixture.getGmeConfig(),
+    webgme = testFixture.WebGME,
+    Q = testFixture.Q,
+    gmeAuth,
+    storage,
+    server,
+    logger = testFixture.logger.fork('karma.conf'),
+    PROJECTS_TO_IMPORT = [
+        {name: 'ProjectAndBranchOperationsTest', path: './test-karma/client/js/client/basicProject.webgmex'},
+        {name: 'noBranchSeedProject', path: './test-karma/client/js/client/pluginProject.webgmex'},
+        {name: 'alreadyExists', path: './test-karma/client/js/client/pluginProject.webgmex'},
+        {name: 'createGenericBranch', path: './test-karma/client/js/client/pluginProject.webgmex'},
+        {name: 'removeGenericBranch', path: './test-karma/client/js/client/pluginProject.webgmex'},
+        {name: 'metaQueryAndManipulationTest', path: './test-karma/client/js/client/metaTestProject.webgmex'},
+        {name: 'ClientNodeInquiryTests', path: './test-karma/client/js/client/clientNodeTestProject.webgmex'},
+        {name: 'nodeManipulationProject', path: './test-karma/client/js/client/clientNodeTestProject.webgmex'},
+        {name: 'RESTLikeTests', path: './test-karma/client/js/client/clientNodeTestProject.webgmex'},
+        {name: 'undoRedoTests', path: './test-karma/client/js/client/clientNodeTestProject.webgmex'},
+        {name: 'territoryProject', path: './test-karma/client/js/client/clientNodeTestProject.webgmex'},
+        {name: 'projectSeedSingleMaster', path: './test-karma/client/js/client/clientNodeTestProject.webgmex'},
+        {
+            name: 'projectSeedSingleNonMaster',
+            path: './test-karma/client/js/client/clientNodeTestProject.webgmex',
+            branches: ['other']
+        },
+        {
+            name: 'projectSeedMultiple',
+            path: './test-karma/client/js/client/clientNodeTestProject.webgmex',
+            branches: ['master', 'other']
+        },
+        {name: 'pluginProject', path: './test-karma/client/js/client/pluginProject.webgmex'},
+        {name: 'branchWatcher', path: './test-karma/client/js/client/pluginProject.webgmex'},
+        {name: 'branchStatus', path: './test-karma/client/js/client/pluginProject.webgmex'}
+    ];
 
 (function initializeServer() {
     'use strict';
-    var server = webgme.standaloneServer(gmeConfig),
-        importProject = function (projectName, filePath, branch) {
-            importCli.import(
-                webgme.serverUserStorage,
-                gmeConfig,
-                projectName,
-                JSON.parse(testFixture.fs.readFileSync(filePath, 'utf8')),
-                branch || 'master',
-                true,
-                function (err) {
-                    error = error || err;
-                    console.log(projectName, 'have been imported: ', err);
-                    if (--needed === 0) {
-                        finishInitialization();
-                    }
-                });
-        },
-        projectsToImport = [
-            {name: 'ProjectAndBranchOperationsTest', path: './test-karma/client/js/client/basicProject.json'},
-            {name: 'metaQueryAndManipulationTest', path: './test-karma/client/js/client/metaTestProject.json'},
-            {name: 'ClientNodeInquiryTests', path: './test-karma/client/js/client/clientNodeTestProject.json'},
-            {name: 'nodeManipulationProject', path: './test-karma/client/js/client/clientNodeTestProject.json'},
-            {name: 'RESTLikeTests', path: './test-karma/client/js/client/clientNodeTestProject.json'},
-            {name: 'undoRedoTests', path: './test-karma/client/js/client/clientNodeTestProject.json'},
-            {name: 'territoryProject', path: './test-karma/client/js/client/clientNodeTestProject.json'},
-            {name: 'projectSeedSingleMaster', path: './test-karma/client/js/client/clientNodeTestProject.json'},
-            {
-                name: 'projectSeedSingleNonMaster',
-                path: './test-karma/client/js/client/clientNodeTestProject.json',
-                branch: 'other'
-            },
-            {name: 'projectSeedMultiple', path: './test-karma/client/js/client/clientNodeTestProject.json'},
-            {name: 'projectSeedMultiple', path: './test-karma/client/js/client/metaTestProject.json', branch: 'other'},
-        ],
-        needed = projectsToImport.length,
-        i,
-        error = null,
-        finishInitialization = function () {
-            if (error) {
-                console.log('server side initialization failed [' + error + '].');
-            } else {
-                console.log('server side initialization was successful, starting webgme server');
-                server.start(function () {
-                    console.log('webgme server started');
-                });
-            }
-        };
+    // Add a user to to GMEAuth
+    var projectNames = PROJECTS_TO_IMPORT.map(function (projectData) {
+        return projectData.name;
+    });
+    console.log(projectNames);
+    testFixture.clearDBAndGetGMEAuth(gmeConfig, projectNames)
+        .then(function (gmeAuth_) {
+            // Open the database storage
+            gmeAuth = gmeAuth_;
+            storage = testFixture.getMongoStorage(logger, gmeConfig, gmeAuth);
+            return storage.openDatabase();
+        })
+        .then(function () {
+            // Import all the projects.
 
-    for (i = 0; i < projectsToImport.length; i++) {
-        importProject(projectsToImport[i].name, projectsToImport[i].path, projectsToImport[i].branch);
-    }
+
+            function importProject(projectInfo) {
+                var branchName = projectInfo.hasOwnProperty('branches') ?
+                    projectInfo.branches[0] : 'master';
+                console.log((new Date()).toISOString(), ' importing ' + projectInfo.name);
+                return testFixture.importProject(storage, {
+                    projectSeed: projectInfo.path,
+                    projectName: projectInfo.name,
+                    branchName: branchName,
+                    gmeConfig: gmeConfig,
+                    logger: logger
+                })
+                    .then(function (importResult) {
+                        var i,
+                            createBranches = [];
+                        if (projectInfo.hasOwnProperty('branches') && projectInfo.branches.length > 1) {
+                            // First one is already added thus i = 1.
+                            for (i = 1; i < projectInfo.branches.length; i += 1) {
+                                createBranches.push(storage.createBranch({
+                                        projectId: testFixture.projectName2Id(projectInfo.name),
+                                        branchName: projectInfo.branches[i],
+                                        hash: importResult.commitHash
+                                    })
+                                );
+                            }
+                        }
+                        return Q.allDone(createBranches);
+                    })
+                    .then(function () {
+                        var nextProject = PROJECTS_TO_IMPORT.shift();
+                        if (nextProject) {
+                            return importProject(nextProject);
+                        }
+                    });
+            }
+
+            return importProject(PROJECTS_TO_IMPORT.shift());
+        })
+        .then(function () {
+            // Close the storage
+            return storage.closeDatabase();
+        })
+        .then(function () {
+            server = webgme.standaloneServer(gmeConfig);
+            //setTimeout(function () {
+            server.start(function () {
+                console.log('webgme server started');
+            });
+            //}, 10000); // timeout to emulate long server start up see test-main.js
+        })
+        .catch(function (err) {
+            console.error(err);
+        });
 
 }());
 
@@ -86,10 +132,25 @@ module.exports = function (config) {
 
         // list of files / patterns to load in the browser
         files: [
-            {pattern: 'src/**/*.js', included: false},
-            {pattern: 'seeds/*.json', included: false}, //seeds
+            // {pattern: 'src/**/*.js', included: false}, // THIS IS SLOW: SPECIFY EXPLICITLY WHAT WE NEED.
+            {pattern: 'src/common/**/*.js', included: false},
+            {pattern: 'src/client/js/*.js', included: false},
+            {pattern: 'src/client/js/**/*.js', included: false},
+            {pattern: 'src/client/bower_components/visionmedia-debug/dist/debug.js', included: false},
+            {pattern: 'src/client/lib/jquery/*.js', included: false},
+            {pattern: 'src/client/lib/require/**/*.js', included: false},
+            {pattern: 'src/client/lib/superagent/*.js', included: false},
+            {pattern: 'src/client/bower_components/q/*.js', included: false},
+            {pattern: 'src/client/bower_components/underscore/underscore.js', included: false},
+            {pattern: 'src/plugin/*.js', included: false},
+            {pattern: 'src/plugin/coreplugins/MinimalWorkingExample/**/*', included: false},
+            {pattern: 'src/plugin/coreplugins/PluginGenerator/**/*', included: false},
+            {pattern: 'src/*.js', included: false},
+            {pattern: 'utils/build/empty/empty.js', included: false},
+            {pattern: 'test/plugin/scenarios/plugins/**/*', included: false},
+            {pattern: 'seeds/*.webgmex', included: false}, //seeds
             {pattern: 'test-karma/**/*.spec.js', included: false},
-            {pattern: 'test-karma/**/*.inc.js', included: false}, //test include scripts
+            // {pattern: 'test-karma/**/*.inc.js', included: false}, //test include scripts
             {pattern: 'test-karma/**/*.json', included: false}, //test assets
             'test-main.js'
         ],
@@ -97,7 +158,6 @@ module.exports = function (config) {
 
         // list of files to exclude
         exclude: [
-            'src/server/middleware/executor/worker/node_modules/**/*.js'
         ],
 
 
@@ -136,6 +196,12 @@ module.exports = function (config) {
         // available browser launchers: https://npmjs.org/browse/keyword/karma-launcher
         browsers: ['Chrome', 'Firefox'],
 
+        reportSlowerThan: 1000,
+
+        // to avoid DISCONNECTED messages
+        browserDisconnectTimeout: 10000, // default 2000
+        browserDisconnectTolerance: 1, // default 0
+        browserNoActivityTimeout: 60000, //default 10000
 
         // Continuous Integration mode
         // if true, Karma captures browsers, runs the tests and exits
@@ -145,10 +211,9 @@ module.exports = function (config) {
         // forward these requests to the webgme server. All other files are server by the karma web server
         proxies: {
             '/base/gmeConfig.json': 'http://localhost:' + gmeConfig.server.port + '/gmeConfig.json',
+            '/docs': 'http://localhost:' + gmeConfig.server.port + '/docs',
             '/rest': 'http://localhost:' + gmeConfig.server.port + '/rest',
-            '/worker': 'http://localhost:' + gmeConfig.server.port + '/worker',
-            '/listAllDecorators': 'http://localhost:' + gmeConfig.server.port + '/listAllDecorators',
-            '/listAllPlugins': 'http://localhost:' + gmeConfig.server.port + '/listAllPlugins'
+            '/api': 'http://localhost:' + gmeConfig.server.port + '/api'
         }
     });
 };

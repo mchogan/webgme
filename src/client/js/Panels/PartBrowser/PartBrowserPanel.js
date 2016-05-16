@@ -21,6 +21,7 @@ define(['js/PanelBase/PanelBaseWithHeader',
         //set properties from options
         options[PanelBaseWithHeader.OPTIONS.LOGGER_INSTANCE_NAME] = 'PartBrowserPanel';
         options[PanelBaseWithHeader.OPTIONS.HEADER_TITLE] = false;
+        options[PanelBaseWithHeader.OPTIONS.NO_SCROLLING] = true;
 
         //call parent's constructor
         __parent__.apply(this, [options]);
@@ -37,12 +38,17 @@ define(['js/PanelBase/PanelBaseWithHeader',
     _.extend(PartBrowserPanel.prototype, __parent__.prototype);
 
     PartBrowserPanel.prototype._initialize = function () {
+        var self = this;
         //set Widget title
         this.setTitle('Part Browser');
 
         this._partBrowserWidget = new PartBrowserWidget(this.$el);
 
         this._panelControl = new PartBrowserPanelControl(this._client, this._partBrowserWidget);
+
+        this._panelControl.setReadOnly = function (isReadOnly) {
+            self.setReadOnly(isReadOnly);
+        };
     };
 
     /* OVERRIDE FROM WIDGET-WITH-HEADER */
